@@ -1,0 +1,10 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.slnx
+*.vsidx
+*.db
+*.db-shm
+*.db-wal
