@@ -7,7 +7,7 @@
         mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
         x:Class="GithubAccelerator.UI.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Icon="/Assets/avalonia-logo.ico"
+        Icon="/Assets/app-icon.ico"
         Title="GitHub 加速器 Pro"
         Width="1000" Height="700"
         MinWidth="800" MinHeight="600"
@@ -230,6 +230,14 @@
                                     BorderThickness="1"
                                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"/>
                         </Grid>
+
+                        <!-- 联系方式 -->
+                        <Border Padding="6,4" CornerRadius="6" Background="{DynamicResource ControlFillColorDisabledBrush}">
+                            <TextBlock Text="科控物联 QQ:2492123056" 
+                                       FontSize="10" 
+                                       HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"/>
+                        </Border>
                     </StackPanel>
                 </Border>
             </Grid>

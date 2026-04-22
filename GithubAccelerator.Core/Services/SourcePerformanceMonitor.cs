@@ -343,6 +343,11 @@ public class SourcePerformanceMonitor : ISourcePerformanceMonitor, IDisposable
                           (integrityScore * 0.1) +
                           (accuracyScore * 0.05);
         
+        var speedScore = (successRate * 20) +
+                        (responseTimeScore * 0.6) +
+                        (stabilityScore * 0.15) +
+                        (integrityScore * 0.05);
+        
         // 计算连续成功/失败次数
         var consecutiveSuccesses = 0;
         var consecutiveFailures = 0;
@@ -371,6 +376,7 @@ public class SourcePerformanceMonitor : ISourcePerformanceMonitor, IDisposable
             DataAccuracyScore = accuracyScore,
             StabilityScore = stabilityScore,
             OverallScore = overallScore,
+            SpeedScore = speedScore,
             LastTestTime = DateTime.Now,
             RecentTestCount = recentRecords.Count,
             ConsecutiveSuccesses = consecutiveSuccesses,
@@ -422,7 +428,8 @@ public class SourcePerformanceMonitor : ISourcePerformanceMonitor, IDisposable
     {
         return _currentMetrics.Values
             .Where(m => m.IsRecommended)
-            .OrderByDescending(m => m.OverallScore)
+            .OrderByDescending(m => m.SpeedScore)
+            .ThenBy(m => m.AverageResponseTimeMs)
             .ToArray();
     }
     
@@ -433,7 +440,8 @@ public class SourcePerformanceMonitor : ISourcePerformanceMonitor, IDisposable
     {
         return _currentMetrics.Values
             .Where(m => m.IsRecommended)
-            .OrderByDescending(m => m.OverallScore)
+            .OrderByDescending(m => m.SpeedScore)
+            .ThenBy(m => m.AverageResponseTimeMs)
             .FirstOrDefault();
     }
     

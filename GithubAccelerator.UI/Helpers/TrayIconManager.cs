@@ -20,7 +20,7 @@ public class TrayIconManager : IDisposable
             _onShowWindow = onShowWindow;
             _onExit = onExit;
 
-            var iconPath = "Assets/avalonia-logo.ico";
+            var iconPath = "Assets/app-icon.ico";
             if (!File.Exists(iconPath))
             {
                 iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, iconPath);

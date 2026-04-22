@@ -172,10 +172,9 @@ public class SmartSourceSelector : ISmartSourceSelector
     {
         if (_performanceCache.TryGetValue(url, out var metrics))
         {
-            return metrics.OverallScore;
+            return metrics.SpeedScore;
         }
         
-        // 默认评分：基于原始优先级
         var source = _sourcesCache.GetValueOrDefault(url);
         return source != null ? 100 - (source.Priority * 10) : 0;
     }

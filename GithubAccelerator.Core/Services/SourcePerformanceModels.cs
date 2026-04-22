@@ -45,6 +45,8 @@ public class SourcePerformanceMetrics
     /// </summary>
     public double OverallScore { get; set; }
     
+    public double SpeedScore { get; set; }
+    
     /// <summary>
     /// 最后测试时间
     /// </summary>

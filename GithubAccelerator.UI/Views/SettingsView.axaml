@@ -132,6 +132,27 @@
                     </StackPanel>
                 </Border>
             </StackPanel>
+
+            <!-- 关于与反馈 -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="关于与反馈" FontSize="16" FontWeight="SemiBold"/>
+
+                <Border Padding="16" CornerRadius="8"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="用户反馈" FontSize="14" FontWeight="SemiBold"/>
+                        <TextBlock Text="如有问题或建议，欢迎通过以下方式联系我们：" FontSize="12" Classes="SecondaryText"/>
+                        <Border Padding="10,8" CornerRadius="6" Background="{DynamicResource ControlFillColorDisabledBrush}">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="科控物联" FontSize="13" FontWeight="SemiBold"/>
+                                <TextBlock Text="QQ: 2492123056" FontSize="12" Classes="SecondaryText"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </UserControl>
