@@ -30,9 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.3] - 2026-04-22
 
 ### Changed
-- 更新 GitHub hosts 数据源列表，移除长期超时的数据源（maxiaof/github-hosts、Tinsfox）
-- 新增 GitHub520 Fastly CDN 镜像源，访问速度更快
-- 新增 GitCDN.top 镜像源，提供额外的数据源选择
+- 重新测试并更新 GitHub hosts 数据源列表，移除所有不可用的数据源
+- 仅保留经过测试确认可用的2个数据源：GitCDN.top 和 ineo6/hosts
+- 确保数据源在添加前都经过可用性测试
 
 ---
 

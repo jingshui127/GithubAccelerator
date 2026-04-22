@@ -26,9 +26,9 @@ public class GithubHostsService
     {
         new HostsSource
         {
-            Url = "https://raw.hellogithub.com/hosts",
-            Name = "GitHub520 (HelloGitHub)",
-            Description = "HelloGitHub提供的GitHub Hosts，每日更新，推荐首选",
+            Url = "https://hosts.gitcdn.top/hosts.txt",
+            Name = "GitCDN.top",
+            Description = "GitCDN.top提供的GitHub Hosts镜像，国内访问友好",
             Priority = 1
         },
         new HostsSource
@@ -37,34 +37,6 @@ public class GithubHostsService
             Name = "ineo6/hosts",
             Description = "ineo6提供的GitHub Hosts，稳定性高",
             Priority = 2
-        },
-        new HostsSource
-        {
-            Url = "https://raw.githubusercontent.com/521xueweihan/GitHub520/main/hosts",
-            Name = "GitHub520 (Raw)",
-            Description = "GitHub520原始源",
-            Priority = 3
-        },
-        new HostsSource
-        {
-            Url = "https://raw.gitmirror.com/521xueweihan/GitHub520/main/hosts",
-            Name = "GitMirror",
-            Description = "GitMirror镜像源，国内访问友好",
-            Priority = 4
-        },
-        new HostsSource
-        {
-            Url = "https://fastly.hellogithub.com/hosts",
-            Name = "GitHub520 (Fastly CDN)",
-            Description = "GitHub520的Fastly CDN镜像，访问速度更快",
-            Priority = 5
-        },
-        new HostsSource
-        {
-            Url = "https://hosts.gitcdn.top/hosts.txt",
-            Name = "GitCDN.top",
-            Description = "GitCDN.top提供的GitHub Hosts镜像",
-            Priority = 6
         }
     };
 
