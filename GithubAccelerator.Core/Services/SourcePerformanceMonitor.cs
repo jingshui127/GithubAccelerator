@@ -137,7 +137,7 @@ public class SourcePerformanceMonitor : ISourcePerformanceMonitor, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "周期性测试失败");
+            _logger.LogDebug(ex, "周期性测试失败");
         }
     }
     
@@ -156,7 +156,7 @@ public class SourcePerformanceMonitor : ISourcePerformanceMonitor, IDisposable
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "测试数据源 {Url} 失败", source.Url);
+                _logger.LogDebug(ex, "测试数据源 {Url} 失败", source.Url);
                 return new SourcePerformanceMetrics
                 {
                     Url = source.Url,
@@ -220,7 +220,7 @@ public class SourcePerformanceMonitor : ISourcePerformanceMonitor, IDisposable
             stopwatch.Stop();
             record.ResponseTimeMs = stopwatch.ElapsedMilliseconds;
             record.ErrorMessage = ex.Message;
-            _logger.LogError(ex, "测试数据源 {Url} 异常", url);
+            _logger.LogDebug(ex, "测试数据源 {Url} 异常", url);
         }
         
         // 失败情况

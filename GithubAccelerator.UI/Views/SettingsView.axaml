@@ -121,13 +121,13 @@
                     <StackPanel>
                         <TextBlock Text="日志级别" FontSize="14" FontWeight="SemiBold"/>
                         <TextBlock Text="设置日志记录的详细程度" FontSize="12" Classes="SecondaryText"/>
-                        <ComboBox SelectedItem="{Binding LogLevel}" 
+                        <ComboBox SelectedItem="{Binding LogLevel}"
                                   Margin="0,8,0,0"
                                   HorizontalAlignment="Left" Width="200">
-                            <ComboBoxItem Content="Debug"/>
-                            <ComboBoxItem Content="Information"/>
-                            <ComboBoxItem Content="Warning"/>
-                            <ComboBoxItem Content="Error"/>
+                            <x:String>Debug</x:String>
+                            <x:String>Information</x:String>
+                            <x:String>Warning</x:String>
+                            <x:String>Error</x:String>
                         </ComboBox>
                     </StackPanel>
                 </Border>

@@ -52,6 +52,9 @@ public class LogService : IDisposable
     private bool _disposed;
     private bool _initialized;
     private const int MaxLogEntries = 1000;
+    
+    private LoggingLevelSwitch _levelSwitch = new LoggingLevelSwitch(LogEventLevel.Debug);
+    private string _currentLogLevel = "Information";
 
     public ObservableCollection<LogEntry> LogEntries => _logEntries;
 
@@ -72,6 +75,25 @@ public class LogService : IDisposable
         Log.Information("应用程序启动");
     }
 
+    public void SetLogLevel(string level)
+    {
+        if (_currentLogLevel == level) return;
+        
+        _currentLogLevel = level;
+        _levelSwitch.MinimumLevel = level switch
+        {
+            "Debug" => LogEventLevel.Debug,
+            "Information" => LogEventLevel.Information,
+            "Warning" => LogEventLevel.Warning,
+            "Error" => LogEventLevel.Error,
+            _ => LogEventLevel.Information
+        };
+        
+        Log.Information("日志等级已设置为: {Level}", level);
+    }
+
+    public string GetLogLevel() => _currentLogLevel;
+
     private void InitializeSerilog()
     {
         var logPath = Path.Combine(
@@ -81,7 +103,7 @@ public class LogService : IDisposable
             "log-.txt");
 
         Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
+            .MinimumLevel.ControlledBy(_levelSwitch)
             .WriteTo.File(
                 path: logPath,
                 rollingInterval: RollingInterval.Day,

@@ -244,6 +244,9 @@ public partial class MainWindowViewModel : ObservableObject
         _historyService.OnOperationRecorded += OnOperationRecorded;
         _notificationService.OnNotification += OnNotificationReceived;
 
+        Log.Information("正在预初始化GitHub延迟监控");
+        GitHubLatency = new GitHubLatencyViewModel();
+
         Log.Information("正在加载仪表盘");
         ShowDashboard();
         

@@ -27,6 +27,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.2] - 2026-04-22
+
+### Fixed
+- 修复 GitHub 延迟监控启动时机问题，现在应用启动时就开始执行监控
+- 修复主页数据源列表显示不完整问题，增加底部边距
+- 修复设置页面日志等级设置无法生效的问题
+
+### Changed
+- 数据源测试异常日志等级从 Error 改为 Debug，避免日志刷屏
+- LogService 支持动态调整日志等级
+- 设置变更时自动应用日志等级到 LogService
+
+---
+
 ## [1.2.1] - 2026-04-22
 
 ### Fixed

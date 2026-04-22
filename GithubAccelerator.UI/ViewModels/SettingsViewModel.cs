@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
+using GithubAccelerator.UI.Services;
 
 namespace GithubAccelerator.UI.ViewModels;
 
@@ -30,8 +31,19 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _startMinimized = false;
 
-    [ObservableProperty]
     private string _logLevel = "Information";
+    
+    public string LogLevel
+    {
+        get => _logLevel;
+        set
+        {
+            if (SetProperty(ref _logLevel, value))
+            {
+                LogService.Instance.SetLogLevel(value);
+            }
+        }
+    }
 
     public void Save()
     {
@@ -72,7 +84,8 @@ public partial class SettingsViewModel : ObservableObject
                     AutoSwitchBestSource = settings.AutoSwitchBestSource;
                     MinimizeToTray = settings.MinimizeToTray;
                     StartMinimized = settings.StartMinimized;
-                    LogLevel = settings.LogLevel;
+                    _logLevel = settings.LogLevel;
+                    LogService.Instance.SetLogLevel(_logLevel);
                 }
             }
         }

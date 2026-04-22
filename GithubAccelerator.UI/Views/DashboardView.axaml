@@ -48,7 +48,7 @@
         <!-- 实际内容 -->
         <ScrollViewer Padding="24" Background="{DynamicResource BackgroundColor}" HorizontalAlignment="Stretch"
                       IsVisible="{Binding !IsLoading}">
-            <StackPanel Spacing="20" Margin="0,0,0,24" HorizontalAlignment="Stretch">
+            <StackPanel Spacing="20" Margin="0,0,0,80" HorizontalAlignment="Stretch">
                 
                 <!-- 核心监控指标 -->
                 <Grid ColumnDefinitions="*,*,*,*" RowDefinitions="Auto">
