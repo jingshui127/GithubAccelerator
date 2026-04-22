@@ -220,6 +220,8 @@ public partial class MainWindowViewModel : ObservableObject
 
     public int SelectedSourcesCount => Sources.Count(s => s.IsSelected);
 
+    public bool HasFilteredSources => FilteredSources.Count > 0;
+
     private readonly OperationHistoryService _historyService = OperationHistoryService.Instance;
     private readonly NotificationService _notificationService = NotificationService.Instance;
 
@@ -297,6 +299,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             FilteredSources.Add(source);
         }
+        OnPropertyChanged(nameof(HasFilteredSources));
     }
 
     private void OnOperationRecorded(OperationRecord record)

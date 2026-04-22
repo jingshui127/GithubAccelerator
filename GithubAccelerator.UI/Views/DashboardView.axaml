@@ -260,6 +260,20 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <!-- 空状态显示 -->
+                    <Grid IsVisible="{Binding !HasFilteredSources}" Margin="0,40,0,0">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
+                            <TextBlock Text="🔍" FontSize="64" HorizontalAlignment="Center"/>
+                            <TextBlock Text="未找到匹配的数据源" FontSize="18" FontWeight="SemiBold" 
+                                      HorizontalAlignment="Center"/>
+                            <TextBlock Text="请尝试修改搜索条件或刷新数据源列表" FontSize="13" 
+                                      HorizontalAlignment="Center" Foreground="#666666"/>
+                            <Button Content="刷新数据源" Command="{Binding RefreshSourcesCommand}"
+                                   Padding="16,8" Margin="0,8,0,0" HorizontalAlignment="Center"
+                                   CornerRadius="6"/>
+                        </StackPanel>
+                    </Grid>
                 </StackPanel>
                 
             </StackPanel>

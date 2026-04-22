@@ -284,9 +284,9 @@
             <Border Grid.Row="1"
                     Padding="20"
                     Background="{DynamicResource BackgroundColor}">
-                <ContentControl Content="{Binding CurrentView}"
-                               HorizontalContentAlignment="Stretch"
-                               VerticalContentAlignment="Stretch"/>
+                <TransitioningContentControl Content="{Binding CurrentView}"
+                                            HorizontalContentAlignment="Stretch"
+                                            VerticalContentAlignment="Stretch"/>
             </Border>
 
             <!-- 通知栏 -->
