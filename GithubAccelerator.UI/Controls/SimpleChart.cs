@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Media;
 
 namespace GithubAccelerator.UI.Controls;
@@ -39,6 +40,9 @@ public class SimpleLineChart : Control
 
     public static readonly StyledProperty<Color> TextColorProperty =
         AvaloniaProperty.Register<SimpleLineChart, Color>(nameof(TextColor), Colors.Gray);
+
+    public static readonly StyledProperty<IList<string>?> LabelsProperty =
+        AvaloniaProperty.Register<SimpleLineChart, IList<string>?>(nameof(Labels));
 
     public IList<double>? Values
     {
@@ -100,12 +104,88 @@ public class SimpleLineChart : Control
         set => SetValue(TextColorProperty, value);
     }
 
+    public IList<string>? Labels
+    {
+        get => GetValue(LabelsProperty);
+        set => SetValue(LabelsProperty, value);
+    }
+
+    private int _hoveredIndex = -1;
+    private List<Point> _points = new();
+    private ToolTip? _toolTip;
+
     static SimpleLineChart()
     {
         AffectsRender<SimpleLineChart>(
             ValuesProperty, TitleProperty, XAxisLabelProperty, YAxisLabelProperty,
             MinYProperty, MaxYProperty, LineColorProperty, FillColorProperty,
-            AxisColorProperty, TextColorProperty);
+            AxisColorProperty, TextColorProperty, LabelsProperty);
+    }
+
+    public SimpleLineChart()
+    {
+        Cursor = new Cursor(StandardCursorType.Cross);
+        PointerMoved += OnPointerMoved;
+        PointerExited += OnPointerExited;
+    }
+
+    private void OnPointerMoved(object? sender, PointerEventArgs e)
+    {
+        var pos = e.GetPosition(this);
+        var bounds = Bounds;
+        var padding = new Thickness(55, 30, 20, 40);
+        var chartLeft = padding.Left;
+        var chartRight = bounds.Width - padding.Right;
+        var chartWidth = chartRight - chartLeft;
+
+        if (chartWidth <= 0 || _points.Count == 0) return;
+
+        var values = Values;
+        if (values == null || values.Count == 0) return;
+
+        var newHoveredIndex = -1;
+        var minDist = double.MaxValue;
+
+        for (int i = 0; i < _points.Count; i++)
+        {
+            var dist = Math.Abs(pos.X - _points[i].X);
+            if (dist < minDist && dist < 30)
+            {
+                minDist = dist;
+                newHoveredIndex = i;
+            }
+        }
+
+        if (newHoveredIndex != _hoveredIndex)
+        {
+            _hoveredIndex = newHoveredIndex;
+            InvalidateVisual();
+
+            if (_hoveredIndex >= 0 && _hoveredIndex < values.Count)
+            {
+                var value = values[_hoveredIndex];
+                var labels = Labels;
+                var label = labels != null && _hoveredIndex < labels.Count 
+                    ? labels[_hoveredIndex] 
+                    : $"#{_hoveredIndex + 1}";
+                
+                var toolTipText = $"{label}: {value:F1} ms";
+                
+                ToolTip.SetTip(this, toolTipText);
+                ToolTip.SetIsOpen(this, true);
+            }
+            else
+            {
+                ToolTip.SetIsOpen(this, false);
+            }
+        }
+    }
+
+    private void OnPointerExited(object? sender, PointerEventArgs e)
+    {
+        _hoveredIndex = -1;
+        ToolTip.SetIsOpen(this, false);
+        InvalidateVisual();
     }
 
     private static Size MeasureText(string text, double fontSize = 10)
@@ -208,21 +288,21 @@ public class SimpleLineChart : Control
             return;
         }
 
-        var points = new List<Point>();
+        _points.Clear();
         for (int i = 0; i < values.Count; i++)
         {
             var x = chartLeft + (values.Count > 1 ? (double)i / (values.Count - 1) * chartWidth : chartWidth / 2);
             var val = Math.Clamp(values[i], minY, maxY);
             var y = chartBottom - ((val - minY) / yRange) * chartHeight;
-            points.Add(new Point(x, y));
+            _points.Add(new Point(x, y));
         }
 
-        if (points.Count > 1)
+        if (_points.Count > 1)
         {
-            var fillPoints = new List<Point>(points)
+            var fillPoints = new List<Point>(_points)
             {
-                new Point(points[points.Count - 1].X, chartBottom),
-                new Point(points[0].X, chartBottom)
+                new Point(_points[_points.Count - 1].X, chartBottom),
+                new Point(_points[0].X, chartBottom)
             };
             var fillGeo = new StreamGeometry();
             using (var ctx = fillGeo.Open())
@@ -239,20 +319,56 @@ public class SimpleLineChart : Control
             var lineGeo = new StreamGeometry();
             using (var ctx = lineGeo.Open())
             {
-                ctx.BeginFigure(points[0], false);
-                for (int i = 1; i < points.Count; i++)
+                ctx.BeginFigure(_points[0], false);
+                for (int i = 1; i < _points.Count; i++)
                 {
-                    ctx.LineTo(points[i]);
+                    ctx.LineTo(_points[i]);
                 }
                 ctx.EndFigure(false);
             }
             context.DrawGeometry(null, new Pen(lineBrush, 2), lineGeo);
         }
 
-        foreach (var pt in points)
+        for (int i = 0; i < _points.Count; i++)
         {
-            context.DrawEllipse(lineBrush, null, pt, 4, 4);
-            context.DrawEllipse(Brushes.White, null, pt, 2, 2);
+            var pt = _points[i];
+            var isHovered = i == _hoveredIndex;
+            var radius = isHovered ? 8 : 4;
+
+            if (isHovered)
+            {
+                context.DrawEllipse(WithAlpha(LineColor, 0.3), null, pt, 12, 12);
+            }
+
+            context.DrawEllipse(lineBrush, null, pt, radius, radius);
+            context.DrawEllipse(Brushes.White, null, pt, radius - 2, radius - 2);
+
+            if (isHovered)
+            {
+                var value = values[i];
+                var labels = Labels;
+                var label = labels != null && i < labels.Count 
+                    ? labels[i] 
+                    : $"#{i + 1}";
+                
+                var tooltipText = $"{value:F1} ms";
+                var tooltipSize = MeasureText(tooltipText, 12);
+                var tooltipX = pt.X - tooltipSize.Width / 2;
+                var tooltipY = pt.Y - tooltipSize.Height - 15;
+
+                if (tooltipX < chartLeft) tooltipX = chartLeft;
+                if (tooltipX + tooltipSize.Width > chartRight) tooltipX = chartRight - tooltipSize.Width;
+                if (tooltipY < chartTop) tooltipY = pt.Y + 15;
+
+                var tooltipRect = new Rect(
+                    tooltipX - 8,
+                    tooltipY - 4,
+                    tooltipSize.Width + 16,
+                    tooltipSize.Height + 8);
+
+                context.DrawRectangle(new SolidColorBrush(Color.FromArgb(230, 50, 50, 50)), null, tooltipRect, 4, 4);
+                DrawText(context, tooltipText, new Point(tooltipX, tooltipY), Brushes.White, 12);
+            }
         }
 
         if (!string.IsNullOrEmpty(XAxisLabel))
@@ -338,6 +454,9 @@ public class SimpleBarChart : Control
         set => SetValue(TextColorProperty, value);
     }
 
+    private int _hoveredIndex = -1;
+    private List<Rect> _barRects = new();
+
     private static readonly Color[] _barColors = new[]
     {
         Colors.DodgerBlue, Colors.Orange, Colors.Green, Colors.Red, Colors.Purple,
@@ -349,6 +468,55 @@ public class SimpleBarChart : Control
         AffectsRender<SimpleBarChart>(
             ItemsProperty, TitleProperty, YAxisLabelProperty, MaxYProperty,
             AxisColorProperty, TextColorProperty);
+    }
+
+    public SimpleBarChart()
+    {
+        Cursor = new Cursor(StandardCursorType.Hand);
+        PointerMoved += OnPointerMoved;
+        PointerExited += OnPointerExited;
+    }
+
+    private void OnPointerMoved(object? sender, PointerEventArgs e)
+    {
+        var pos = e.GetPosition(this);
+        var items = Items;
+        if (items == null || items.Count == 0) return;
+
+        var newHoveredIndex = -1;
+        for (int i = 0; i < _barRects.Count; i++)
+        {
+            if (_barRects[i].Contains(pos))
+            {
+                newHoveredIndex = i;
+                break;
+            }
+        }
+
+        if (newHoveredIndex != _hoveredIndex)
+        {
+            _hoveredIndex = newHoveredIndex;
+            InvalidateVisual();
+
+            if (_hoveredIndex >= 0 && _hoveredIndex < items.Count)
+            {
+                var item = items[_hoveredIndex];
+                var toolTipText = $"{item.Label}: {item.Value:F1}";
+                ToolTip.SetTip(this, toolTipText);
+                ToolTip.SetIsOpen(this, true);
+            }
+            else
+            {
+                ToolTip.SetIsOpen(this, false);
+            }
+        }
+    }
+
+    private void OnPointerExited(object? sender, PointerEventArgs e)
+    {
+        _hoveredIndex = -1;
+        ToolTip.SetIsOpen(this, false);
+        InvalidateVisual();
     }
 
     private static Size MeasureText(string text, double fontSize = 10)
@@ -445,6 +613,8 @@ public class SimpleBarChart : Control
         var barSpacing = chartWidth / (items.Count * 1.5 + 0.5);
         var barWidth = barSpacing;
 
+        _barRects.Clear();
+
         for (int i = 0; i < items.Count; i++)
         {
             var item = items[i];
@@ -452,10 +622,21 @@ public class SimpleBarChart : Control
             var barHeight = (item.Value / maxY) * chartHeight;
             var y = chartBottom - barHeight;
 
+            var isHovered = i == _hoveredIndex;
             var color = _barColors[i % _barColors.Length];
-            var barBrush = new SolidColorBrush(color);
+            var barBrush = isHovered 
+                ? new SolidColorBrush(Color.FromArgb(255, (byte)Math.Min(color.R + 30, 255), (byte)Math.Min(color.G + 30, 255), (byte)Math.Min(color.B + 30, 255)))
+                : new SolidColorBrush(color);
 
             var rect = new Rect(x, y, barWidth, barHeight);
+            _barRects.Add(rect);
+
+            if (isHovered)
+            {
+                context.DrawRectangle(WithAlpha(color, 0.3), null, 
+                    new Rect(x - 4, y - 4, barWidth + 8, barHeight + 8), 6, 6);
+            }
+
             context.DrawRectangle(barBrush, null, rect, 4, 4);
 
             var valueLabel = item.Value.ToString("F1");
@@ -465,6 +646,8 @@ public class SimpleBarChart : Control
                 y - valueSize.Height - 2), textBrush, 10);
 
             var nameLabel = item.Label;
+            if (nameLabel.Length > 8)
+                nameLabel = nameLabel.Substring(0, 6) + "..";
             var nameSize = MeasureText(nameLabel, 9);
             DrawText(context, nameLabel, new Point(
                 x + (barWidth - nameSize.Width) / 2,

@@ -20,6 +20,10 @@
         <KeyBinding Gesture="Ctrl+S" Command="{Binding ApplyHostsCommand}"/>
         <KeyBinding Gesture="Ctrl+H" Command="{Binding ViewHostsContentCommand}"/>
         <KeyBinding Gesture="F5" Command="{Binding ToggleMonitoringCommand}"/>
+        <KeyBinding Gesture="Ctrl+1" Command="{Binding ShowDashboardCommand}"/>
+        <KeyBinding Gesture="Ctrl+2" Command="{Binding ShowPerformanceChartCommand}"/>
+        <KeyBinding Gesture="Ctrl+3" Command="{Binding ShowGitHubLatencyCommand}"/>
+        <KeyBinding Gesture="Ctrl+4" Command="{Binding ShowSettingsCommand}"/>
     </Window.KeyBindings>
 
     <Design.DataContext>
@@ -30,66 +34,254 @@
         <vm:MainWindowViewModel/>
     </Window.DataContext>
 
-    <Grid RowDefinitions="Auto,*,Auto">
-        <!-- Header - 顶部 -->
-        <Border Grid.Row="0"
-                Padding="20"
-                Background="{DynamicResource ControlFillColorDefaultBrush}"
-                BorderThickness="0,0,0,1"
+    <Grid ColumnDefinitions="Auto,*">
+        <!-- 侧边栏导航 -->
+        <Border Grid.Column="0"
+                Width="200"
+                Background="{DynamicResource SystemChromeLowColor}"
+                BorderThickness="0,0,1,0"
                 BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
-            <Grid RowDefinitions="Auto,Auto">
-                <!-- 第一行：标题和状态 -->
-                <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
-                    <!-- Logo和标题 -->
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                        <TextBlock Text="🚀" FontSize="28" VerticalAlignment="Center"/>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="GitHub 加速器 Pro" FontSize="20" FontWeight="Bold"/>
-                            <TextBlock Text="智能 Hosts 管理与加速工具" FontSize="11"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"/>
-                        </StackPanel>
+            <Grid RowDefinitions="Auto,*,Auto">
+                <!-- Logo区域 -->
+                <Border Grid.Row="0"
+                        Padding="16,20"
+                        BorderThickness="0,0,0,1"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="🚀" FontSize="32" HorizontalAlignment="Center"/>
+                        <TextBlock Text="GitHub 加速器 Pro" 
+                                   FontSize="14" 
+                                   FontWeight="Bold"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock Text="v1.2.0" 
+                                   FontSize="10" 
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   HorizontalAlignment="Center"/>
                     </StackPanel>
+                </Border>
 
-                    <!-- 状态指示器 -->
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <Border Padding="12,6" CornerRadius="12"
-                                Background="{DynamicResource SuccessColor}"
-                                IsVisible="{Binding IsMonitoring}">
-                            <TextBlock Text="● 监控中" FontSize="12" Foreground="White"/>
-                        </Border>
-                        <Border Padding="12,6" CornerRadius="12"
-                                Background="{DynamicResource WarningColor}"
-                                IsVisible="{Binding !IsMonitoring}">
-                            <TextBlock Text="○ 已停止" FontSize="12" Foreground="White"/>
-                        </Border>
+                <!-- 导航菜单 -->
+                <ScrollViewer Grid.Row="1" Padding="8,12">
+                    <StackPanel Spacing="4">
+                        <!-- 主要功能 -->
+                        <TextBlock Text="主要功能" 
+                                   FontSize="10" 
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Margin="12,8,0,4"/>
+                        
+                        <Button Command="{Binding ShowDashboardCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10"
+                                CornerRadius="8"
+                                Background="{Binding IsDashboardSelected, Converter={StaticResource BoolToColorConverter}, ConverterParameter='{DynamicResource AccentColor}|Transparent'}"
+                                BorderThickness="0">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="📊" FontSize="16"/>
+                                <TextBlock Text="仪表盘" FontSize="13" 
+                                          FontWeight="{Binding IsDashboardSelected, Converter={StaticResource BoolToFontWeightConverter}}"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Command="{Binding ShowPerformanceChartCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10"
+                                CornerRadius="8"
+                                Background="{Binding IsPerformanceChartSelected, Converter={StaticResource BoolToColorConverter}, ConverterParameter='{DynamicResource AccentColor}|Transparent'}"
+                                BorderThickness="0">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="📈" FontSize="16"/>
+                                <TextBlock Text="性能图表" FontSize="13"
+                                          FontWeight="{Binding IsPerformanceChartSelected, Converter={StaticResource BoolToFontWeightConverter}}"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Command="{Binding ShowGitHubLatencyCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10"
+                                CornerRadius="8"
+                                Background="{Binding IsGitHubLatencySelected, Converter={StaticResource BoolToColorConverter}, ConverterParameter='{DynamicResource AccentColor}|Transparent'}"
+                                BorderThickness="0">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="🌐" FontSize="16"/>
+                                <TextBlock Text="GitHub延迟" FontSize="13"
+                                          FontWeight="{Binding IsGitHubLatencySelected, Converter={StaticResource BoolToFontWeightConverter}}"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Hosts管理 -->
+                        <TextBlock Text="Hosts 管理" 
+                                   FontSize="10" 
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Margin="12,16,0,4"/>
+
+                        <Button Command="{Binding ViewHostsContentCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10"
+                                CornerRadius="8"
+                                Background="{Binding IsHostsContentSelected, Converter={StaticResource BoolToColorConverter}, ConverterParameter='{DynamicResource AccentColor}|Transparent'}"
+                                BorderThickness="0">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="📄" FontSize="16"/>
+                                <TextBlock Text="Hosts 内容" FontSize="13"
+                                          FontWeight="{Binding IsHostsContentSelected, Converter={StaticResource BoolToFontWeightConverter}}"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Command="{Binding ShowHostsGroupManagerCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10"
+                                CornerRadius="8"
+                                Background="{Binding IsHostsGroupSelected, Converter={StaticResource BoolToColorConverter}, ConverterParameter='{DynamicResource AccentColor}|Transparent'}"
+                                BorderThickness="0">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="📁" FontSize="16"/>
+                                <TextBlock Text="分组管理" FontSize="13"
+                                          FontWeight="{Binding IsHostsGroupSelected, Converter={StaticResource BoolToFontWeightConverter}}"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Command="{Binding ShowBackupManagerCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10"
+                                CornerRadius="8"
+                                Background="{Binding IsBackupSelected, Converter={StaticResource BoolToColorConverter}, ConverterParameter='{DynamicResource AccentColor}|Transparent'}"
+                                BorderThickness="0">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="💾" FontSize="16"/>
+                                <TextBlock Text="备份管理" FontSize="13"
+                                          FontWeight="{Binding IsBackupSelected, Converter={StaticResource BoolToFontWeightConverter}}"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- 系统工具 -->
+                        <TextBlock Text="系统工具" 
+                                   FontSize="10" 
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Margin="12,16,0,4"/>
+
+                        <Button Command="{Binding ShowSettingsCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10"
+                                CornerRadius="8"
+                                Background="{Binding IsSettingsSelected, Converter={StaticResource BoolToColorConverter}, ConverterParameter='{DynamicResource AccentColor}|Transparent'}"
+                                BorderThickness="0">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="⚙️" FontSize="16"/>
+                                <TextBlock Text="设置" FontSize="13"
+                                          FontWeight="{Binding IsSettingsSelected, Converter={StaticResource BoolToFontWeightConverter}}"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Command="{Binding ShowLogViewerCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10"
+                                CornerRadius="8"
+                                Background="{Binding IsLogViewerSelected, Converter={StaticResource BoolToColorConverter}, ConverterParameter='{DynamicResource AccentColor}|Transparent'}"
+                                BorderThickness="0">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="📝" FontSize="16"/>
+                                <TextBlock Text="日志查看" FontSize="13"
+                                          FontWeight="{Binding IsLogViewerSelected, Converter={StaticResource BoolToFontWeightConverter}}"/>
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
-                </Grid>
+                </ScrollViewer>
 
-                <!-- 第二行：导航按钮 -->
-                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Margin="0,16,0,0">
-                    <Button Content="📊 仪表盘" Command="{Binding ShowDashboardCommand}"
-                            Padding="16,8" FontSize="13" FontWeight="Medium"/>
-                    <Button Content="📈 性能图表" Command="{Binding ShowPerformanceChartCommand}"
-                            Padding="16,8" FontSize="13" FontWeight="Medium"/>
-                    <Button Content="🌐 GitHub 延迟" Command="{Binding ShowGitHubLatencyCommand}"
-                            Padding="16,8" FontSize="13" FontWeight="Medium"/>
-                    <Button Content="📄 Hosts" Command="{Binding ViewHostsContentCommand}"
-                            Padding="16,8" FontSize="13" FontWeight="Medium"/>
-                    <Button Content="📁 分组管理" Command="{Binding ShowHostsGroupManagerCommand}"
-                            Padding="16,8" FontSize="13" FontWeight="Medium"/>
-                    <Button Content="⚙️ 设置" Command="{Binding ShowSettingsCommand}"
-                            Padding="16,8" FontSize="13" FontWeight="Medium"/>
-                    <Button Content="📝 日志" Command="{Binding ShowLogViewerCommand}"
-                            Padding="16,8" FontSize="13" FontWeight="Medium"/>
-                    <Button Content="💾 备份" Command="{Binding ShowBackupManagerCommand}"
-                            Padding="16,8" FontSize="13" FontWeight="Medium"/>
-                </StackPanel>
+                <!-- 底部状态 -->
+                <Border Grid.Row="2"
+                        Padding="12,12"
+                        BorderThickness="0,1,0,0"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                    <StackPanel Spacing="8">
+                        <!-- 监控状态 -->
+                        <Border Padding="8,6" CornerRadius="8"
+                                Background="{Binding IsMonitoring, Converter={StaticResource BoolToColorConverter}, ConverterParameter='#107C10|#6B6B6B'}">
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                <TextBlock Text="{Binding IsMonitoring, Converter={StaticResource BoolToStringConverter}, ConverterParameter='●|○'}" 
+                                          FontSize="10" Foreground="White"/>
+                                <TextBlock Text="{Binding IsMonitoring, Converter={StaticResource BoolToStringConverter}, ConverterParameter='监控中|已停止'}" 
+                                          FontSize="11" Foreground="White"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 快捷操作 -->
+                        <Grid ColumnDefinitions="*,*">
+                            <Button Grid.Column="0"
+                                    Content="{Binding IsDarkMode, Converter={StaticResource BoolToStringConverter}, ConverterParameter='☀️|🌙'}"
+                                    Command="{Binding ToggleThemeCommand}"
+                                    Padding="8,6"
+                                    FontSize="14"
+                                    HorizontalAlignment="Stretch"
+                                    CornerRadius="8"
+                                    Background="Transparent"
+                                    BorderThickness="1"
+                                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"/>
+                            <Button Grid.Column="1"
+                                    Content="ℹ️"
+                                    Command="{Binding ShowAboutCommand}"
+                                    Padding="8,6"
+                                    FontSize="14"
+                                    HorizontalAlignment="Stretch"
+                                    CornerRadius="8"
+                                    Background="Transparent"
+                                    BorderThickness="1"
+                                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
             </Grid>
         </Border>
 
-        <!-- Content Area - 中间内容区域 -->
-        <Grid Grid.Row="1" RowDefinitions="*,Auto">
+        <!-- 主内容区域 -->
+        <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto">
+            <!-- 顶部标题栏 -->
             <Border Grid.Row="0"
+                    Padding="20,12"
+                    Background="{DynamicResource ControlFillColorDefaultBrush}"
+                    BorderThickness="0,0,0,1"
+                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <!-- 当前页面标题 -->
+                    <TextBlock Grid.Column="0"
+                              Text="{Binding CurrentPageTitle}"
+                              FontSize="18"
+                              FontWeight="SemiBold"
+                              VerticalAlignment="Center"/>
+
+                    <!-- 状态信息 -->
+                    <TextBlock Grid.Column="1"
+                              Text="{Binding StatusMessage}"
+                              FontSize="12"
+                              Foreground="{DynamicResource SecondaryTextBrush}"
+                              VerticalAlignment="Center"
+                              HorizontalAlignment="Center"
+                              TextTrimming="CharacterEllipsis"/>
+
+                    <!-- 快捷操作 -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                        <Button Content="📤 导出" Command="{Binding ExportDataCommand}"
+                                Padding="10,6" FontSize="11"
+                                CornerRadius="6"/>
+                        <Button Content="📥 导入" Command="{Binding ImportDataCommand}"
+                                Padding="10,6" FontSize="11"
+                                CornerRadius="6"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 内容区域 -->
+            <Border Grid.Row="1"
                     Padding="20"
                     Background="{DynamicResource BackgroundColor}">
                 <ContentControl Content="{Binding CurrentView}"
@@ -98,7 +290,7 @@
             </Border>
 
             <!-- 通知栏 -->
-            <Border Grid.Row="1"
+            <Border Grid.Row="2"
                     Padding="16,8"
                     Background="{DynamicResource ControlFillColorDefaultBrush}"
                     BorderThickness="0,1,0,0"
@@ -118,61 +310,43 @@
             </Border>
         </Grid>
 
-        <!-- Footer - 底部状态栏 -->
-        <Border Grid.Row="2"
-                Padding="20,12"
-                Background="{DynamicResource ControlFillColorDefaultBrush}"
-                BorderThickness="0,1,0,0"
-                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <TextBlock Grid.Column="0"
-                           Text="{Binding StatusMessage}"
-                           FontSize="11"
-                           Foreground="{DynamicResource SecondaryTextBrush}"
-                           VerticalAlignment="Center"/>
-
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                    <Button Content="{Binding IsDarkMode, Converter={StaticResource BoolToStringConverter}, ConverterParameter='☀️ 亮色 | 🌙 暗色'}"
-                            Command="{Binding ToggleThemeCommand}"
-                            Padding="8,4"
-                            FontSize="11"
-                            Background="Transparent"
-                            BorderThickness="0"/>
-                    <TextBlock Text="|"
-                               FontSize="11"
-                               Foreground="{DynamicResource SecondaryTextBrush}"
-                               VerticalAlignment="Center"/>
-                    <Button Content="关于"
-                            Command="{Binding ShowAboutCommand}"
-                            Padding="8,4"
-                            FontSize="11"
-                            Background="Transparent"
-                            BorderThickness="0"/>
-                    <TextBlock Text="|"
-                               FontSize="11"
-                               Foreground="{DynamicResource SecondaryTextBrush}"
-                               VerticalAlignment="Center"/>
-                    <Button Content="📤 导出" Command="{Binding ExportDataCommand}"
-                            Padding="8,4" FontSize="11"
-                            Background="Transparent" BorderThickness="0"/>
-                    <Button Content="📥 导入" Command="{Binding ImportDataCommand}"
-                            Padding="8,4" FontSize="11"
-                            Background="Transparent" BorderThickness="0"/>
-                    <TextBlock Text="|"
-                               FontSize="11"
-                               Foreground="{DynamicResource SecondaryTextBrush}"
-                               VerticalAlignment="Center"/>
-                    <TextBlock Text="v1.2.0"
-                               FontSize="11"
-                               Foreground="{DynamicResource SecondaryTextBrush}"
-                               VerticalAlignment="Center"/>
-                </StackPanel>
-            </Grid>
-        </Border>
+        <!-- Toast 通知容器 -->
+        <Panel Grid.Column="1" Grid.ColumnSpan="1" Margin="0,60,20,0"
+               VerticalAlignment="Top" HorizontalAlignment="Right"
+               ZIndex="1000">
+            <ItemsControl ItemsSource="{Binding Toasts}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Spacing="8"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Padding="16,12" CornerRadius="8"
+                                Background="#F5F5F5"
+                                BoxShadow="0 4 12 0 #30000000"
+                                MinWidth="300" MaxWidth="400">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <Border Grid.Column="0" Width="32" Height="32" CornerRadius="16"
+                                        Background="{Binding TypeColor}" Margin="0,0,12,0">
+                                    <TextBlock Text="{Binding TypeIcon}" FontSize="14" FontWeight="Bold"
+                                              Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" Spacing="4">
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13"/>
+                                    <TextBlock Text="{Binding Message}" FontSize="12" TextWrapping="Wrap" MaxWidth="280"
+                                              Foreground="#666666"/>
+                                </StackPanel>
+                                <Button Grid.Column="2" Content="✕" Padding="4" FontSize="10"
+                                        Background="Transparent" BorderThickness="0"
+                                        VerticalAlignment="Top"
+                                        Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).DismissToastCommand}"
+                                        CommandParameter="{Binding}"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Panel>
     </Grid>
 </Window>

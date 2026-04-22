@@ -52,3 +52,20 @@ public class BoolToColorConverter : IValueConverter
         throw new NotImplementedException();
     }
 }
+
+public class BoolToFontWeightConverter : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is bool boolValue && boolValue)
+        {
+            return FontWeight.Bold;
+        }
+        return FontWeight.Regular;
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
+}

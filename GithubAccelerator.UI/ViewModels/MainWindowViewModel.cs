@@ -12,6 +12,7 @@ using Avalonia.Styling;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GithubAccelerator.Services;
+using GithubAccelerator.UI.Controls;
 using GithubAccelerator.UI.Services;
 using GithubAccelerator.UI.Views;
 using Microsoft.Extensions.Logging;
@@ -167,6 +168,46 @@ public partial class MainWindowViewModel : ObservableObject
     private bool _isDarkMode;
 
     [ObservableProperty]
+    private bool _isLoading = true;
+
+    [ObservableProperty]
+    private string _currentPageTitle = "仪表盘";
+
+    [ObservableProperty]
+    private bool _isDashboardSelected = true;
+
+    [ObservableProperty]
+    private bool _isPerformanceChartSelected;
+
+    [ObservableProperty]
+    private bool _isGitHubLatencySelected;
+
+    [ObservableProperty]
+    private bool _isHostsContentSelected;
+
+    [ObservableProperty]
+    private bool _isHostsGroupSelected;
+
+    [ObservableProperty]
+    private bool _isBackupSelected;
+
+    [ObservableProperty]
+    private bool _isSettingsSelected;
+
+    [ObservableProperty]
+    private bool _isLogViewerSelected;
+
+    [ObservableProperty]
+    private string _searchText = string.Empty;
+
+    [ObservableProperty]
+    private int _sortOption = 0;
+
+    public ObservableCollection<SourceStatusViewModel> FilteredSources { get; } = new();
+
+    public ObservableCollection<ToastItem> Toasts => ToastService.Instance.Toasts;
+
+    [ObservableProperty]
     private ObservableCollection<OperationRecord> _operationHistory = new();
 
     [ObservableProperty]
@@ -219,6 +260,43 @@ public partial class MainWindowViewModel : ObservableObject
         {
             OperationHistory.Add(record);
         }
+
+        PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(SearchText) || e.PropertyName == nameof(SortOption))
+            {
+                UpdateFilteredSources();
+            }
+        };
+    }
+
+    private void UpdateFilteredSources()
+    {
+        var filtered = Sources.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(SearchText))
+        {
+            var search = SearchText.ToLowerInvariant();
+            filtered = filtered.Where(s => 
+                s.Name.ToLowerInvariant().Contains(search) || 
+                s.Url.ToLowerInvariant().Contains(search));
+        }
+
+        filtered = SortOption switch
+        {
+            1 => filtered.OrderBy(s => s.ResponseTime),
+            2 => filtered.OrderByDescending(s => s.ResponseTime),
+            3 => filtered.OrderBy(s => s.Score),
+            4 => filtered.OrderByDescending(s => s.Score),
+            5 => filtered.OrderBy(s => s.Name),
+            _ => filtered.OrderByDescending(s => s.Score)
+        };
+
+        FilteredSources.Clear();
+        foreach (var source in filtered)
+        {
+            FilteredSources.Add(source);
+        }
     }
 
     private void OnOperationRecorded(OperationRecord record)
@@ -250,6 +328,12 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void DismissToast(ToastItem toast)
+    {
+        ToastService.Instance.Remove(toast);
+    }
+
+    [RelayCommand]
     private void ToggleTheme()
     {
         ThemeManager.ToggleTheme();
@@ -263,6 +347,9 @@ public partial class MainWindowViewModel : ObservableObject
     private void ShowDashboard()
     {
         CurrentView = new DashboardView { DataContext = this };
+        CurrentPageTitle = "仪表盘";
+        ResetNavigationSelection();
+        IsDashboardSelected = true;
         IsDashboardVisible = true;
         IsSettingsVisible = false;
     }
@@ -273,6 +360,9 @@ public partial class MainWindowViewModel : ObservableObject
         var settingsView = new SettingsView();
         settingsView.DataContext = _settings;
         CurrentView = settingsView;
+        CurrentPageTitle = "设置";
+        ResetNavigationSelection();
+        IsSettingsSelected = true;
         IsDashboardVisible = false;
         IsSettingsVisible = true;
         IsLogViewerVisible = false;
@@ -289,6 +379,9 @@ public partial class MainWindowViewModel : ObservableObject
         var logViewerView = new GithubAccelerator.UI.Views.LogViewerView();
         logViewerView.DataContext = LogViewer;
         CurrentView = logViewerView;
+        CurrentPageTitle = "日志查看";
+        ResetNavigationSelection();
+        IsLogViewerSelected = true;
         IsDashboardVisible = false;
         IsSettingsVisible = false;
         IsLogViewerVisible = true;
@@ -305,6 +398,9 @@ public partial class MainWindowViewModel : ObservableObject
         var backupManagerView = new GithubAccelerator.UI.Views.BackupManagerView();
         backupManagerView.DataContext = BackupManager;
         CurrentView = backupManagerView;
+        CurrentPageTitle = "备份管理";
+        ResetNavigationSelection();
+        IsBackupSelected = true;
         IsDashboardVisible = false;
         IsSettingsVisible = false;
         IsLogViewerVisible = false;
@@ -322,6 +418,9 @@ public partial class MainWindowViewModel : ObservableObject
         var hostsGroupView = new GithubAccelerator.UI.Views.HostsGroupView();
         hostsGroupView.DataContext = HostsGroupManager;
         CurrentView = hostsGroupView;
+        CurrentPageTitle = "分组管理";
+        ResetNavigationSelection();
+        IsHostsGroupSelected = true;
         IsDashboardVisible = false;
         IsSettingsVisible = false;
         IsLogViewerVisible = false;
@@ -341,6 +440,9 @@ public partial class MainWindowViewModel : ObservableObject
         var chartView = new GithubAccelerator.UI.Views.PerformanceChartView();
         chartView.DataContext = PerformanceChart;
         CurrentView = chartView;
+        CurrentPageTitle = "性能图表";
+        ResetNavigationSelection();
+        IsPerformanceChartSelected = true;
         IsDashboardVisible = false;
         IsSettingsVisible = false;
         IsLogViewerVisible = false;
@@ -360,12 +462,27 @@ public partial class MainWindowViewModel : ObservableObject
         var latencyView = new GithubAccelerator.UI.Views.GitHubLatencyView();
         latencyView.DataContext = GitHubLatency;
         CurrentView = latencyView;
+        CurrentPageTitle = "GitHub 延迟监控";
+        ResetNavigationSelection();
+        IsGitHubLatencySelected = true;
         IsDashboardVisible = false;
         IsSettingsVisible = false;
         IsLogViewerVisible = false;
         IsHostsGroupVisible = false;
         IsPerformanceChartVisible = false;
         IsGitHubLatencyVisible = true;
+    }
+
+    private void ResetNavigationSelection()
+    {
+        IsDashboardSelected = false;
+        IsPerformanceChartSelected = false;
+        IsGitHubLatencySelected = false;
+        IsHostsContentSelected = false;
+        IsHostsGroupSelected = false;
+        IsBackupSelected = false;
+        IsSettingsSelected = false;
+        IsLogViewerSelected = false;
     }
 
     [RelayCommand]
@@ -425,6 +542,8 @@ public partial class MainWindowViewModel : ObservableObject
             Sources.Add(vm);
         }
         UpdateBestSource();
+        UpdateFilteredSources();
+        IsLoading = false;
     }
 
     private async void OnSingleSourceApplyRequested(SourceStatusViewModel source)
@@ -800,6 +919,9 @@ public partial class MainWindowViewModel : ObservableObject
             var hostsContentView = new GithubAccelerator.UI.Views.HostsContentView();
             hostsContentView.DataContext = this;
             CurrentView = hostsContentView;
+            CurrentPageTitle = "Hosts 内容";
+            ResetNavigationSelection();
+            IsHostsContentSelected = true;
             IsDashboardVisible = false;
             IsSettingsVisible = false;
             IsLogViewerVisible = false;

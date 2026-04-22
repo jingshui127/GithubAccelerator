@@ -10,6 +10,7 @@
         <converters:BoolToStringConverter x:Key="BoolToStringConverter"/>
         <converters:StringNotEmptyConverter x:Key="StringNotEmptyConverter"/>
         <converters:BoolToColorConverter x:Key="BoolToColorConverter"/>
+        <converters:BoolToFontWeightConverter x:Key="BoolToFontWeightConverter"/>
 
         <!-- Theme Colors -->
         <Color x:Key="PrimaryColorValue">#0078D4</Color>
