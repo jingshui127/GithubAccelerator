@@ -29,18 +29,47 @@ public class LogEntry
 
 public class LogService : IDisposable
 {
+    private static LogService? _instance;
+    private static readonly object _instanceLock = new();
+    
+    public static LogService Instance
+    {
+        get
+        {
+            if (_instance == null)
+            {
+                lock (_instanceLock)
+                {
+                    _instance ??= new LogService();
+                }
+            }
+            return _instance;
+        }
+    }
+
     private readonly ObservableCollection<LogEntry> _logEntries = new();
     private readonly object _lock = new();
     private bool _disposed;
+    private bool _initialized;
     private const int MaxLogEntries = 1000;
 
     public ObservableCollection<LogEntry> LogEntries => _logEntries;
 
     public event Action<LogEntry>? OnLogEntryAdded;
 
-    public LogService()
+    private LogService()
     {
+    }
+
+    public void Initialize()
+    {
+        if (_initialized) return;
+        
         InitializeSerilog();
+        _initialized = true;
+        
+        Log.Information("日志服务已初始化");
+        Log.Information("应用程序启动");
     }
 
     private void InitializeSerilog()
@@ -71,16 +100,19 @@ public class LogService : IDisposable
             Exception = logEvent.Exception?.ToString()
         };
 
-        lock (_lock)
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            if (_logEntries.Count >= MaxLogEntries)
+            lock (_lock)
             {
-                _logEntries.RemoveAt(0);
+                if (_logEntries.Count >= MaxLogEntries)
+                {
+                    _logEntries.RemoveAt(0);
+                }
+                _logEntries.Add(entry);
             }
-            _logEntries.Add(entry);
-        }
 
-        OnLogEntryAdded?.Invoke(entry);
+            OnLogEntryAdded?.Invoke(entry);
+        });
     }
 
     public void Clear()

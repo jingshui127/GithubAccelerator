@@ -16,6 +16,8 @@ public partial class App : Application
     {
         AvaloniaXamlLoader.Load(this);
         ThemeManager.Initialize();
+        
+        LogService.Instance.Initialize();
     }
 
     public override void OnFrameworkInitializationCompleted()

@@ -38,7 +38,7 @@
         <!-- 侧边栏导航 -->
         <Border Grid.Column="0"
                 Width="200"
-                Background="{DynamicResource SystemChromeLowColor}"
+                Background="{DynamicResource ControlFillColorDefaultBrush}"
                 BorderThickness="0,0,1,0"
                 BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
             <Grid RowDefinitions="Auto,*,Auto">
@@ -75,12 +75,11 @@
                                 HorizontalContentAlignment="Left"
                                 Padding="12,10"
                                 CornerRadius="8"
-                                Background="{Binding IsDashboardSelected, Converter={StaticResource BoolToColorConverter}, ConverterParameter='{DynamicResource AccentColor}|Transparent'}"
-                                BorderThickness="0">
+                                BorderThickness="0"
+                                Classes="NavButton">
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <TextBlock Text="📊" FontSize="16"/>
-                                <TextBlock Text="仪表盘" FontSize="13" 
-                                          FontWeight="{Binding IsDashboardSelected, Converter={StaticResource BoolToFontWeightConverter}}"/>
+                                <TextBlock Text="仪表盘" FontSize="13"/>
                             </StackPanel>
                         </Button>
 
@@ -89,12 +88,11 @@
                                 HorizontalContentAlignment="Left"
                                 Padding="12,10"
                                 CornerRadius="8"
-                                Background="{Binding IsPerformanceChartSelected, Converter={StaticResource BoolToColorConverter}, ConverterParameter='{DynamicResource AccentColor}|Transparent'}"
-                                BorderThickness="0">
+                                BorderThickness="0"
+                                Classes="NavButton">
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <TextBlock Text="📈" FontSize="16"/>
-                                <TextBlock Text="性能图表" FontSize="13"
-                                          FontWeight="{Binding IsPerformanceChartSelected, Converter={StaticResource BoolToFontWeightConverter}}"/>
+                                <TextBlock Text="性能图表" FontSize="13"/>
                             </StackPanel>
                         </Button>
 
@@ -103,12 +101,11 @@
                                 HorizontalContentAlignment="Left"
                                 Padding="12,10"
                                 CornerRadius="8"
-                                Background="{Binding IsGitHubLatencySelected, Converter={StaticResource BoolToColorConverter}, ConverterParameter='{DynamicResource AccentColor}|Transparent'}"
-                                BorderThickness="0">
+                                BorderThickness="0"
+                                Classes="NavButton">
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <TextBlock Text="🌐" FontSize="16"/>
-                                <TextBlock Text="GitHub延迟" FontSize="13"
-                                          FontWeight="{Binding IsGitHubLatencySelected, Converter={StaticResource BoolToFontWeightConverter}}"/>
+                                <TextBlock Text="GitHub延迟" FontSize="13"/>
                             </StackPanel>
                         </Button>
 
@@ -124,12 +121,11 @@
                                 HorizontalContentAlignment="Left"
                                 Padding="12,10"
                                 CornerRadius="8"
-                                Background="{Binding IsHostsContentSelected, Converter={StaticResource BoolToColorConverter}, ConverterParameter='{DynamicResource AccentColor}|Transparent'}"
-                                BorderThickness="0">
+                                BorderThickness="0"
+                                Classes="NavButton">
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <TextBlock Text="📄" FontSize="16"/>
-                                <TextBlock Text="Hosts 内容" FontSize="13"
-                                          FontWeight="{Binding IsHostsContentSelected, Converter={StaticResource BoolToFontWeightConverter}}"/>
+                                <TextBlock Text="Hosts 内容" FontSize="13"/>
                             </StackPanel>
                         </Button>
 
@@ -138,12 +134,11 @@
                                 HorizontalContentAlignment="Left"
                                 Padding="12,10"
                                 CornerRadius="8"
-                                Background="{Binding IsHostsGroupSelected, Converter={StaticResource BoolToColorConverter}, ConverterParameter='{DynamicResource AccentColor}|Transparent'}"
-                                BorderThickness="0">
+                                BorderThickness="0"
+                                Classes="NavButton">
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <TextBlock Text="📁" FontSize="16"/>
-                                <TextBlock Text="分组管理" FontSize="13"
-                                          FontWeight="{Binding IsHostsGroupSelected, Converter={StaticResource BoolToFontWeightConverter}}"/>
+                                <TextBlock Text="分组管理" FontSize="13"/>
                             </StackPanel>
                         </Button>
 
@@ -152,12 +147,11 @@
                                 HorizontalContentAlignment="Left"
                                 Padding="12,10"
                                 CornerRadius="8"
-                                Background="{Binding IsBackupSelected, Converter={StaticResource BoolToColorConverter}, ConverterParameter='{DynamicResource AccentColor}|Transparent'}"
-                                BorderThickness="0">
+                                BorderThickness="0"
+                                Classes="NavButton">
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <TextBlock Text="💾" FontSize="16"/>
-                                <TextBlock Text="备份管理" FontSize="13"
-                                          FontWeight="{Binding IsBackupSelected, Converter={StaticResource BoolToFontWeightConverter}}"/>
+                                <TextBlock Text="备份管理" FontSize="13"/>
                             </StackPanel>
                         </Button>
 
@@ -173,12 +167,11 @@
                                 HorizontalContentAlignment="Left"
                                 Padding="12,10"
                                 CornerRadius="8"
-                                Background="{Binding IsSettingsSelected, Converter={StaticResource BoolToColorConverter}, ConverterParameter='{DynamicResource AccentColor}|Transparent'}"
-                                BorderThickness="0">
+                                BorderThickness="0"
+                                Classes="NavButton">
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <TextBlock Text="⚙️" FontSize="16"/>
-                                <TextBlock Text="设置" FontSize="13"
-                                          FontWeight="{Binding IsSettingsSelected, Converter={StaticResource BoolToFontWeightConverter}}"/>
+                                <TextBlock Text="设置" FontSize="13"/>
                             </StackPanel>
                         </Button>
 
@@ -187,12 +180,11 @@
                                 HorizontalContentAlignment="Left"
                                 Padding="12,10"
                                 CornerRadius="8"
-                                Background="{Binding IsLogViewerSelected, Converter={StaticResource BoolToColorConverter}, ConverterParameter='{DynamicResource AccentColor}|Transparent'}"
-                                BorderThickness="0">
+                                BorderThickness="0"
+                                Classes="NavButton">
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <TextBlock Text="📝" FontSize="16"/>
-                                <TextBlock Text="日志查看" FontSize="13"
-                                          FontWeight="{Binding IsLogViewerSelected, Converter={StaticResource BoolToFontWeightConverter}}"/>
+                                <TextBlock Text="日志查看" FontSize="13"/>
                             </StackPanel>
                         </Button>
                     </StackPanel>

@@ -92,7 +92,7 @@ public partial class LogViewerViewModel : ObservableObject
 
     public LogViewerViewModel()
     {
-        _logService = new LogService();
+        _logService = LogService.Instance;
         _logService.OnLogEntryAdded += OnLogEntryAdded;
 
         foreach (var entry in _logService.LogEntries)

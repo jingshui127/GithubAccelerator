@@ -27,6 +27,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.1] - 2026-04-22
+
+### Fixed
+- 修复侧边栏导航亮色主题配色问题，按钮背景色在亮色主题下显示正常
+- 修复日志界面显示为空的问题，改用单例 LogService 并在应用启动时初始化
+- 修复 LogService 跨线程更新 UI 的问题
+
+### Changed
+- 重构侧边栏导航按钮样式，使用 NavButton 类替代动态绑定
+- LogService 改为单例模式，确保全局日志一致性
+- 更新项目计划，将跨平台开发推迟，优先完善功能
+
+---
+
 ## [1.2.0] - 2026-04-22
 
 ### Added
@@ -35,11 +49,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 新增骨架屏加载动画，提升加载状态用户体验
 - 新增数据源搜索和排序功能
 - 新增 Toast 通知系统，支持成功/警告/错误/信息四种类型
+- 新增空状态显示，当搜索无结果时显示友好提示
+- 新增图标辅助类 IconHelper，统一管理应用图标
+- 新增页面切换动画，使用 TransitioningContentControl 实现平滑过渡
 
 ### Changed
 - 重构导航结构，从顶部导航改为侧边栏导航
 - 优化图表控件，添加悬停高亮效果
 - 改进加载状态显示，使用骨架屏替代简单加载指示器
+- 完善快捷键系统，支持 Ctrl+R、Ctrl+S、Ctrl+H、F5、Ctrl+1-4 等快捷键
 
 ---
 

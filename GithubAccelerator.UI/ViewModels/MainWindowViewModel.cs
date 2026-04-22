@@ -16,6 +16,7 @@ using GithubAccelerator.UI.Controls;
 using GithubAccelerator.UI.Services;
 using GithubAccelerator.UI.Views;
 using Microsoft.Extensions.Logging;
+using Serilog;
 
 namespace GithubAccelerator.UI.ViewModels;
 
@@ -229,6 +230,8 @@ public partial class MainWindowViewModel : ObservableObject
 
     public MainWindowViewModel()
     {
+        Log.Information("MainWindowViewModel 初始化开始");
+        
         _settings = SettingsViewModel.Create();
         _statsService = SourceStatisticsService.Instance;
 
@@ -241,13 +244,17 @@ public partial class MainWindowViewModel : ObservableObject
         _historyService.OnOperationRecorded += OnOperationRecorded;
         _notificationService.OnNotification += OnNotificationReceived;
 
+        Log.Information("正在加载仪表盘");
         ShowDashboard();
+        
+        Log.Information("正在初始化数据源");
         InitializeSources();
         ApplySettings();
         StartAutoUpdate();
         CheckHostsStatus();
 
         // 自动启动监控 - 始终检测所有数据源状态
+        Log.Information("启动性能监控");
         _performanceMonitor.StartMonitoring();
         IsMonitoring = true;
         if (_settings.TestInterval > 0)
@@ -270,6 +277,8 @@ public partial class MainWindowViewModel : ObservableObject
                 UpdateFilteredSources();
             }
         };
+        
+        Log.Information("MainWindowViewModel 初始化完成");
     }
 
     private void UpdateFilteredSources()

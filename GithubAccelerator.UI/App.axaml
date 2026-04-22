@@ -34,5 +34,30 @@
     <Application.Styles>
         <semi:SemiTheme Locale="zh-CN" />
         <StyleInclude Source="avares://GithubAccelerator.UI/Styles/CardStyles.axaml"/>
+        
+        <!-- Navigation Button Style -->
+        <Style Selector="Button.NavButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.15"/>
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.NavButton:pointerover">
+            <Setter Property="Background" Value="#E5E5E5"/>
+        </Style>
+        <Style Selector="Button.NavButton:pressed">
+            <Setter Property="Background" Value="#D0D0D0"/>
+        </Style>
+        
+        <!-- Dark theme navigation button -->
+        <Style Selector="Button.NavButton /template/ ContentPresenter">
+            <Setter Property="CornerRadius" Value="8"/>
+        </Style>
     </Application.Styles>
 </Application>
