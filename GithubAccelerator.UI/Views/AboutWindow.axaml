@@ -1,0 +1,54 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="300"
+        x:Class="GithubAccelerator.UI.Views.AboutWindow"
+        Title="关于 GitHub 加速器 Pro"
+        Width="450" Height="350"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        CanResize="False">
+
+    <StackPanel Margin="24" Spacing="16" HorizontalAlignment="Center">
+        <!-- Logo -->
+        <TextBlock Text="🚀" FontSize="48" HorizontalAlignment="Center"/>
+        
+        <!-- Title -->
+        <TextBlock Text="GitHub 加速器 Pro" FontSize="20" FontWeight="SemiBold" 
+                   HorizontalAlignment="Center"/>
+        
+        <TextBlock Text="智能 Hosts 管理与加速工具" FontSize="12" Classes="SecondaryText" 
+                   HorizontalAlignment="Center"/>
+
+        <!-- Version -->
+        <Border Padding="16,8" CornerRadius="8" 
+                Background="{DynamicResource ControlFillColorDefaultBrush}">
+            <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="Auto,*">
+                    <TextBlock Grid.Column="0" Text="版本：" FontSize="13"/>
+                    <TextBlock Grid.Column="1" Text="v1.0.0" FontSize="13" FontWeight="SemiBold"/>
+                </Grid>
+                <Grid ColumnDefinitions="Auto,*">
+                    <TextBlock Grid.Column="0" Text="构建日期：" FontSize="13"/>
+                    <TextBlock Grid.Column="1" Text="2026.04" FontSize="13"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- Description -->
+        <TextBlock Text="GitHub 加速器 Pro 是一款专为国内用户设计的 GitHub 访问加速工具。&#10;通过智能优选最佳数据源，自动更新 Hosts 文件，&#10;帮助您快速、稳定地访问 GitHub 资源。" 
+                   FontSize="12" TextAlignment="Center" TextWrapping="Wrap"
+                   HorizontalAlignment="Center"/>
+
+        <!-- Copyright -->
+        <TextBlock Text="© 2026 GitHub 加速器 Pro. All rights reserved." 
+                   FontSize="11" Classes="SecondaryText"
+                   HorizontalAlignment="Center"/>
+
+        <!-- Close Button -->
+        <Button Content="关闭" Click="CloseButton_Click" 
+                Theme="{DynamicResource PrimaryButton}"
+                Padding="24,6" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+    </StackPanel>
+</Window>

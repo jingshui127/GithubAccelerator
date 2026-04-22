@@ -57,9 +57,9 @@ public class IntegrationTests
     }
 
     [Fact]
-    public void HostsFileService_ApplyAndCheck_WorkflowMaintainsIntegrity()
+    public void WindowsHostsFileService_ApplyAndCheck_WorkflowMaintainsIntegrity()
     {
-        var service = new HostsFileService();
+        var service = new WindowsHostsFileService();
         var testOriginalContent = "127.0.0.1 localhost\n::1 localhost\n";
 
         var hasGithubHosts = service.IsGithubHostsApplied(testOriginalContent);
@@ -70,9 +70,9 @@ public class IntegrationTests
     }
 
     [Fact]
-    public void HostsFileService_MultipleGithubBlocks_RemovesAllBlocks()
+    public void WindowsHostsFileService_MultipleGithubBlocks_RemovesAllBlocks()
     {
-        var service = new HostsFileService();
+        var service = new WindowsHostsFileService();
         var contentWithMultipleBlocks = @"127.0.0.1 localhost
 # GitHub520 Host Start
 140.82.114.4 github.com
@@ -84,8 +84,8 @@ public class IntegrationTests
 10.0.0.1 minecraft
 ";
 
-        var method = typeof(HostsFileService).GetMethod("RemoveGithubHostsBlock",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var method = typeof(WindowsHostsFileService).GetMethod("RemoveGithubHostsBlock",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static);
         var result = (string)method!.Invoke(service, new object[] { contentWithMultipleBlocks })!;
 
         Assert.DoesNotContain("github.com", result);
@@ -96,9 +96,9 @@ public class IntegrationTests
     }
 
     [Fact]
-    public void HostsFileService_HostsBlockWithDifferentEndings_HandlesGracefully()
+    public void WindowsHostsFileService_HostsBlockWithDifferentEndings_HandlesGracefully()
     {
-        var service = new HostsFileService();
+        var service = new WindowsHostsFileService();
         var content = @"127.0.0.1 localhost
 # GitHub520 Host Start
 140.82.114.4 github.com
@@ -195,9 +195,9 @@ public class IntegrationTests
     }
 
     [Fact]
-    public void HostsFileService_UnicodeInHosts_HandlesCorrectly()
+    public void WindowsHostsFileService_UnicodeInHosts_HandlesCorrectly()
     {
-        var service = new HostsFileService();
+        var service = new WindowsHostsFileService();
         var contentWithUnicode = @"127.0.0.1 localhost
 # GitHub520 Host Start
 140.82.114.4 github.com
@@ -205,8 +205,8 @@ public class IntegrationTests
 # 注释行
 ";
 
-        var method = typeof(HostsFileService).GetMethod("RemoveGithubHostsBlock",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var method = typeof(WindowsHostsFileService).GetMethod("RemoveGithubHostsBlock",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static);
         var result = (string)method!.Invoke(service, new object[] { contentWithUnicode })!;
 
         Assert.Contains("localhost", result);

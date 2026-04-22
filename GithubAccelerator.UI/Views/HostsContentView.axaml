@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GithubAccelerator.UI.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
+             x:Class="GithubAccelerator.UI.Views.HostsContentView"
+             x:DataType="vm:MainWindowViewModel">
+
+    <Border Padding="24" Background="{DynamicResource BackgroundColor}">
+        <Grid RowDefinitions="Auto,*,Auto" HorizontalAlignment="Stretch">
+            <!-- 标题和操作按钮 -->
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
+                <StackPanel Grid.Column="0" Spacing="4">
+                    <TextBlock Text="📄 Hosts 文件内容" FontSize="20" FontWeight="SemiBold"/>
+                    <TextBlock Text="查看和管理系统 Hosts 文件" FontSize="12" 
+                               Foreground="{DynamicResource SecondaryTextBrush}"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <Button Content="🔄 刷新" Command="{Binding ViewHostsContentCommand}"
+                            Padding="12,8" FontSize="12"/>
+                    <Button Content="📝 用记事本打开" Command="{Binding OpenHostsInNotepadCommand}"
+                            Padding="12,8" FontSize="12"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Hosts 内容显示 -->
+            <Border Grid.Row="1" CornerRadius="8" 
+                    Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                    BorderThickness="1"
+                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                    <TextBlock Text="{Binding HostsContent}"
+                               FontFamily="Consolas, Courier New, monospace"
+                               FontSize="12"
+                               Padding="16"
+                               TextWrapping="NoWrap"
+                               Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                </ScrollViewer>
+            </Border>
+
+            <!-- 底部状态 -->
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="16" Margin="0,16,0,0">
+                <TextBlock Text="{Binding StatusMessage}" FontSize="12" 
+                           Foreground="{DynamicResource SecondaryTextBrush}"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

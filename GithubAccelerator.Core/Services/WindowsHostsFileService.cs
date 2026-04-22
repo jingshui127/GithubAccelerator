@@ -8,8 +8,8 @@ public class WindowsHostsFileService : IHostsFileService
 {
     private const string HostsFilePath = @"C:\Windows\System32\drivers\etc\hosts";
     private const string BackupFilePath = @"C:\Windows\System32\drivers\etc\hosts.backup";
-    private const string GithubHostsStartMarker = "# GitHub520 Host Start";
-    private const string GithubHostsEndMarker = "# GitHub520 Host End";
+    private const string GithubHostsStartMarker = "# === GitHub Accelerator Start ===";
+    private const string GithubHostsEndMarker = "# === GitHub Accelerator End ===";
 
     public async Task<bool> BackupHostsFileAsync()
     {
@@ -46,7 +46,12 @@ public class WindowsHostsFileService : IHostsFileService
             await BackupHostsFileAsync();
             var currentContent = await ReadHostsFileAsync();
             var newContent = RemoveGithubHostsBlock(currentContent);
-            newContent += "\n" + hostsContent;
+            
+            // 添加标记区域，确保只管理我们自己的内容
+            newContent += $"\n{GithubHostsStartMarker}\n";
+            newContent += hostsContent.Trim();
+            newContent += $"\n{GithubHostsEndMarker}\n";
+            
             await File.WriteAllTextAsync(HostsFilePath, newContent);
             return true;
         }
@@ -111,11 +116,19 @@ public class WindowsHostsFileService : IHostsFileService
         while (startIndex >= 0)
         {
             var endIndex = content.IndexOf(GithubHostsEndMarker, startIndex, StringComparison.Ordinal);
-            if (endIndex < 0) break;
+            if (endIndex < 0)
+            {
+                content = content.Substring(0, startIndex);
+                break;
+            }
 
             content = content.Substring(0, startIndex) + content.Substring(endIndex + GithubHostsEndMarker.Length);
             startIndex = content.IndexOf(GithubHostsStartMarker, StringComparison.Ordinal);
         }
+        
+        content = Regex.Replace(content, @"^\s*[\r\n]+", "", RegexOptions.Multiline);
+        content = content.TrimStart('\r', '\n');
+        
         return content.Trim();
     }
 }

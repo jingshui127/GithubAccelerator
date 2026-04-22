@@ -1,0 +1,137 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:GithubAccelerator.UI.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
+             x:Class="GithubAccelerator.UI.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+
+    <UserControl.DataContext>
+        <vm:SettingsViewModel/>
+    </UserControl.DataContext>
+
+    <ScrollViewer Padding="24" Background="{DynamicResource BackgroundColor}">
+        <StackPanel Spacing="24" MaxWidth="600" Margin="0,0,0,24">
+            <!-- 监控设置 -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="监控设置" FontSize="16" FontWeight="SemiBold"/>
+                
+                <Border Padding="16" CornerRadius="8" 
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <StackPanel Spacing="16">
+                        <StackPanel>
+                            <TextBlock Text="测试间隔（秒）" FontSize="14" FontWeight="SemiBold"/>
+                            <TextBlock Text="每隔多少秒测试一次所有数据源（建议 600 秒/10 分钟）" FontSize="12" Classes="SecondaryText"/>
+                            <NumericUpDown Value="{Binding TestInterval}" 
+                                           Minimum="30" Maximum="3600"
+                                           Margin="0,8,0,0"
+                                           HorizontalAlignment="Left" Width="200"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- 启动设置 -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="启动设置" FontSize="16" FontWeight="SemiBold"/>
+                
+                <Border Padding="16" CornerRadius="8" 
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <StackPanel Spacing="16">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <ToggleSwitch IsChecked="{Binding AutoStart}" HorizontalAlignment="Left"/>
+                            <StackPanel>
+                                <TextBlock Text="开机自启动" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock Text="系统启动时自动运行" FontSize="12" Classes="SecondaryText"/>
+                            </StackPanel>
+                        </StackPanel>
+                        
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <ToggleSwitch IsChecked="{Binding StartMinimized}" HorizontalAlignment="Left"/>
+                            <StackPanel>
+                                <TextBlock Text="启动时最小化" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock Text="启动后自动最小化到托盘" FontSize="12" Classes="SecondaryText"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Hosts 设置 -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="Hosts 设置" FontSize="16" FontWeight="SemiBold"/>
+                
+                <Border Padding="16" CornerRadius="8" 
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <StackPanel Spacing="16">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <ToggleSwitch IsChecked="{Binding AutoApplyHosts}" HorizontalAlignment="Left"/>
+                            <StackPanel>
+                                <TextBlock Text="自动应用 Hosts" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock Text="启动时自动应用最佳数据源的 Hosts" FontSize="12" Classes="SecondaryText"/>
+                            </StackPanel>
+                        </StackPanel>
+                        
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <ToggleSwitch IsChecked="{Binding AutoSwitchBestSource}" HorizontalAlignment="Left"/>
+                            <StackPanel>
+                                <TextBlock Text="自动切换最佳源" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock Text="当发现更快的源时自动切换（比当前快 20ms 以上）" FontSize="12" Classes="SecondaryText"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- 托盘设置 -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="托盘设置" FontSize="16" FontWeight="SemiBold"/>
+                
+                <Border Padding="16" CornerRadius="8" 
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <StackPanel Spacing="16">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <ToggleSwitch IsChecked="{Binding MinimizeToTray}" HorizontalAlignment="Left"/>
+                            <StackPanel>
+                                <TextBlock Text="最小化到托盘" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock Text="关闭窗口时最小化到系统托盘" FontSize="12" Classes="SecondaryText"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- 日志设置 -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="日志设置" FontSize="16" FontWeight="SemiBold"/>
+                
+                <Border Padding="16" CornerRadius="8" 
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <StackPanel>
+                        <TextBlock Text="日志级别" FontSize="14" FontWeight="SemiBold"/>
+                        <TextBlock Text="设置日志记录的详细程度" FontSize="12" Classes="SecondaryText"/>
+                        <ComboBox SelectedItem="{Binding LogLevel}" 
+                                  Margin="0,8,0,0"
+                                  HorizontalAlignment="Left" Width="200">
+                            <ComboBoxItem Content="Debug"/>
+                            <ComboBoxItem Content="Information"/>
+                            <ComboBoxItem Content="Warning"/>
+                            <ComboBoxItem Content="Error"/>
+                        </ComboBox>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -117,12 +117,12 @@ another invalid line
     }
 }
 
-public class HostsFileServiceTests
+public class WindowsHostsFileServiceTests
 {
     [Fact]
     public void IsGithubHostsApplied_WithMarker_ReturnsTrue()
     {
-        var service = new HostsFileService();
+        var service = new WindowsHostsFileService();
         var content = @"# GitHub520 Host Start
 140.82.114.4 github.com
 # GitHub520 Host End";
@@ -132,7 +132,7 @@ public class HostsFileServiceTests
     [Fact]
     public void IsGithubHostsApplied_WithoutMarker_ReturnsFalse()
     {
-        var service = new HostsFileService();
+        var service = new WindowsHostsFileService();
         var content = @"127.0.0.1 localhost";
         Assert.False(service.IsGithubHostsApplied(content));
     }
@@ -140,7 +140,7 @@ public class HostsFileServiceTests
     [Fact]
     public void GetCurrentGithubHostsBlock_WithBlock_ReturnsBlock()
     {
-        var service = new HostsFileService();
+        var service = new WindowsHostsFileService();
         var content = $@"127.0.0.1 localhost
 # GitHub520 Host Start
 140.82.114.4 github.com
@@ -155,7 +155,7 @@ public class HostsFileServiceTests
     [Fact]
     public void GetCurrentGithubHostsBlock_WithoutBlock_ReturnsEmpty()
     {
-        var service = new HostsFileService();
+        var service = new WindowsHostsFileService();
         var content = "127.0.0.1 localhost";
         var result = service.GetCurrentGithubHostsBlock(content);
         Assert.Empty(result);
@@ -169,9 +169,9 @@ public class HostsFileServiceTests
         "127.0.0.1 localhost")]
     public void RemoveGithubHostsBlock_RemovesCorrectly(string input, string expected)
     {
-        var service = new HostsFileService();
-        var method = typeof(HostsFileService).GetMethod("RemoveGithubHostsBlock",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var service = new WindowsHostsFileService();
+        var method = typeof(WindowsHostsFileService).GetMethod("RemoveGithubHostsBlock",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static);
         var result = (string)method!.Invoke(service, new object[] { input })!;
         Assert.Equal(expected.Trim(), result.Trim());
     }

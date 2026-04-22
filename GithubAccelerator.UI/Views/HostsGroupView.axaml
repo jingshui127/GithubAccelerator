@@ -1,0 +1,154 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:GithubAccelerator.UI.ViewModels"
+             xmlns:svc="using:GithubAccelerator.UI.Services"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
+             x:Class="GithubAccelerator.UI.Views.HostsGroupView"
+             x:DataType="vm:HostsGroupViewModel">
+
+    <Grid ColumnDefinitions="280,*" Margin="0">
+        <!-- 左侧分组列表 -->
+        <Border Grid.Column="0" Padding="16" Margin="0,0,8,0"
+                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                CornerRadius="12" BorderThickness="1"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+            <Grid RowDefinitions="Auto,Auto,*,Auto">
+                <TextBlock Grid.Row="0" Text="📁 Hosts 分组" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12"/>
+
+                <!-- 新建分组 -->
+                <StackPanel Grid.Row="1" Spacing="8" Margin="0,0,0,12">
+                    <TextBox PlaceholderText="分组名称" Text="{Binding NewGroupName}"/>
+                    <TextBox PlaceholderText="描述（可选）" Text="{Binding NewGroupDescription}"/>
+                    <Button Content="➕ 新建分组" Command="{Binding CreateGroupCommand}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                </StackPanel>
+
+                <!-- 分组列表 -->
+                <ListBox Grid.Row="2"
+                         ItemsSource="{Binding Groups}"
+                         SelectedItem="{Binding SelectedGroup}"
+                         Margin="0,0,0,8">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="svc:HostsGroup">
+                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="4,6">
+                                <Border Grid.Column="0" Width="12" Height="12" CornerRadius="6"
+                                        Background="{Binding Color}" Margin="0,0,8,0"
+                                        VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="Medium"/>
+                                    <TextBlock FontSize="10" Foreground="{DynamicResource SecondaryTextBrush}">
+                                        <Run Text="{Binding EnabledCount}"/>
+                                        <Run Text="/"/>
+                                        <Run Text="{Binding TotalCount}"/>
+                                        <Run Text=" 条规则"/>
+                                    </TextBlock>
+                                </StackPanel>
+                                <TextBlock Grid.Column="2" Text="✓" FontSize="14"
+                                           Foreground="#4CAF50" IsVisible="{Binding IsEnabled}"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <!-- 底部操作 -->
+                <StackPanel Grid.Row="3" Spacing="8">
+                    <Button Content="📥 从当前 Hosts 导入" Command="{Binding ImportFromCurrentHostsCommand}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 右侧详情 -->
+        <Border Grid.Column="1" Padding="20"
+                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                CornerRadius="12" BorderThickness="1"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+            <ScrollViewer>
+                <StackPanel Spacing="16">
+                    <!-- 分组标题区域 -->
+                    <Grid ColumnDefinitions="*,Auto,Auto,Auto" IsVisible="{Binding SelectedGroup, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <StackPanel Grid.Column="0" Spacing="4">
+                            <TextBlock Text="{Binding SelectedGroup.Name}" FontSize="20" FontWeight="Bold"/>
+                            <TextBlock Text="{Binding SelectedGroup.Description}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="0,0,16,0">
+                            <TextBox PlaceholderText="新名称" Text="{Binding NewGroupName}" 
+                                     Width="150" Padding="8,4" FontSize="12"/>
+                            <Button Content="✏️ 重命名" Command="{Binding RenameGroupCommand}"
+                                    Padding="12,6"/>
+                        </StackPanel>
+                        <Button Grid.Column="2" Content="🔄 切换启用" Command="{Binding ToggleGroupCommand}"
+                                Margin="0,0,8,0" Padding="12,6"/>
+                        <Button Grid.Column="3" Content="🗑️ 删除" Command="{Binding DeleteGroupCommand}"
+                                Padding="12,6"/>
+                    </Grid>
+
+                    <!-- 添加规则 -->
+                    <Border Padding="12" CornerRadius="8"
+                            Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                            BorderThickness="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                            IsVisible="{Binding SelectedGroup, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="8">
+                            <TextBox Grid.Column="0" PlaceholderText="IP 地址" Text="{Binding NewEntryIp}"/>
+                            <TextBox Grid.Column="1" PlaceholderText="域名" Text="{Binding NewEntryDomain}"/>
+                            <Button Grid.Column="2" Content="➕ 添加" Command="{Binding AddEntryCommand}"
+                                    Padding="16,0" VerticalAlignment="Stretch"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- 规则列表 -->
+                    <ItemsControl ItemsSource="{Binding SelectedGroup.Entries}"
+                                  IsVisible="{Binding SelectedGroup, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="svc:HostsEntry">
+                                <Border Padding="12,8" Margin="0,0,0,4" CornerRadius="8"
+                                        Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                                        BorderThickness="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                                    <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+                                        <TextBlock Grid.Column="0" Text="{Binding Ip}" FontSize="13"
+                                                   FontFamily="Consolas" Margin="0,0,16,0"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="→" FontSize="13"
+                                                   Margin="0,0,16,0" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding Domain}" FontSize="13"
+                                                   FontWeight="Medium" VerticalAlignment="Center"/>
+                                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="✅" FontSize="14" IsVisible="{Binding IsEnabled}"
+                                                       VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBlock Text="⏸️" FontSize="14" IsVisible="{Binding !IsEnabled}"
+                                                       VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <Button Content="🔄" Command="{Binding $parent[ItemsControl].DataContext.ToggleEntryCommand}"
+                                                    CommandParameter="{Binding}" Padding="4,2" FontSize="10" Margin="0,0,4,0"/>
+                                            <Button Content="❌" Command="{Binding $parent[ItemsControl].DataContext.RemoveEntryCommand}"
+                                                    CommandParameter="{Binding}" Padding="4,2" FontSize="10"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- 底部操作 -->
+                    <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding SelectedGroup, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" FontSize="12"
+                                   VerticalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                        <Button Grid.Column="1" Content="🚀 应用分组规则" Command="{Binding ApplyGroupsCommand}"
+                                Padding="20,10" FontSize="14" FontWeight="Medium"/>
+                    </Grid>
+
+                    <!-- 空状态 -->
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                                Spacing="12" IsVisible="{Binding SelectedGroup, Converter={x:Static ObjectConverters.IsNull}}">
+                        <TextBlock Text="📁" FontSize="48" HorizontalAlignment="Center"/>
+                        <TextBlock Text="请选择或创建一个分组" FontSize="16" HorizontalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                        <TextBlock Text="在左侧创建分组，然后添加 Hosts 规则" FontSize="12" HorizontalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</UserControl>

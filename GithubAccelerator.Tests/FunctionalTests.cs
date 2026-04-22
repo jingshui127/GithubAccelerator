@@ -45,7 +45,7 @@ public class FunctionalTests
     public void ApplyHosts_Workflow_CompleteCycle()
     {
         var hostsService = new GithubHostsService();
-        var hostsFileService = new HostsFileService();
+        var hostsFileService = new WindowsHostsFileService();
 
         var hostsContent = ValidHostsContent;
 
@@ -62,7 +62,7 @@ public class FunctionalTests
     [Fact]
     public void RestoreHosts_PreservesOriginalContent()
     {
-        var service = new HostsFileService();
+        var service = new WindowsHostsFileService();
         var originalContent = @"127.0.0.1 localhost
 ::1 localhost
 
@@ -251,7 +251,7 @@ public class UiLayoutTests
     [Fact]
     public void NotificationPanel_HiddenByDefault()
     {
-        var service = new HostsFileService();
+        var service = new WindowsHostsFileService();
         Assert.False(service.IsGithubHostsApplied(""));
     }
 }
@@ -303,9 +303,9 @@ invalid!@#$
     }
 
     [Fact]
-    public void HostsFileService_EmptyHostsFile_HandlesCorrectly()
+    public void WindowsHostsFileService_EmptyHostsFile_HandlesCorrectly()
     {
-        var service = new HostsFileService();
+        var service = new WindowsHostsFileService();
         Assert.False(service.IsGithubHostsApplied(""));
         Assert.False(service.IsGithubHostsApplied("# Just comments"));
     }

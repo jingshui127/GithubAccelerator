@@ -3,7 +3,7 @@ using MaterialSkin.Controls;
 using System.Drawing;
 using System.Net.NetworkInformation;
 using System.Windows.Forms;
-using System.Windows.Forms.DataVisualization.Charting;
+using ScottPlot;
 using GithubAccelerator.Services;
 
 namespace GithubAccelerator;
@@ -21,7 +21,14 @@ public partial class MainForm : MaterialForm
     private readonly List<(DateTime time, int latency)> _latencyHistory = new();
     private System.Windows.Forms.Timer _autoTestTimer;
     private bool _isTesting = false;
+    private bool _isSourceTesting = false;
     private readonly MaterialSkinManager _skinManager;
+    private System.Drawing.Color _statusColor = System.Drawing.Color.Gray;
+
+    private static readonly System.Drawing.Color StatusEnabled = System.Drawing.Color.FromArgb(76, 175, 80);
+    private static readonly System.Drawing.Color StatusDisabled = System.Drawing.Color.FromArgb(158, 158, 158);
+    private static readonly System.Drawing.Color StatusError = System.Drawing.Color.FromArgb(244, 67, 54);
+    private static readonly System.Drawing.Color StatusWarning = System.Drawing.Color.FromArgb(255, 193, 7);
 
     public MainForm()
     {
@@ -47,6 +54,8 @@ public partial class MainForm : MaterialForm
         _ = TestSingleDomainLatencyAsync();
         _ = InitializeAsync();
 
+        InitializeSourceMonitorGrid();
+
         this.StartPosition = FormStartPosition.CenterScreen;
         this.Visible = true;
         this.Show();
@@ -60,23 +69,36 @@ public partial class MainForm : MaterialForm
 
     private void InitializeChart()
     {
-        ChartArea chartArea = new ChartArea("LatencyArea");
-        chartArea.AxisX.LabelStyle.Format = "HH:mm";
-        chartArea.AxisX.IntervalType = DateTimeIntervalType.Minutes;
-        chartArea.AxisX.Interval = 10;
-        chartArea.AxisY.Title = "延迟 (ms)";
-        chartArea.AxisY.Minimum = 0;
-        chartLatency.ChartAreas.Add(chartArea);
+        formsPlotLatency.Plot.Title("延迟曲线");
+        formsPlotLatency.Plot.XLabel("时间");
+        formsPlotLatency.Plot.YLabel("延迟 (ms)");
+        formsPlotLatency.Plot.DataBackground.Color = ScottPlot.Color.FromHex("#FAFAFA");
+        formsPlotLatency.Plot.Axes.SetLimitsY(0, 500);
+        
+        // 自动检测中文字体支持
+        formsPlotLatency.Plot.Font.Automatic();
+        
+        formsPlotLatency.Refresh();
+    }
 
-        Series latencySeries = new Series("延迟");
-        latencySeries.ChartType = SeriesChartType.Line;
-        latencySeries.Color = Color.FromArgb(0, 123, 255);
-        latencySeries.BorderWidth = 2;
-        latencySeries.XValueType = ChartValueType.DateTime;
-        chartLatency.Series.Add(latencySeries);
-
-        chartLatency.Location = new Point(20, 190);
-        chartLatency.Size = new Size(960, 200);
+    private void UpdateChartTheme(bool isDark)
+    {
+        if (isDark)
+        {
+            formsPlotLatency.Plot.DataBackground.Color = ScottPlot.Color.FromHex("#1F1F1F");
+            formsPlotLatency.Plot.FigureBackground.Color = ScottPlot.Color.FromHex("#181818");
+            formsPlotLatency.Plot.Axes.Color(ScottPlot.Color.FromHex("#D7D7D7"));
+            formsPlotLatency.Plot.Grid.MajorLineColor = ScottPlot.Color.FromHex("#404040");
+        }
+        else
+        {
+            formsPlotLatency.Plot.DataBackground.Color = ScottPlot.Color.FromHex("#FAFAFA");
+            formsPlotLatency.Plot.FigureBackground.Color = ScottPlot.Color.FromHex("#FFFFFF");
+            formsPlotLatency.Plot.Axes.Color(ScottPlot.Color.FromHex("#000000"));
+            formsPlotLatency.Plot.Grid.MajorLineColor = ScottPlot.Color.FromHex("#CCCCCC");
+        }
+        
+        formsPlotLatency.Refresh();
     }
 
     private async Task InitializeAsync()
@@ -88,7 +110,7 @@ public partial class MainForm : MaterialForm
     {
         try
         {
-            lblStatus.Text = "正在检查状态...";
+            UpdateStatusIndicator(StatusWarning, "正在检查状态...");
             materialButtonApply.Enabled = false;
             materialButtonRestore.Enabled = false;
             materialButtonRefresh.Enabled = false;
@@ -98,23 +120,20 @@ public partial class MainForm : MaterialForm
 
             if (_isHostsApplied)
             {
-                lblStatus.Text = "已启用加速";
-                picStatus.BackColor = Color.FromArgb(76, 175, 80);
+                UpdateStatusIndicator(StatusEnabled, "已启用加速");
                 materialButtonRestore.Enabled = true;
                 materialButtonRefresh.Enabled = true;
                 _lastTestTime = DateTime.Now;
             }
             else
             {
-                lblStatus.Text = "未启用加速";
-                picStatus.BackColor = Color.FromArgb(158, 158, 158);
+                UpdateStatusIndicator(StatusDisabled, "未启用加速");
                 materialButtonApply.Enabled = true;
             }
         }
         catch (Exception ex)
         {
-            lblStatus.Text = $"检查失败: {ex.Message}";
-            picStatus.BackColor = Color.FromArgb(244, 67, 54);
+            UpdateStatusIndicator(StatusError, $"检查失败: {ex.Message}");
             materialButtonApply.Enabled = true;
         }
     }
@@ -123,12 +142,12 @@ public partial class MainForm : MaterialForm
     {
         try
         {
-            lblStatus.Text = "正在获取最新 Hosts...";
+            UpdateStatusIndicator(StatusWarning, "正在获取最新 Hosts...");
             materialButtonApply.Enabled = false;
 
             var hostsContent = await _hostsService.FetchHostsAsync();
 
-            lblStatus.Text = "正在备份并应用...";
+            UpdateStatusIndicator(StatusWarning, "正在备份并应用...");
             await _fileService.BackupHostsFileAsync();
             await _fileService.ApplyGithubHostsAsync(hostsContent);
 
@@ -138,15 +157,14 @@ public partial class MainForm : MaterialForm
             _isHostsApplied = true;
             _lastTestTime = DateTime.Now;
 
-            lblStatus.Text = "加速已启用";
-            picStatus.BackColor = Color.FromArgb(76, 175, 80);
+            UpdateStatusIndicator(StatusEnabled, "加速已启用");
             materialButtonRestore.Enabled = true;
             materialButtonRefresh.Enabled = true;
+            UpdateHostsPreview();
         }
         catch (Exception ex)
         {
-            lblStatus.Text = $"启用失败: {ex.Message}";
-            picStatus.BackColor = Color.FromArgb(244, 67, 54);
+            UpdateStatusIndicator(StatusError, $"启用失败: {ex.Message}");
             materialButtonApply.Enabled = true;
         }
     }
@@ -155,7 +173,7 @@ public partial class MainForm : MaterialForm
     {
         try
         {
-            lblStatus.Text = "正在恢复...";
+            UpdateStatusIndicator(StatusWarning, "正在恢复...");
             materialButtonRestore.Enabled = false;
 
             await _fileService.RestoreOriginalHostsAsync();
@@ -164,15 +182,13 @@ public partial class MainForm : MaterialForm
             _currentHostsContent = await _fileService.ReadHostsFileAsync();
             _isHostsApplied = false;
 
-            lblStatus.Text = "已恢复原状";
-            picStatus.BackColor = Color.FromArgb(158, 158, 158);
+            UpdateStatusIndicator(StatusDisabled, "已恢复原状");
             materialButtonApply.Enabled = true;
             materialButtonRefresh.Enabled = false;
         }
         catch (Exception ex)
         {
-            lblStatus.Text = $"恢复失败: {ex.Message}";
-            picStatus.BackColor = Color.FromArgb(244, 67, 54);
+            UpdateStatusIndicator(StatusError, $"恢复失败: {ex.Message}");
             materialButtonRestore.Enabled = true;
         }
     }
@@ -258,18 +274,19 @@ public partial class MainForm : MaterialForm
     {
         if (materialTabControl.SelectedIndex == 1)
         {
-            txtHostsPreview.Text = _currentHostsContent;
-            if (_lastTestTime != DateTime.MinValue)
-            {
-                lblUpdateTime.Text = _lastTestTime.ToString("yyyy-MM-dd HH:mm:ss");
-            }
+            UpdateHostsPreview();
         }
-        else if (materialTabControl.SelectedIndex == 2)
+    }
+
+    private void UpdateHostsPreview()
+    {
+        if (!string.IsNullOrEmpty(_currentHostsContent))
         {
-            if (!string.IsNullOrEmpty(_lastTestResults))
-            {
-                txtTestResults.Text = _lastTestResults;
-            }
+            txtHostsPreview.Text = _currentHostsContent.Replace("\n", "\r\n").Replace("\r\r\n", "\r\n");
+        }
+        if (_lastTestTime != DateTime.MinValue)
+        {
+            lblUpdateTime.Text = _lastTestTime.ToString("yyyy-MM-dd HH:mm:ss");
         }
     }
 
@@ -278,6 +295,9 @@ public partial class MainForm : MaterialForm
         _skinManager.Theme = materialSwitchDarkMode.Checked
             ? MaterialSkinManager.Themes.DARK
             : MaterialSkinManager.Themes.LIGHT;
+        
+        // 更新图表主题
+        UpdateChartTheme(materialSwitchDarkMode.Checked);
     }
 
     private void materialSwitchStartup_CheckedChanged(object? sender, EventArgs e)
@@ -286,25 +306,6 @@ public partial class MainForm : MaterialForm
             _startupManager.EnableStartup();
         else
             _startupManager.DisableStartup();
-    }
-
-    private void materialButtonToggleProxy_Click(object? sender, EventArgs e)
-    {
-        if (materialButtonToggleProxy.Text == "启动代理")
-        {
-            materialButtonToggleProxy.Text = "停止代理";
-            lblProxyInfo.Text = "代理状态: 已启动";
-        }
-        else
-        {
-            materialButtonToggleProxy.Text = "启动代理";
-            lblProxyInfo.Text = "代理状态: 已停止";
-        }
-    }
-
-    private void materialButtonProxyGit_Click(object? sender, EventArgs e)
-    {
-        MessageBox.Show("Git 代理配置功能开发中...", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
@@ -372,23 +373,247 @@ public partial class MainForm : MaterialForm
 
     private void UpdateLatencyChart(int latency)
     {
-        if (chartLatency.Series.Count == 0 || chartLatency.ChartAreas.Count == 0)
-            return;
-
         var now = DateTime.Now;
         _latencyHistory.Add((now, latency));
 
         var oneHourAgo = now.AddHours(-1);
         _latencyHistory.RemoveAll(x => x.time < oneHourAgo);
 
-        var series = chartLatency.Series["延迟"];
-        series.Points.Clear();
-
-        foreach (var point in _latencyHistory)
+        if (latency >= 0)
         {
-            series.Points.AddXY(point.time.ToOADate(), point.latency >= 0 ? point.latency : 0);
+            lblLatency.Text = $"平均延迟: {latency} ms";
+        }
+        else
+        {
+            lblLatency.Text = "平均延迟: -- ms";
         }
 
-        chartLatency.ChartAreas[0].RecalculateAxesScale();
+        formsPlotLatency.Plot.Clear();
+
+        if (_latencyHistory.Count > 0)
+        {
+            var xs = _latencyHistory.Select(p => p.time.ToOADate()).ToArray();
+            var ys = _latencyHistory.Select(p => p.latency >= 0 ? (double)p.latency : 0).ToArray();
+
+            var signal = formsPlotLatency.Plot.Add.Scatter(xs, ys);
+            signal.Color = ScottPlot.Color.FromHex("#007BFF");
+            signal.LineWidth = 2;
+            signal.MarkerSize = 4;
+
+            formsPlotLatency.Plot.Axes.DateTimeTicksBottom();
+            
+            var maxLatency = ys.Max();
+            formsPlotLatency.Plot.Axes.SetLimitsY(0, Math.Max(maxLatency * 1.2, 100));
+        }
+
+        formsPlotLatency.Refresh();
     }
+
+    private async void materialButtonRefreshHosts_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            materialButtonRefreshHosts.Enabled = false;
+            _currentHostsContent = await _fileService.ReadHostsFileAsync();
+            UpdateHostsPreview();
+            lblUpdateTime.Text = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        }
+        catch (Exception ex)
+        {
+            txtHostsPreview.Text = $"读取失败: {ex.Message}";
+        }
+        finally
+        {
+            materialButtonRefreshHosts.Enabled = true;
+        }
+    }
+
+    private void materialButtonOpenNotepad_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            var hostsPath = @"C:\Windows\System32\drivers\etc\hosts";
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "notepad.exe",
+                Arguments = hostsPath,
+                UseShellExecute = true
+            };
+            System.Diagnostics.Process.Start(psi);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"无法打开记事本: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void picStatus_Paint(object sender, PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+        var centerX = picStatus.Width / 2;
+        var centerY = picStatus.Height / 2;
+        var radius = Math.Min(centerX, centerY) - 4;
+
+        using (var glowPath = new System.Drawing.Drawing2D.GraphicsPath())
+        {
+            for (int i = 3; i >= 0; i--)
+            {
+                var glowRadius = radius + i * 3;
+                var alpha = 30 - i * 7;
+                if (alpha < 0) alpha = 0;
+                
+                using (var glowBrush = new SolidBrush(System.Drawing.Color.FromArgb(alpha, _statusColor)))
+                {
+                    g.FillEllipse(glowBrush, centerX - glowRadius, centerY - glowRadius, glowRadius * 2, glowRadius * 2);
+                }
+            }
+        }
+
+        using (var brush = new SolidBrush(_statusColor))
+        {
+            g.FillEllipse(brush, centerX - radius, centerY - radius, radius * 2, radius * 2);
+        }
+
+        using (var highlightBrush = new SolidBrush(System.Drawing.Color.FromArgb(60, System.Drawing.Color.White)))
+        {
+            var highlightRect = new RectangleF(centerX - radius + 4, centerY - radius + 4, radius * 2 - 8, radius - 4);
+            g.FillEllipse(highlightBrush, highlightRect);
+        }
+
+        using (var pen = new Pen(System.Drawing.Color.FromArgb(100, System.Drawing.Color.White), 2))
+        {
+            g.DrawEllipse(pen, centerX - radius, centerY - radius, radius * 2, radius * 2);
+        }
+    }
+
+    private void UpdateStatusIndicator(System.Drawing.Color color, string statusText)
+    {
+        _statusColor = color;
+        picStatus.Invalidate();
+        lblStatus.Text = statusText;
+    }
+
+    private void InitializeSourceMonitorGrid()
+    {
+        dgvSources.AutoGenerateColumns = false;
+        dgvSources.Columns.Clear();
+
+        dgvSources.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            DataPropertyName = "Name",
+            HeaderText = "数据源名称",
+            Width = 160
+        });
+        dgvSources.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            DataPropertyName = "Priority",
+            HeaderText = "优先级",
+            Width = 60
+        });
+        dgvSources.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            DataPropertyName = "IsHealthyText",
+            HeaderText = "状态",
+            Width = 60
+        });
+        dgvSources.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            DataPropertyName = "LastResponseTimeMs",
+            HeaderText = "响应时间(ms)",
+            Width = 100
+        });
+        dgvSources.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            DataPropertyName = "Description",
+            HeaderText = "描述",
+            Width = 300
+        });
+        dgvSources.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            DataPropertyName = "LastCheckTimeText",
+            HeaderText = "最后检测",
+            Width = 140
+        });
+
+        LoadInitialSourceData();
+    }
+
+    private void LoadInitialSourceData()
+    {
+        var sources = _hostsService.GetHostsSources();
+        var displayList = sources.Select(s => new SourceDisplayItem
+        {
+            Name = s.Name,
+            Priority = s.Priority,
+            IsHealthy = s.IsHealthy,
+            IsHealthyText = s.IsHealthy ? "✓ 健康" : "✗ 异常",
+            LastResponseTimeMs = s.LastResponseTimeMs > 0 ? $"{s.LastResponseTimeMs}" : "--",
+            Description = s.Description,
+            LastCheckTime = s.LastCheckTime,
+            LastCheckTimeText = s.LastCheckTime?.ToString("HH:mm:ss") ?? "--"
+        }).OrderBy(s => s.Priority).ToList();
+
+        dgvSources.DataSource = displayList;
+    }
+
+    private async void materialButtonTestSources_Click(object? sender, EventArgs e)
+    {
+        if (_isSourceTesting) return;
+        _isSourceTesting = true;
+        materialButtonTestSources.Enabled = false;
+        materialButtonTestSources.Text = "测试中...";
+
+        try
+        {
+            var results = await _hostsService.CheckSourcesHealthAsync();
+
+            var displayList = results.Select(s => new SourceDisplayItem
+            {
+                Name = s.Name,
+                Priority = s.Priority,
+                IsHealthy = s.IsHealthy,
+                IsHealthyText = s.IsHealthy ? "✓ 健康" : "✗ 异常",
+                LastResponseTimeMs = s.LastResponseTimeMs > 0 ? $"{s.LastResponseTimeMs}" : "超时",
+                Description = s.Description,
+                LastCheckTime = s.LastCheckTime,
+                LastCheckTimeText = s.LastCheckTime?.ToString("HH:mm:ss") ?? "--"
+            }).OrderBy(s => s.Priority).ThenBy(s => s.LastResponseTimeMs).ToList();
+
+            dgvSources.DataSource = displayList;
+
+            var bestSource = results.FirstOrDefault(s => s.IsHealthy);
+            if (bestSource != null)
+            {
+                lblBestSource.Text = $"推荐源: {bestSource.Name} ({bestSource.LastResponseTimeMs}ms)";
+            }
+            else
+            {
+                lblBestSource.Text = "推荐源: 所有源不可用";
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"测试失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            materialButtonTestSources.Enabled = true;
+            materialButtonTestSources.Text = "测试所有源";
+            _isSourceTesting = false;
+        }
+    }
+}
+
+public class SourceDisplayItem
+{
+    public string Name { get; set; } = string.Empty;
+    public int Priority { get; set; }
+    public bool IsHealthy { get; set; }
+    public string IsHealthyText { get; set; } = string.Empty;
+    public string LastResponseTimeMs { get; set; } = "--";
+    public string Description { get; set; } = string.Empty;
+    public DateTime? LastCheckTime { get; set; }
+    public string LastCheckTimeText { get; set; } = "--";
 }

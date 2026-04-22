@@ -1,0 +1,37 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GithubAccelerator.UI.App"
+             xmlns:local="using:GithubAccelerator.UI"
+             xmlns:semi="https://irihi.tech/semi"
+             xmlns:converters="using:GithubAccelerator.UI.Converters"
+             RequestedThemeVariant="Light">
+
+    <Application.Resources>
+        <converters:BoolToStringConverter x:Key="BoolToStringConverter"/>
+        <converters:StringNotEmptyConverter x:Key="StringNotEmptyConverter"/>
+        <converters:BoolToColorConverter x:Key="BoolToColorConverter"/>
+
+        <!-- Theme Colors -->
+        <Color x:Key="PrimaryColorValue">#0078D4</Color>
+        <Color x:Key="SuccessColorValue">#107C10</Color>
+        <Color x:Key="WarningColorValue">#FF8C00</Color>
+        <Color x:Key="ErrorColorValue">#D13438</Color>
+        <Color x:Key="SecondaryTextColor">#666666</Color>
+
+        <!-- Theme Brushes -->
+        <SolidColorBrush x:Key="PrimaryColor" Color="{StaticResource PrimaryColorValue}"/>
+        <SolidColorBrush x:Key="SuccessColor" Color="{StaticResource SuccessColorValue}"/>
+        <SolidColorBrush x:Key="WarningColor" Color="{StaticResource WarningColorValue}"/>
+        <SolidColorBrush x:Key="ErrorColor" Color="{StaticResource ErrorColorValue}"/>
+        <SolidColorBrush x:Key="SecondaryTextBrush" Color="{StaticResource SecondaryTextColor}"/>
+    </Application.Resources>
+
+    <Application.DataTemplates>
+        <local:ViewLocator/>
+    </Application.DataTemplates>
+
+    <Application.Styles>
+        <semi:SemiTheme Locale="zh-CN" />
+        <StyleInclude Source="avares://GithubAccelerator.UI/Styles/CardStyles.axaml"/>
+    </Application.Styles>
+</Application>

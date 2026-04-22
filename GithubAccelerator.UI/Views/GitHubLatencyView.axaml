@@ -1,0 +1,126 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:GithubAccelerator.UI.ViewModels"
+             xmlns:ctrl="using:GithubAccelerator.UI.Controls"
+             mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="400"
+             x:Class="GithubAccelerator.UI.Views.GitHubLatencyView"
+             x:DataType="vm:GitHubLatencyViewModel">
+
+    <Border Padding="16"
+            Background="{DynamicResource ControlFillColorDefaultBrush}"
+            CornerRadius="12" BorderThickness="1"
+            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+        <Grid RowDefinitions="Auto,*,Auto">
+            <!-- 标题和状态 -->
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,12">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="🌐" FontSize="20"/>
+                    <StackPanel>
+                        <TextBlock Text="GitHub 访问延迟" FontSize="16" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding StatusMessage}" FontSize="11" 
+                                   Foreground="{DynamicResource SecondaryTextBrush}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" Margin="0,0,16,0">
+                    <Border Background="#4CAF50" CornerRadius="4" Padding="8,4"
+                            IsVisible="{Binding LatencyStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <TextBlock Text="{Binding LatencyStatus}" FontSize="11" FontWeight="Medium" 
+                                   Foreground="White"/>
+                    </Border>
+                </StackPanel>
+
+                <Button Grid.Column="2" Content="Start" Command="{Binding StartMonitoringCommand}"
+                        Padding="10,4" FontSize="12" Margin="0,0,8,0"
+                        IsVisible="{Binding !IsMonitoring}"/>
+                <Button Grid.Column="2" Content="Stop" Command="{Binding StopMonitoringCommand}"
+                        Padding="10,4" FontSize="12" Margin="0,0,8,0"
+                        IsVisible="{Binding IsMonitoring}"/>
+                
+                <Button Grid.Column="3" Content="Clear" Command="{Binding ClearDataCommand}"
+                        Padding="10,4" FontSize="12"/>
+            </Grid>
+
+            <!-- 图表区域 - 使用自绘图表 -->
+            <Border Grid.Row="1" Padding="8" Margin="0,0,0,12"
+                    Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                    CornerRadius="8" BorderThickness="1"
+                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                <ctrl:SimpleLineChart Values="{Binding ChartValues}"
+                                      YAxisLabel="延迟 (ms)"
+                                      XAxisLabel="测试次数"
+                                      MinY="0"
+                                      MaxY="{Binding ChartMaxY}"
+                                      LineColor="#4FC3F7"
+                                      FillColor="#1A4FC3F7"
+                                      AxisColor="#666666"
+                                      TextColor="#999999"/>
+            </Border>
+
+            <!-- 底部统计 -->
+            <Grid Grid.Row="2" ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
+                <Border Grid.Column="0" Padding="12,8" CornerRadius="8"
+                        Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                        BorderThickness="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock Text="Current" FontSize="11" 
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock FontSize="18" FontWeight="Bold" 
+                                   HorizontalAlignment="Center">
+                            <Run Text="{Binding CurrentLatency}"/>
+                            <Run Text=" ms" FontSize="12"/>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="1" Padding="12,8" CornerRadius="8"
+                        Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                        BorderThickness="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock Text="Average" FontSize="11" 
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock FontSize="18" FontWeight="Bold" 
+                                   HorizontalAlignment="Center">
+                            <Run Text="{Binding AverageLatency}"/>
+                            <Run Text=" ms" FontSize="12"/>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="2" Padding="12,8" CornerRadius="8"
+                        Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                        BorderThickness="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock Text="Min" FontSize="11" 
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock FontSize="18" FontWeight="Bold" 
+                                   HorizontalAlignment="Center">
+                            <Run Text="{Binding MinLatency}"/>
+                            <Run Text=" ms" FontSize="12"/>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="3" Padding="12,8" CornerRadius="8"
+                        Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                        BorderThickness="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock Text="Max" FontSize="11" 
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock FontSize="18" FontWeight="Bold" 
+                                   HorizontalAlignment="Center">
+                            <Run Text="{Binding MaxLatency}"/>
+                            <Run Text=" ms" FontSize="12"/>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

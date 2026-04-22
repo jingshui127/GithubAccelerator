@@ -23,6 +23,17 @@ public class IpSpeedTestResult
     public bool IsReachable { get; set; }
 }
 
+public class HostsSourceInfo
+{
+    public string Url { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public int Priority { get; set; }
+    public bool IsHealthy { get; set; } = true;
+    public long LastResponseTimeMs { get; set; }
+    public DateTime? LastCheckTime { get; set; }
+}
+
 public class GithubAcceleratorService
 {
     private readonly HttpClient _httpClient = new()
@@ -30,12 +41,50 @@ public class GithubAcceleratorService
         Timeout = TimeSpan.FromSeconds(15)
     };
 
-    private static readonly string[] HostsSources = new[]
+    private static readonly HostsSourceInfo[] HostsSources = new[]
     {
-        "https://raw.hellogithub.com/hosts",
-        "https://raw.githubusercontent.com/521xueweihan/GitHub520/main/hosts",
-        "https://hosts. github.is儋袍屠?actual problematic domain but we'll handle gracefully",
-        "https://raw.gitmirror.com/521xueweihan/GitHub520/main/hosts"
+        new HostsSourceInfo
+        {
+            Url = "https://raw.hellogithub.com/hosts",
+            Name = "GitHub520",
+            Description = "HelloGitHub提供的GitHub Hosts，每日更新",
+            Priority = 1
+        },
+        new HostsSourceInfo
+        {
+            Url = "https://raw.githubusercontent.com/521xueweihan/GitHub520/main/hosts",
+            Name = "GitHub520 Raw",
+            Description = "GitHub520原始源",
+            Priority = 2
+        },
+        new HostsSourceInfo
+        {
+            Url = "https://gitlab.com/ineo6/hosts/-/raw/master/hosts",
+            Name = "ineo6/hosts",
+            Description = "ineo6提供的GitHub Hosts，稳定性高",
+            Priority = 3
+        },
+        new HostsSourceInfo
+        {
+            Url = "https://raw.gitmirror.com/521xueweihan/GitHub520/main/hosts",
+            Name = "GitMirror",
+            Description = "GitMirror镜像源",
+            Priority = 4
+        },
+        new HostsSourceInfo
+        {
+            Url = "https://raw.githubusercontent.com/maxiaof/github-hosts/master/hosts",
+            Name = "maxiaof/github-hosts",
+            Description = "maxiaof提供的GitHub Hosts",
+            Priority = 5
+        },
+        new HostsSourceInfo
+        {
+            Url = "https://github-hosts.tinsfox.com/hosts",
+            Name = "Tinsfox",
+            Description = "Tinsfox提供的GitHub Hosts",
+            Priority = 6
+        }
     };
 
     private static readonly string[] GitHubDomains = new[]
@@ -54,33 +103,84 @@ public class GithubAcceleratorService
     public event Action<string, int, int>? OnFetchProgress;
     public event Action<string>? OnLog;
 
+    public HostsSourceInfo[] GetHostsSources() => HostsSources;
+
+    public async Task<HostsSourceInfo[]> CheckSourcesHealthAsync()
+    {
+        var results = new HostsSourceInfo[HostsSources.Length];
+        
+        var tasks = HostsSources.Select(async (source, index) =>
+        {
+            var info = new HostsSourceInfo
+            {
+                Url = source.Url,
+                Name = source.Name,
+                Description = source.Description,
+                Priority = source.Priority
+            };
+
+            try
+            {
+                var sw = Stopwatch.StartNew();
+                using var response = await _httpClient.GetAsync(source.Url, HttpCompletionOption.ResponseHeadersRead);
+                sw.Stop();
+
+                info.IsHealthy = response.IsSuccessStatusCode;
+                info.LastResponseTimeMs = sw.ElapsedMilliseconds;
+                info.LastCheckTime = DateTime.Now;
+            }
+            catch
+            {
+                info.IsHealthy = false;
+                info.LastResponseTimeMs = -1;
+                info.LastCheckTime = DateTime.Now;
+            }
+
+            results[index] = info;
+        });
+
+        await Task.WhenAll(tasks);
+        return results.OrderBy(s => s.Priority).ThenBy(s => s.LastResponseTimeMs).ToArray();
+    }
+
     public async Task<string> FetchHostsWithFallbackAsync()
     {
         var triedSources = new List<string>();
         var lastError = "";
+        var orderedSources = HostsSources.OrderBy(s => s.Priority).ToArray();
 
-        for (int i = 0; i < HostsSources.Length; i++)
+        for (int i = 0; i < orderedSources.Length; i++)
         {
-            var source = HostsSources[i];
-            OnFetchProgress?.Invoke($"尝试数据源 {i + 1}/{HostsSources.Length}: {source}", i + 1, HostsSources.Length);
+            var source = orderedSources[i];
+            OnFetchProgress?.Invoke($"尝试数据源 {i + 1}/{orderedSources.Length}: {source.Name}", i + 1, orderedSources.Length);
 
             try
             {
-                var response = await _httpClient.GetAsync(source, HttpCompletionOption.ResponseHeadersRead);
+                var sw = Stopwatch.StartNew();
+                var response = await _httpClient.GetAsync(source.Url, HttpCompletionOption.ResponseHeadersRead);
+                sw.Stop();
+
                 if (response.IsSuccessStatusCode)
                 {
                     var content = await response.Content.ReadAsStringAsync();
                     if (IsValidHostsContent(content))
                     {
-                        OnLog?.Invoke($"成功从 {GetDomainFromUrl(source)} 获取 Hosts 数据");
+                        source.IsHealthy = true;
+                        source.LastResponseTimeMs = sw.ElapsedMilliseconds;
+                        source.LastCheckTime = DateTime.Now;
+                        OnLog?.Invoke($"成功从 {source.Name} 获取 Hosts 数据 (耗时: {sw.ElapsedMilliseconds}ms)");
                         return content;
                     }
                 }
-                triedSources.Add($"{source} (HTTP {(int)response.StatusCode})");
+                source.IsHealthy = false;
+                source.LastCheckTime = DateTime.Now;
+                triedSources.Add($"{source.Name} (HTTP {(int)response.StatusCode})");
             }
             catch (Exception ex)
             {
-                triedSources.Add($"{source} ({ex.Message})");
+                source.IsHealthy = false;
+                source.LastCheckTime = DateTime.Now;
+                triedSources.Add($"{source.Name} ({ex.Message})");
                 lastError = ex.Message;
             }
         }
