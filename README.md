@@ -19,7 +19,9 @@
 
 ## 📸 截图
 
-![主界面](docs/screenshots/main.png)
+![主界面](docs/images/ui-main-interface.png)
+![性能图表](docs/images/performance-curve.png)
+![延迟监控](docs/images/latency-curve.png)
 
 ## 🚀 快速开始
 
