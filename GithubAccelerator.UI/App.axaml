@@ -48,16 +48,39 @@
                 </Transitions>
             </Setter>
         </Style>
-        <Style Selector="Button.NavButton:pointerover">
+        
+        <!-- Light theme navigation button hover/pressed -->
+        <Style Selector="Button.NavButton:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#E5E5E5"/>
         </Style>
-        <Style Selector="Button.NavButton:pressed">
+        <Style Selector="Button.NavButton:pressed /template/ ContentPresenter">
             <Setter Property="Background" Value="#D0D0D0"/>
         </Style>
         
-        <!-- Dark theme navigation button -->
-        <Style Selector="Button.NavButton /template/ ContentPresenter">
-            <Setter Property="CornerRadius" Value="8"/>
+        <!-- Dark theme navigation button hover/pressed -->
+        <Style Selector="Button.NavButton:pointerover:dark /template/ ContentPresenter">
+            <Setter Property="Background" Value="#2D2D2D"/>
+        </Style>
+        <Style Selector="Button.NavButton:pressed:dark /template/ ContentPresenter">
+            <Setter Property="Background" Value="#3D3D3D"/>
+        </Style>
+        
+        <!-- Navigation button text style -->
+        <Style Selector="Button.NavButton TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+        </Style>
+        
+        <!-- Dark theme text style -->
+        <Style Selector="TextBlock:dark">
+            <Setter Property="Foreground" Value="#E0E0E0"/>
+        </Style>
+        
+        <!-- Secondary text style -->
+        <Style Selector="TextBlock.SecondaryText">
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.SecondaryText:dark">
+            <Setter Property="Foreground" Value="#9E9E9E"/>
         </Style>
     </Application.Styles>
 </Application>

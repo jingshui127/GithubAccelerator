@@ -30,9 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.3] - 2026-04-22
 
 ### Changed
-- 重新测试并更新 GitHub hosts 数据源列表，移除所有不可用的数据源
-- 仅保留经过测试确认可用的2个数据源：GitCDN.top 和 ineo6/hosts
-- 确保数据源在添加前都经过可用性测试
+- 恢复之前的数据源列表，包括 GitHub520、GitMirror 等
+- 新增 ittuann/GitHub-IP-hosts 数据源
+- 保留 GitCDN.top 和 ineo6/hosts 数据源
+- 数据源总数增加到6个，提供更多选择
 
 ---
 
