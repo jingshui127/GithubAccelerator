@@ -54,16 +54,16 @@ public class GithubHostsService
         },
         new HostsSource
         {
-            Url = "https://raw.githubusercontent.com/maxiaof/github-hosts/master/hosts",
-            Name = "maxiaof/github-hosts",
-            Description = "maxiaof提供的GitHub Hosts",
+            Url = "https://fastly.hellogithub.com/hosts",
+            Name = "GitHub520 (Fastly CDN)",
+            Description = "GitHub520的Fastly CDN镜像，访问速度更快",
             Priority = 5
         },
         new HostsSource
         {
-            Url = "https://github-hosts.tinsfox.com/hosts",
-            Name = "Tinsfox",
-            Description = "Tinsfox提供的GitHub Hosts",
+            Url = "https://hosts.gitcdn.top/hosts.txt",
+            Name = "GitCDN.top",
+            Description = "GitCDN.top提供的GitHub Hosts镜像",
             Priority = 6
         }
     };
