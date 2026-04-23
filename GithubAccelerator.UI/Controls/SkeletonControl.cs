@@ -19,10 +19,9 @@ public class SkeletonControl : ContentControl
     public static readonly StyledProperty<IBrush?> SkeletonHighlightBrushProperty =
         AvaloniaProperty.Register<SkeletonControl, IBrush?>(nameof(SkeletonHighlightBrush));
 
-    public static readonly StyledProperty<CornerRadius> CornerRadiusProperty =
-        AvaloniaProperty.Register<SkeletonControl, CornerRadius>(nameof(CornerRadius), new CornerRadius(4));
+    public static readonly StyledProperty<CornerRadius> SkeletonCornerRadiusProperty =
+        AvaloniaProperty.Register<SkeletonControl, CornerRadius>(nameof(SkeletonCornerRadius), new CornerRadius(4));
 
-    private Border? _skeletonBorder;
     private Animation? _shimmerAnimation;
     private bool _isAnimating;
 
@@ -44,10 +43,10 @@ public class SkeletonControl : ContentControl
         set => SetValue(SkeletonHighlightBrushProperty, value);
     }
 
-    public CornerRadius CornerRadius
+    public CornerRadius SkeletonCornerRadius
     {
-        get => GetValue(CornerRadiusProperty);
-        set => SetValue(CornerRadiusProperty, value);
+        get => GetValue(SkeletonCornerRadiusProperty);
+        set => SetValue(SkeletonCornerRadiusProperty, value);
     }
 
     static SkeletonControl()

@@ -337,13 +337,13 @@ public class SourcePerformanceMonitor : ISourcePerformanceMonitor, IDisposable
         // 计算综合评分
         // 权重：成功率 40%, 响应时间 30%, 稳定性 15%, 完整性 10%, 准确性 5%
         var responseTimeScore = Math.Max(0, 100 - (avgResponseTime / 10));
-        var overallScore = (successRate * 40) +
+        var overallScore = (successRate * 100 * 0.4) +
                           (responseTimeScore * 0.3) +
                           (stabilityScore * 0.15) +
                           (integrityScore * 0.1) +
                           (accuracyScore * 0.05);
         
-        var speedScore = (successRate * 20) +
+        var speedScore = (successRate * 100 * 0.2) +
                         (responseTimeScore * 0.6) +
                         (stabilityScore * 0.15) +
                         (integrityScore * 0.05);

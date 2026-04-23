@@ -28,7 +28,7 @@ public class GitHubLatencyMonitorService : IDisposable
     private readonly HttpClient _httpClient;
     private CancellationTokenSource? _cancellationTokenSource;
     private Task? _monitorTask;
-    private readonly TimeSpan _checkInterval = TimeSpan.FromSeconds(2);
+    private TimeSpan _checkInterval = TimeSpan.FromSeconds(5);
     private readonly int _maxRecords = 60;
     private bool _isMonitoring;
     private bool _disposed;
@@ -42,6 +42,11 @@ public class GitHubLatencyMonitorService : IDisposable
     public double SuccessRate { get; private set; }
 
     public event Action? OnLatencyUpdated;
+
+    public void SetCheckInterval(TimeSpan interval)
+    {
+        _checkInterval = interval;
+    }
 
     public GitHubLatencyMonitorService()
     {

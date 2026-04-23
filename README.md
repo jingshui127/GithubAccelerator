@@ -53,6 +53,9 @@
 | [测试报告](docs/TEST_REPORT.md) | 测试用例和测试结果 |
 | [用户手册](docs/USER_MANUAL.md) | 安装和使用指南 |
 | [维护手册](docs/MAINTENANCE_MANUAL.md) | 运维和故障排除 |
+| [竞品分析](docs/COMPETITIVE_ANALYSIS.md) | 同类产品对比分析 |
+| [改进计划](docs/IMPROVEMENT_PLAN.md) | 功能改进和优化计划 |
+| [运维指南](docs/OPERATIONS.md) | 部署和运维操作指南 |
 
 ## 🏗️ 项目结构
 

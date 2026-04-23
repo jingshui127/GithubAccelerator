@@ -13,7 +13,8 @@
         MinWidth="800" MinHeight="600"
         WindowStartupLocation="CenterScreen"
         CanResize="True"
-        ShowInTaskbar="True">
+        ShowInTaskbar="True"
+        Closing="Window_Closing">
 
     <Window.KeyBindings>
         <KeyBinding Gesture="Ctrl+R" Command="{Binding RefreshSourcesCommand}"/>
@@ -274,6 +275,9 @@
                                 Padding="10,6" FontSize="11"
                                 CornerRadius="6"/>
                         <Button Content="📥 导入" Command="{Binding ImportDataCommand}"
+                                Padding="10,6" FontSize="11"
+                                CornerRadius="6"/>
+                        <Button Content="🔄 刷新DNS" Command="{Binding FlushDnsCacheCommand}"
                                 Padding="10,6" FontSize="11"
                                 CornerRadius="6"/>
                     </StackPanel>

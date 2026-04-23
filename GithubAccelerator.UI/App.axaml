@@ -4,7 +4,7 @@
              xmlns:local="using:GithubAccelerator.UI"
              xmlns:semi="https://irihi.tech/semi"
              xmlns:converters="using:GithubAccelerator.UI.Converters"
-             RequestedThemeVariant="Light">
+             RequestedThemeVariant="Default">
 
     <Application.Resources>
         <converters:BoolToStringConverter x:Key="BoolToStringConverter"/>
@@ -17,13 +17,17 @@
         <Color x:Key="SuccessColorValue">#107C10</Color>
         <Color x:Key="WarningColorValue">#FF8C00</Color>
         <Color x:Key="ErrorColorValue">#D13438</Color>
+        <Color x:Key="PrimaryTextColor">#000000</Color>
         <Color x:Key="SecondaryTextColor">#666666</Color>
+        <Color x:Key="PrimaryTextColorDark">#E0E0E0</Color>
+        <Color x:Key="SecondaryTextColorDark">#9E9E9E</Color>
 
         <!-- Theme Brushes -->
         <SolidColorBrush x:Key="PrimaryColor" Color="{StaticResource PrimaryColorValue}"/>
         <SolidColorBrush x:Key="SuccessColor" Color="{StaticResource SuccessColorValue}"/>
         <SolidColorBrush x:Key="WarningColor" Color="{StaticResource WarningColorValue}"/>
         <SolidColorBrush x:Key="ErrorColor" Color="{StaticResource ErrorColorValue}"/>
+        <SolidColorBrush x:Key="PrimaryTextBrush" Color="{StaticResource PrimaryTextColor}"/>
         <SolidColorBrush x:Key="SecondaryTextBrush" Color="{StaticResource SecondaryTextColor}"/>
     </Application.Resources>
 
@@ -38,7 +42,7 @@
         <!-- Navigation Button Style -->
         <Style Selector="Button.NavButton">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="Foreground" Value="#1A1A1A"/>
             <Setter Property="CornerRadius" Value="8"/>
             <Setter Property="Padding" Value="12,10"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -49,7 +53,7 @@
             </Setter>
         </Style>
         
-        <!-- Light theme navigation button hover/pressed -->
+        <!-- Navigation button hover/pressed (light) -->
         <Style Selector="Button.NavButton:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#E5E5E5"/>
         </Style>
@@ -57,30 +61,14 @@
             <Setter Property="Background" Value="#D0D0D0"/>
         </Style>
         
-        <!-- Dark theme navigation button hover/pressed -->
-        <Style Selector="Button.NavButton:pointerover:dark /template/ ContentPresenter">
-            <Setter Property="Background" Value="#2D2D2D"/>
-        </Style>
-        <Style Selector="Button.NavButton:pressed:dark /template/ ContentPresenter">
-            <Setter Property="Background" Value="#3D3D3D"/>
-        </Style>
-        
-        <!-- Navigation button text style -->
+        <!-- Navigation button text -->
         <Style Selector="Button.NavButton TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
-        </Style>
-        
-        <!-- Dark theme text style -->
-        <Style Selector="TextBlock:dark">
-            <Setter Property="Foreground" Value="#E0E0E0"/>
+            <Setter Property="Foreground" Value="#1A1A1A"/>
         </Style>
         
         <!-- Secondary text style -->
         <Style Selector="TextBlock.SecondaryText">
-            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
-        </Style>
-        <Style Selector="TextBlock.SecondaryText:dark">
-            <Setter Property="Foreground" Value="#9E9E9E"/>
+            <Setter Property="Foreground" Value="#666666"/>
         </Style>
     </Application.Styles>
 </Application>

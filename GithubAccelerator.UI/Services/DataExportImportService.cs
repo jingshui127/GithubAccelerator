@@ -130,6 +130,7 @@ public class DataExportImportService
                 using var entryStream = entry.Open();
                 using var fileStream = File.Create(tempPath);
                 await entryStream.CopyToAsync(fileStream);
+                await fileStream.FlushAsync();
             }
             catch (InvalidDataException)
             {

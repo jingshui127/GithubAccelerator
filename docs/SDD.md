@@ -115,6 +115,7 @@ GithubAccelerator/
 │   ├── Services/
 │   │   ├── GithubHostsService.cs     # Hosts 数据获取
 │   │   ├── SourcePerformanceMonitor.cs # 性能监控
+│   │   ├── IntelligentSourceManager.cs # 智能数据源管理
 │   │   ├── SmartSourceSelector.cs    # 智能选择
 │   │   ├── SourcePerformancePersistence.cs # 持久化
 │   │   └── WindowsHostsFileService.cs # Hosts 文件操作
@@ -393,6 +394,54 @@ public class HealthBasedStrategy : ISelectionStrategy
             Reason = "降级选择：评分最高"
         };
     }
+}
+```
+
+---
+### 3.3 IntelligentSourceManager (智能数据源管理器)
+
+#### 3.3.1 类图
+
+```
+┌─────────────────────────────────────────────┐
+│        IntelligentSourceManager              │
+├─────────────────────────────────────────────┤
+│ - _sourceHealthMap: ConcurrentDictionary    │
+│ - _monitoringTimer: Timer                   │
+│ - _checkInterval: TimeSpan                 │
+│ - _initialDelay: TimeSpan                  │
+├─────────────────────────────────────────────┤
+│ + Initialize(): void                         │
+│ + StartSmartMonitoring(): void              │
+│ + StopSmartMonitoring(): void              │
+│ + GetBestAvailableSource(): Task<Host>     │
+│ + GetHealthySources(): IEnumerable<Host>   │
+│ + GetHealthReport(): SourceHealthReport    │
+│ + RefreshSourcesAsync(): Task              │
+└─────────────────────────────────────────────┘
+```
+
+#### 3.3.2 功能说明
+
+| 功能 | 说明 |
+|------|------|
+| 启动1小时后自动检测 | 首次运行1小时后开始定期检测 |
+| 每小时健康检查 | 自动检测所有数据源可用性 |
+| 自动选择最佳源 | 优先选择响应最快的可用数据源 |
+| 健康状态报告 | 提供各数据源的健康状况 |
+
+#### 3.3.3 核心方法
+
+```csharp
+public interface IIntelligentSourceManager
+{
+    void Initialize();
+    void StartSmartMonitoring();
+    void StopSmartMonitoring();
+    Task<HostsSource?> GetBestAvailableSourceAsync();
+    IEnumerable<HostsSource> GetHealthySources();
+    SourceHealthReport GetHealthReport();
+    Task RefreshSourcesAsync();
 }
 ```
 

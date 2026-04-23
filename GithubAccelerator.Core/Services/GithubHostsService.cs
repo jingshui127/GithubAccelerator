@@ -17,7 +17,7 @@ public class HostsSource
 
 public class GithubHostsService
 {
-    private static readonly HttpClient _httpClient = new()
+    public static readonly HttpClient HttpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(30)
     };
@@ -27,42 +27,42 @@ public class GithubHostsService
         new HostsSource
         {
             Url = "https://raw.hellogithub.com/hosts",
-            Name = "GitHub520 (HelloGitHub)",
+            Name = "GitHub520",
             Description = "HelloGitHub提供的GitHub Hosts，每日更新，推荐首选",
             Priority = 1
         },
         new HostsSource
         {
             Url = "https://gitlab.com/ineo6/hosts/-/raw/master/hosts",
-            Name = "ineo6/hosts",
+            Name = "ineo6",
             Description = "ineo6提供的GitHub Hosts，稳定性高",
             Priority = 2
         },
         new HostsSource
         {
             Url = "https://raw.githubusercontent.com/521xueweihan/GitHub520/main/hosts",
-            Name = "GitHub520 (Raw)",
+            Name = "GitHub520 Raw",
             Description = "GitHub520原始源",
             Priority = 3
         },
         new HostsSource
         {
-            Url = "https://raw.gitmirror.com/521xueweihan/GitHub520/main/hosts",
-            Name = "GitMirror",
-            Description = "GitMirror镜像源，国内访问友好",
+            Url = "https://ghproxy.net/https://raw.githubusercontent.com/521xueweihan/GitHub520/main/hosts",
+            Name = "GHProxy",
+            Description = "GHProxy镜像源，国内访问稳定",
             Priority = 4
         },
         new HostsSource
         {
             Url = "https://hosts.gitcdn.top/hosts.txt",
-            Name = "GitCDN.top",
+            Name = "GitCDN",
             Description = "GitCDN.top提供的GitHub Hosts镜像",
             Priority = 5
         },
         new HostsSource
         {
             Url = "https://raw.githubusercontent.com/ittuann/GitHub-IP-hosts/main/hosts",
-            Name = "ittuann/GitHub-IP-hosts",
+            Name = "ittuann",
             Description = "ittuann提供的GitHub IP Hosts，自动更新",
             Priority = 6
         }
@@ -89,7 +89,7 @@ public class GithubHostsService
             try
             {
                 var sw = Stopwatch.StartNew();
-                using var response = await _httpClient.GetAsync(source.Url, HttpCompletionOption.ResponseHeadersRead);
+                using var response = await HttpClient.GetAsync(source.Url, HttpCompletionOption.ResponseHeadersRead);
                 sw.Stop();
 
                 info.IsHealthy = response.IsSuccessStatusCode;
@@ -199,7 +199,7 @@ public class GithubHostsService
         try
         {
             var sw = Stopwatch.StartNew();
-            var response = await _httpClient.GetAsync(source.Url);
+            var response = await HttpClient.GetAsync(source.Url);
             sw.Stop();
 
             source.LastResponseTimeMs = sw.ElapsedMilliseconds;

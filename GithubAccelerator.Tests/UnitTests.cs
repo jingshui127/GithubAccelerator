@@ -123,9 +123,9 @@ public class WindowsHostsFileServiceTests
     public void IsGithubHostsApplied_WithMarker_ReturnsTrue()
     {
         var service = new WindowsHostsFileService();
-        var content = @"# GitHub520 Host Start
+        var content = @"# === GitHub Accelerator Start ===
 140.82.114.4 github.com
-# GitHub520 Host End";
+# === GitHub Accelerator End ===";
         Assert.True(service.IsGithubHostsApplied(content));
     }
 
@@ -142,14 +142,14 @@ public class WindowsHostsFileServiceTests
     {
         var service = new WindowsHostsFileService();
         var content = $@"127.0.0.1 localhost
-# GitHub520 Host Start
+# === GitHub Accelerator Start ===
 140.82.114.4 github.com
-# GitHub520 Host End
+# === GitHub Accelerator End ===
 192.168.1.1 local";
         var result = service.GetCurrentGithubHostsBlock(content);
         Assert.Contains("140.82.114.4 github.com", result);
-        Assert.StartsWith("# GitHub520 Host Start", result);
-        Assert.EndsWith("# GitHub520 Host End", result);
+        Assert.StartsWith("# === GitHub Accelerator Start ===", result);
+        Assert.EndsWith("# === GitHub Accelerator End ===", result);
     }
 
     [Fact]
@@ -163,9 +163,9 @@ public class WindowsHostsFileServiceTests
 
     [Theory]
     [InlineData("127.0.0.1 localhost", "127.0.0.1 localhost")]
-    [InlineData("# GitHub520 Host Start\n140.82.114.4 github.com\n# GitHub520 Host End\n127.0.0.1 localhost",
+    [InlineData("# === GitHub Accelerator Start ===\n140.82.114.4 github.com\n# === GitHub Accelerator End ===\n127.0.0.1 localhost",
         "127.0.0.1 localhost")]
-    [InlineData("127.0.0.1 localhost\n# GitHub520 Host Start\n140.82.114.4 github.com\n# GitHub520 Host End",
+    [InlineData("127.0.0.1 localhost\n# === GitHub Accelerator Start ===\n140.82.114.4 github.com\n# === GitHub Accelerator End ===",
         "127.0.0.1 localhost")]
     public void RemoveGithubHostsBlock_RemovesCorrectly(string input, string expected)
     {

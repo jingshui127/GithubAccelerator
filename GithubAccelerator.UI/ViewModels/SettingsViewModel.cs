@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using GithubAccelerator.UI.Services;
 
 namespace GithubAccelerator.UI.ViewModels;
@@ -30,6 +31,9 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _startMinimized = false;
+
+    [ObservableProperty]
+    private bool _autoFlushDns = true;
 
     private string _logLevel = "Information";
     
@@ -84,6 +88,7 @@ public partial class SettingsViewModel : ObservableObject
                     AutoSwitchBestSource = settings.AutoSwitchBestSource;
                     MinimizeToTray = settings.MinimizeToTray;
                     StartMinimized = settings.StartMinimized;
+                    AutoFlushDns = settings.AutoFlushDns;
                     _logLevel = settings.LogLevel;
                     LogService.Instance.SetLogLevel(_logLevel);
                 }
@@ -100,5 +105,11 @@ public partial class SettingsViewModel : ObservableObject
         var viewModel = new SettingsViewModel();
         viewModel.Load();
         return viewModel;
+    }
+
+    [RelayCommand]
+    private void SaveSettings()
+    {
+        Save();
     }
 }

@@ -8,54 +8,72 @@
              x:Class="GithubAccelerator.UI.Views.PerformanceChartView"
              x:DataType="vm:PerformanceChartViewModel">
 
-    <UserControl.Resources>
-        <vm:ChartTypeBackgroundConverter x:Key="ChartTypeBgConverter"/>
-        <vm:IsScoreDistributionConverter x:Key="IsScoreDistConverter"/>
-    </UserControl.Resources>
-
-    <Grid RowDefinitions="Auto,*,Auto" Margin="0">
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="0">
         <!-- 顶部工具栏 -->
         <Border Grid.Row="0" Padding="16,12" Margin="0,0,0,12"
                 Background="{DynamicResource ControlFillColorDefaultBrush}"
                 CornerRadius="12" BorderThickness="1"
                 BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+            <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                    <TextBlock Text="📊 性能图表" FontSize="18" FontWeight="SemiBold"/>
-                    <TextBlock Text="{Binding ChartTitle}" FontSize="14"
+                    <TextBlock Text="📊 网络性能概览" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                    <TextBlock Text="实时监控网络响应时间和数据源状态" FontSize="14"
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                VerticalAlignment="Center"/>
                 </StackPanel>
 
-                <!-- 图表类型切换 -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
-                    <Button Content="📈 趋势图" Command="{Binding SwitchToResponseTimeCommand}"
-                            Padding="10,6" FontSize="12"
-                            Background="{Binding SelectedChartType, Converter={StaticResource ChartTypeBgConverter}, ConverterParameter=0}"
-                            BorderThickness="1"/>
-                    <Button Content="📊 对比图" Command="{Binding SwitchToComparisonCommand}"
-                            Padding="10,6" FontSize="12"
-                            Background="{Binding SelectedChartType, Converter={StaticResource ChartTypeBgConverter}, ConverterParameter=1}"
-                            BorderThickness="1"/>
-                    <Button Content="📉 评分图" Command="{Binding SwitchToScoreDistributionCommand}"
-                            Padding="10,6" FontSize="12"
-                            Background="{Binding SelectedChartType, Converter={StaticResource ChartTypeBgConverter}, ConverterParameter=2}"
-                            BorderThickness="1"/>
-                </StackPanel>
+                <Button Grid.Column="1" Content="🔄 刷新" Command="{Binding RefreshDataCommand}"
+                        Padding="10,6" FontSize="12"/>
+            </Grid>
+        </Border>
 
-                <!-- 数据源选择（评分图时显示） -->
-                <ComboBox Grid.Column="2" ItemsSource="{Binding SourceNames}"
-                          SelectedIndex="{Binding SelectedSourceIndex}"
-                          MinWidth="140" Margin="8,0,0,0"
-                          IsVisible="{Binding SelectedChartType, Converter={StaticResource IsScoreDistConverter}}"/>
+        <!-- 统计信息卡片 -->
+        <Border Grid.Row="1" Padding="16" Margin="0,0,0,12"
+                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                CornerRadius="12" BorderThickness="1"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+            <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto">
+                <!-- 最佳数据源 -->
+                <Border Grid.Column="0" Padding="12" Margin="0,0,8,0" CornerRadius="8"
+                        Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="🚀 最佳数据源" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"/>
+                        <TextBlock Text="{Binding BestSourceName}" FontSize="14" FontWeight="Bold"
+                                   TextTrimming="CharacterEllipsis" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                        <TextBlock Text="{Binding BestResponseTime, StringFormat='响应: {0:F0} ms'}" 
+                                   FontSize="11" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                    </StackPanel>
+                </Border>
 
-                <Button Grid.Column="3" Content="🔄 刷新" Command="{Binding RefreshDataCommand}"
-                        Padding="10,6" FontSize="12" Margin="8,0,0,0"/>
+                <!-- 网络延迟 -->
+                <Border Grid.Column="1" Padding="12" Margin="4,0" CornerRadius="8"
+                        Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="📈 网络延迟" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"/>
+                        <TextBlock Text="{Binding ChartMaxValue, StringFormat='最高: {0:F0} ms'}" 
+                                   FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                        <TextBlock Text="实时更新中..." FontSize="10" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- 连接成功率 -->
+                <Border Grid.Column="2" Padding="12" Margin="8,0,0,0" CornerRadius="8"
+                        Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="✅ 连接成功率" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"/>
+                        <TextBlock Text="{Binding AverageSuccessRate, StringFormat='{}{0:F0}%'}" 
+                                   FontSize="14" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                        <TextBlock Text="数据源平均" FontSize="10" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                    </StackPanel>
+                </Border>
             </Grid>
         </Border>
 
         <!-- 图表区域 -->
-        <Border Grid.Row="1" Padding="20"
+        <Border Grid.Row="2" Padding="20"
                 Background="{DynamicResource ControlFillColorDefaultBrush}"
                 CornerRadius="12" BorderThickness="1"
                 BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
@@ -63,24 +81,15 @@
                 <!-- 折线图 -->
                 <ctrl:SimpleLineChart IsVisible="{Binding IsLineChart}"
                                       Values="{Binding LineChartValues}"
-                                      Title="{Binding ChartTitle}"
-                                      YAxisLabel="{Binding YAxisName}"
+                                      Title="响应时间趋势"
+                                      YAxisLabel="响应时间 (毫秒)"
                                       XAxisLabel="测试次数"
                                       MinY="0"
                                       MaxY="{Binding ChartMaxY}"
                                       LineColor="#4FC3F7"
                                       FillColor="#1A4FC3F7"
-                                      AxisColor="#666666"
-                                      TextColor="#999999"/>
-
-                <!-- 柱状图 -->
-                <ctrl:SimpleBarChart IsVisible="{Binding IsBarChart}"
-                                     Items="{Binding BarItems}"
-                                     Title="{Binding ChartTitle}"
-                                     YAxisLabel="{Binding YAxisName}"
-                                     MaxY="{Binding ChartMaxY}"
-                                     AxisColor="#666666"
-                                     TextColor="#999999"/>
+                                      AxisColor="#CCCCCC"
+                                      TextColor="#E0E0E0"/>
 
                 <!-- 空状态 -->
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
@@ -88,16 +97,18 @@
                             IsVisible="{Binding HasNoData}">
                     <TextBlock Text="📊" FontSize="48" HorizontalAlignment="Center"/>
                     <TextBlock Text="暂无数据" FontSize="16" HorizontalAlignment="Center"
-                               Foreground="{DynamicResource SecondaryTextBrush}"/>
+                               Foreground="{DynamicResource PrimaryTextBrush}"/>
                     <TextBlock Text="启动监控后，性能数据将在此处显示" FontSize="12"
                                HorizontalAlignment="Center"
                                Foreground="{DynamicResource SecondaryTextBrush}"/>
+                    <Button Content="开始监控" Command="{Binding RefreshDataCommand}"
+                            Padding="12,6" Margin="0,8,0,0"/>
                 </StackPanel>
             </Grid>
         </Border>
 
         <!-- 底部状态栏 -->
-        <Border Grid.Row="2" Padding="12,8" Margin="0,12,0,0"
+        <Border Grid.Row="3" Padding="12,8" Margin="0,12,0,0"
                 Background="{DynamicResource ControlFillColorDefaultBrush}"
                 CornerRadius="8" BorderThickness="1"
                 BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
@@ -105,18 +116,17 @@
                 <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" FontSize="11"
                            Foreground="{DynamicResource SecondaryTextBrush}"
                            VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="{Binding ChartUnit}" FontSize="11"
+                <TextBlock Grid.Column="1" Text="单位: 毫秒" FontSize="11"
                            Foreground="{DynamicResource SecondaryTextBrush}"
                            VerticalAlignment="Center" Margin="0,0,16,0"/>
                 <TextBlock Grid.Column="2" FontSize="11"
                            Foreground="{DynamicResource SecondaryTextBrush}"
                            VerticalAlignment="Center">
                     <Run Text="范围: "/>
-                    <Run Text="{Binding ChartMinValue}"/>
+                    <Run Text="{Binding ChartMinValue, StringFormat='0:F0'}"/>
                     <Run Text=" - "/>
-                    <Run Text="{Binding ChartMaxValue}"/>
-                    <Run Text=" "/>
-                    <Run Text="{Binding ChartUnit}"/>
+                    <Run Text="{Binding ChartMaxValue, StringFormat='0:F0'}"/>
+                    <Run Text=" ms"/>
                 </TextBlock>
             </Grid>
         </Border>

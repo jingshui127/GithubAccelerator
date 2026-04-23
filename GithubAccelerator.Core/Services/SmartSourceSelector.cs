@@ -129,8 +129,8 @@ public class SmartSourceSelector : ISmartSourceSelector
     {
         return _sourcesCache.Values
             .Where(s => IsSourceRecommended(s))
-            .OrderBy(s => s.Priority)
-            .ThenByDescending(s => GetPerformanceScore(s.Url))
+            .OrderByDescending(s => GetPerformanceScore(s.Url))
+            .ThenBy(s => s.LastResponseTimeMs)
             .ToArray();
     }
     

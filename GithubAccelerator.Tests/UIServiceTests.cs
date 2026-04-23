@@ -719,7 +719,11 @@ public class DataExportImportServiceTests : IDisposable
         groupService.AddEntry(group.Id, new HostsEntry { Ip = "4.4.4.4", Domain = uniqueDomain2, IsEnabled = false });
 
         var exportPath = Path.Combine(_testDir, $"roundtrip_{Guid.NewGuid():N}.zip");
-        await DataExportImportService.Instance.ExportAsync(exportPath);
+        var exportResult = await DataExportImportService.Instance.ExportAsync(exportPath);
+        Assert.True(exportResult, "导出应该成功");
+        Assert.True(File.Exists(exportPath), "导出文件应该存在");
+
+        await Task.Delay(100);
 
         var data = await DataExportImportService.Instance.ImportAsync(exportPath);
 

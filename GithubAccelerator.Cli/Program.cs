@@ -1,4 +1,4 @@
-﻿using Spectre.Console;
+using Spectre.Console;
 using GithubAccelerator.Services;
 
 namespace GithubAccelerator.Cli;
@@ -26,6 +26,28 @@ public static class Program
     public static async Task<int> Main(string[] args)
     {
         AnsiConsole.Write(new FigletText("GitHub Accelerator").Color(Color.Blue));
+        
+        // 检查命令行参数
+        if (args.Length > 0)
+        {
+            return await HandleCommandLineArgs(args);
+        }
+        
+        // 一键启动模式
+        AnsiConsole.MarkupLine("[yellow]正在启动一键加速模式...[/]");
+        AnsiConsole.WriteLine();
+        
+        var result = await QuickStartAsync();
+        
+        if (result == 0)
+        {
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine("[green]✓ 一键加速完成！[/]");
+            AnsiConsole.MarkupLine("[dim]按任意键进入交互模式，或按 Ctrl+C 退出...[/]");
+            Console.ReadKey(true);
+        }
+        
+        // 进入交互模式
         PrintHelp();
 
         _statusCts = new CancellationTokenSource();
@@ -45,48 +67,48 @@ public static class Program
             if (string.IsNullOrEmpty(input))
                 continue;
 
-            int result;
+            int cmdResult;
             switch (input)
             {
                 case "1":
                 case "s":
                 case "status":
-                    result = await CheckStatusAsync();
+                    cmdResult = await CheckStatusAsync();
                     break;
                 case "2":
                 case "a":
                 case "apply":
-                    result = await ApplyHostsAsync();
+                    cmdResult = await ApplyHostsAsync();
                     break;
                 case "3":
                 case "r":
                 case "restore":
-                    result = await RestoreHostsAsync();
+                    cmdResult = await RestoreHostsAsync();
                     break;
                 case "4":
                 case "f":
                 case "refresh":
-                    result = await RefreshHostsAsync();
+                    cmdResult = await RefreshHostsAsync();
                     break;
                 case "5":
                 case "t":
                 case "test":
-                    result = await TestConnectionAsync();
+                    cmdResult = await TestConnectionAsync();
                     break;
                 case "6":
                 case "p":
                 case "preview":
-                    result = await ShowHostsPreviewAsync();
+                    cmdResult = await ShowHostsPreviewAsync();
                     break;
                 case "7":
                 case "x":
                 case "proxy":
-                    result = await ToggleProxyAsync();
+                    cmdResult = await ToggleProxyAsync();
                     break;
                 case "8":
                 case "g":
                 case "git":
-                    result = await ConfigureGitProxyAsync();
+                    cmdResult = await ConfigureGitProxyAsync();
                     break;
                 case "0":
                 case "9":
@@ -95,17 +117,121 @@ public static class Program
                 case "h":
                 case "help":
                     PrintHelp();
-                    result = 0;
+                    cmdResult = 0;
+                    break;
+                case "quick":
+                case "start":
+                case "quickstart":
+                    cmdResult = await QuickStartAsync();
                     break;
                 default:
                     AnsiConsole.MarkupLine($"[red]Unknown: {input}[/]");
-                    result = 1;
+                    cmdResult = 1;
                     break;
             }
         }
 
         _statusCts.Cancel();
         return 0;
+    }
+    
+    private static async Task<int> HandleCommandLineArgs(string[] args)
+    {
+        var command = args[0].ToLower();
+        
+        switch (command)
+        {
+            case "--help":
+            case "-h":
+                PrintHelp();
+                return 0;
+            case "--status":
+            case "-s":
+                return await CheckStatusAsync();
+            case "--apply":
+            case "-a":
+                return await ApplyHostsAsync();
+            case "--restore":
+            case "-r":
+                return await RestoreHostsAsync();
+            case "--test":
+            case "-t":
+                return await TestConnectionAsync();
+            case "--proxy":
+            case "-x":
+                return await ToggleProxyAsync();
+            case "--git":
+            case "-g":
+                return await ConfigureGitProxyAsync();
+            case "--quick":
+            case "-q":
+                return await QuickStartAsync();
+            default:
+                AnsiConsole.MarkupLine($"[red]Unknown command: {command}[/]");
+                PrintHelp();
+                return 1;
+        }
+    }
+    
+    private static async Task<int> QuickStartAsync()
+    {
+        try
+        {
+            AnsiConsole.MarkupLine("[dim]1. 正在检查当前状态...[/]");
+            var hostsContent = await _fileService.ReadHostsFileAsync();
+            var isApplied = _fileService.IsGithubHostsApplied(hostsContent);
+            
+            if (isApplied)
+            {
+                AnsiConsole.MarkupLine("[yellow]加速已启用，正在刷新 Hosts...[/]");
+            }
+            else
+            {
+                AnsiConsole.MarkupLine("[dim]2. 正在获取最新 Hosts...[/]");
+            }
+            
+            var newHosts = await _hostsService.FetchHostsAsync();
+            var parsedHosts = _hostsService.ParseHosts(newHosts);
+            
+            AnsiConsole.MarkupLine("[dim]3. 正在进行 IP 测速优选...[/]");
+            var speedResults = await _speedTestService.TestIpListAsync(parsedHosts);
+            var bestIps = _speedTestService.SelectBestIps(speedResults, maxPerDomain: 3);
+            var optimizedContent = _speedTestService.GenerateOptimizedHostsContent(bestIps, newHosts);
+            
+            AnsiConsole.MarkupLine("[dim]4. 正在应用 Hosts 配置...[/]");
+            await _fileService.BackupHostsFileAsync();
+            await _fileService.ApplyGithubHostsAsync(optimizedContent);
+            await _dnsFlusher.FlushDnsCacheAsync();
+            
+            _currentBestIps = bestIps;
+            
+            AnsiConsole.MarkupLine("[dim]5. 正在启动代理服务...[/]");
+            var domainIpMap = _currentBestIps.ToDictionary(x => x.domain, x => x.ip);
+            _proxyService.SetDomainIpMap(domainIpMap);
+            await _proxyService.StartAsync();
+            
+            AnsiConsole.MarkupLine("[dim]6. 正在配置 Git 代理...[/]");
+            await _proxyService.ConfigureGitProxyAsync();
+            
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine("[green]✓ 一键加速完成！[/]");
+            AnsiConsole.MarkupLine($"[dim]✓ 已优选 {bestIps.Count} 个最优 IP[/]");
+            AnsiConsole.MarkupLine("[dim]✓ DNS 缓存已刷新[/]");
+            AnsiConsole.MarkupLine($"[dim]✓ 代理服务已启动 (端口: {_proxyService.ProxyPort})[/]");
+            AnsiConsole.MarkupLine("[dim]✓ Git 代理已配置[/]");
+            
+            return 0;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            AnsiConsole.MarkupLine("\n[red]✗ 需要管理员权限！请以管理员身份运行此程序。[/]");
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]✗ 错误: {ex.Message}[/]");
+            return 1;
+        }
     }
 
     private static async Task AutoStatusLoop(CancellationToken token)
@@ -222,10 +348,12 @@ public static class Program
         table.AddRow("6 / p", "查看 Hosts 预览");
         table.AddRow("7 / x", "启动/停止代理");
         table.AddRow("8 / g", "配置 Git 代理");
+        table.AddRow("quick", "一键加速（自动配置所有功能）");
         table.AddRow("0 / ?", "显示帮助");
         table.AddRow("q", "退出程序");
         AnsiConsole.Write(table);
         AnsiConsole.WriteLine("自动状态：每 30 秒刷新一次");
+        AnsiConsole.WriteLine("命令行参数：--help, --status, --apply, --restore, --test, --proxy, --git, --quick");
     }
 
     private static async Task<int> CheckStatusAsync()
@@ -449,6 +577,18 @@ public static class Program
             else
             {
                 AnsiConsole.MarkupLine($"\n[bold yellow]{failCount} connection(s) failed[/]");
+                
+                if (successCount == 0)
+                {
+                    AnsiConsole.MarkupLine("\n[bold red]⚠️ 警告: 无法连接到 GitHub！[/]");
+                    AnsiConsole.MarkupLine("[red]可能原因:[/]");
+                    AnsiConsole.MarkupLine("  1. TCP 443 端口被网络运营商封锁");
+                    AnsiConsole.MarkupLine("  2. DNS 解析正常但 HTTPS 请求被阻断");
+                    AnsiConsole.MarkupLine("\n[cyan]解决方案:[/]");
+                    AnsiConsole.MarkupLine("  - 使用代理软件/VPN");
+                    AnsiConsole.MarkupLine("  - 尝试刷新获取新的 IP 段");
+                    AnsiConsole.MarkupLine("  - 等待一段时间后重试");
+                }
             }
             return 0;
         }

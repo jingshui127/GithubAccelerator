@@ -112,7 +112,6 @@ public class SimpleLineChart : Control
 
     private int _hoveredIndex = -1;
     private List<Point> _points = new();
-    private ToolTip? _toolTip;
 
     static SimpleLineChart()
     {

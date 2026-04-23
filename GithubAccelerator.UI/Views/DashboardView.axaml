@@ -93,11 +93,16 @@
                     <Border Grid.Column="3" Grid.Row="0" Padding="20" Margin="8,0,0,8" CornerRadius="12"
                             Background="{DynamicResource WarningColor}"
                             BoxShadow="0 2 8 0 #20000000">
-                        <StackPanel Spacing="8">
+                        <StackPanel Spacing="4">
                             <TextBlock Text="📡 数据源" FontSize="12" Foreground="#AAFFFFFF"/>
                             <StackPanel Orientation="Horizontal" Spacing="4">
-                                <TextBlock Text="{Binding Sources.Count}" FontSize="24" FontWeight="Bold" Foreground="White"/>
+                                <TextBlock Text="{Binding TotalSourcesCount}" FontSize="24" FontWeight="Bold" Foreground="White"/>
                                 <TextBlock Text="个" FontSize="14" Foreground="#AAFFFFFF" VerticalAlignment="Bottom" Margin="0,0,0,4"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="可用: " FontSize="11" Foreground="#AAFFFFFF"/>
+                                <TextBlock Text="{Binding HealthySourcesCount}" FontSize="11" FontWeight="SemiBold" Foreground="White"/>
+                                <TextBlock Text="个" FontSize="11" Foreground="#AAFFFFFF"/>
                             </StackPanel>
                         </StackPanel>
                     </Border>
@@ -108,27 +113,33 @@
                         Background="{DynamicResource ControlFillColorDefaultBrush}"
                         BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                         BorderThickness="1">
-                    <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
                             <Button Content="{Binding IsMonitoring, Converter={StaticResource BoolToStringConverter}, ConverterParameter='⏹ 停止|▶ 开始'}"
                                     Command="{Binding ToggleMonitoringCommand}"
-                                    Padding="16,8" FontSize="13"/>
+                                    Padding="12,6" FontSize="12"/>
                             <Button Content="🔄 刷新" Command="{Binding RefreshSourcesCommand}"
-                                    Padding="16,8" FontSize="13"/>
+                                    Padding="12,6" FontSize="12"/>
                         </StackPanel>
                         
-                        <TextBlock Grid.Column="1" Text="{Binding StatusMessage}"
-                                   FontSize="12" Classes="SecondaryText" 
-                                   VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <Border Grid.Column="1" Padding="8,4" CornerRadius="4" Margin="8,0,0,0"
+                                Background="{Binding IsGitHubAccessible, Converter={StaticResource BoolToColorConverter}, ConverterParameter='#4CAF50|#FF5722'}"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="{Binding GitHubStatusText}" FontSize="10" Foreground="White"/>
+                        </Border>
                         
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-                            <Button Content="✅ 应用选中源" 
+                        <TextBlock Grid.Column="2" Text="{Binding StatusMessage}"
+                                   FontSize="11" Classes="SecondaryText" 
+                                   VerticalAlignment="Center" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4">
+                            <Button Content="✅" 
                                     Command="{Binding ApplySelectedSourcesCommand}"
-                                    Padding="16,8" FontSize="13"
+                                    Padding="12,6" FontSize="12" ToolTip.Tip="应用选中源"
                                     IsEnabled="{Binding HasSelectedSources}"/>
-                            <Button Content="🗑️ 清除Hosts" 
+                            <Button Content="🗑️" 
                                     Command="{Binding ClearAppliedHostsCommand}"
-                                    Padding="16,8" FontSize="13"
+                                    Padding="8,6" FontSize="12" ToolTip.Tip="清除Hosts"
                                     IsVisible="{Binding IsHostsApplied}"/>
                         </StackPanel>
                     </Grid>
@@ -195,7 +206,6 @@
                                 <ComboBoxItem Content="响应最快"/>
                                 <ComboBoxItem Content="响应最慢"/>
                                 <ComboBoxItem Content="评分最低"/>
-                                <ComboBoxItem Content="评分最高"/>
                                 <ComboBoxItem Content="名称排序"/>
                             </ComboBox>
                             <Button Content="全选" Command="{Binding SelectAllSourcesCommand}"

@@ -11,6 +11,7 @@ namespace GithubAccelerator;
 public partial class MainForm : MaterialForm
 {
     private readonly GithubHostsService _hostsService = new();
+    private readonly GithubConnectionService _connectionService = new();
     private readonly IHostsFileService _fileService;
     private readonly IDnsFlusher _dnsFlusher;
     private readonly IStartupManager _startupManager;
@@ -60,6 +61,63 @@ public partial class MainForm : MaterialForm
         this.Visible = true;
         this.Show();
         this.Activate();
+    }
+    
+    private async Task QuickStartAsync()
+    {
+        try
+        {
+            UpdateStatusIndicator(StatusWarning, "正在启动一键加速...");
+            
+            // 1. 检查当前状态
+            var hostsContent = await _fileService.ReadHostsFileAsync();
+            var isApplied = _fileService.IsGithubHostsApplied(hostsContent);
+            
+            if (isApplied)
+            {
+                UpdateStatusIndicator(StatusWarning, "加速已启用，正在刷新...");
+            }
+            else
+            {
+                UpdateStatusIndicator(StatusWarning, "正在获取最新 Hosts...");
+            }
+            
+            // 2. 获取最新 Hosts
+            var newHosts = await _hostsService.FetchHostsAsync();
+            
+            // 3. 应用 Hosts 配置
+            UpdateStatusIndicator(StatusWarning, "正在应用 Hosts 配置...");
+            await _fileService.BackupHostsFileAsync();
+            await _fileService.ApplyGithubHostsAsync(newHosts);
+            await _dnsFlusher.FlushDnsCacheAsync();
+            
+            // 4. 测试连接
+            UpdateStatusIndicator(StatusWarning, "正在测试连接...");
+            await TestSingleDomainLatencyAsync();
+            
+            // 5. 完成
+            _currentHostsContent = newHosts;
+            _isHostsApplied = true;
+            _lastTestTime = DateTime.Now;
+            
+            UpdateStatusIndicator(StatusEnabled, "一键加速完成！");
+            materialButtonRestore.Enabled = true;
+            materialButtonRefresh.Enabled = true;
+            UpdateHostsPreview();
+            
+            // 显示成功消息
+            MessageBox.Show("一键加速完成！\n\n已自动配置：\n- 最新 Hosts 配置\n- DNS 缓存刷新\n- 连接测试", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            UpdateStatusIndicator(StatusError, "需要管理员权限！");
+            MessageBox.Show("需要管理员权限才能应用 Hosts 配置，请以管理员身份运行此程序。", "权限错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        catch (Exception ex)
+        {
+            UpdateStatusIndicator(StatusError, $"加速失败: {ex.Message}");
+            MessageBox.Show($"一键加速失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private void UpdateThemeSwitch()
@@ -161,10 +219,23 @@ public partial class MainForm : MaterialForm
             materialButtonRestore.Enabled = true;
             materialButtonRefresh.Enabled = true;
             UpdateHostsPreview();
+            
+            // 显示成功消息
+            MessageBox.Show("加速已成功启用！\n\n已自动配置：\n- 最新 Hosts 配置\n- DNS 缓存刷新\n- 连接测试", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            
+            // 自动测试连接
+            await TestSingleDomainLatencyAsync();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            UpdateStatusIndicator(StatusError, "需要管理员权限！");
+            MessageBox.Show("需要管理员权限才能应用 Hosts 配置，请以管理员身份运行此程序。", "权限错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            materialButtonApply.Enabled = true;
         }
         catch (Exception ex)
         {
             UpdateStatusIndicator(StatusError, $"启用失败: {ex.Message}");
+            MessageBox.Show($"启用失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             materialButtonApply.Enabled = true;
         }
     }
@@ -254,6 +325,32 @@ public partial class MainForm : MaterialForm
                 lblLatency.Text = "平均延迟: -- ms";
                 txtTestResults.AppendText("=====================================\r\n");
                 txtTestResults.AppendText("测试完成 | 所有节点均超时");
+            }
+
+            txtTestResults.AppendText("\r\n=== 测试 GitHub 真实访问 (HTTPS) ===\r\n");
+            txtTestResults.AppendText("正在测试 TCP 443 端口...\r\n");
+            
+            try
+            {
+                var testResults = await _connectionService.TestAllConnectionsAsync();
+                var successCount = testResults.Count(r => r.IsSuccess);
+                var totalCount = testResults.Count;
+                
+                if (successCount > 0)
+                {
+                    var avgHttpsLatency = testResults.Where(r => r.IsSuccess).Average(r => r.LatencyMs);
+                    txtTestResults.AppendText($"[green]✓ GitHub 可访问 (成功率: {successCount}/{totalCount}, 平均延迟: {avgHttpsLatency:F0}ms)[/]\r\n");
+                }
+                else
+                {
+                    txtTestResults.AppendText($"[red]✗ 无法访问 GitHub！TCP 443 端口可能被封锁[/]\r\n");
+                    txtTestResults.AppendText("[yellow]可能原因: 网络运营商封锁了 GitHub 的 HTTPS 端口[/]\r\n");
+                    txtTestResults.AppendText("[cyan]解决方案: 使用代理软件/VPN 或等待后重试[/]\r\n");
+                }
+            }
+            catch (Exception ex)
+            {
+                txtTestResults.AppendText($"测试失败: {ex.Message}\r\n");
             }
 
             _lastTestResults = txtTestResults.Text;

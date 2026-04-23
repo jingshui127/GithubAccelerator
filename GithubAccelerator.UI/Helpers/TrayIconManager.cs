@@ -20,58 +20,68 @@ public class TrayIconManager : IDisposable
             _onShowWindow = onShowWindow;
             _onExit = onExit;
 
-            var iconPath = "Assets/app-icon.ico";
-            if (!File.Exists(iconPath))
+            string iconPath = FindAppIcon();
+            System.Drawing.Icon? icon = null;
+
+            if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
             {
-                iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, iconPath);
+                try
+                {
+                    icon = new System.Drawing.Icon(iconPath);
+                }
+                catch
+                {
+                    icon = System.Drawing.SystemIcons.Application;
+                }
+            }
+            else
+            {
+                icon = System.Drawing.SystemIcons.Application;
             }
 
-            if (File.Exists(iconPath))
+            _trayIcon = new NotifyIcon
             {
-                _trayIcon = new NotifyIcon
+                Icon = icon,
+                Text = "GitHub 加速器 Pro",
+                Visible = true
+            };
+
+            var contextMenu = new ContextMenuStrip();
+
+            var showItem = new ToolStripMenuItem("显示窗口");
+            showItem.Click += (s, e) =>
+            {
+                Dispatcher.UIThread.Post(() =>
                 {
-                    Icon = new System.Drawing.Icon(iconPath),
-                    Text = "GitHub 加速器 Pro",
-                    Visible = true
-                };
+                    _onShowWindow?.Invoke();
+                });
+            };
 
-                var contextMenu = new ContextMenuStrip();
+            var exitItem = new ToolStripMenuItem("退出");
+            exitItem.Click += (s, e) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    _onExit?.Invoke();
+                });
+            };
 
-                var showItem = new ToolStripMenuItem("显示窗口");
-                showItem.Click += (s, e) =>
+            contextMenu.Items.Add(showItem);
+            contextMenu.Items.Add(new ToolStripSeparator());
+            contextMenu.Items.Add(exitItem);
+
+            _trayIcon.ContextMenuStrip = contextMenu;
+
+            _trayIcon.MouseClick += (s, e) =>
+            {
+                if (e.Button == MouseButtons.Left && e.Clicks == 2)
                 {
                     Dispatcher.UIThread.Post(() =>
                     {
                         _onShowWindow?.Invoke();
                     });
-                };
-
-                var exitItem = new ToolStripMenuItem("退出");
-                exitItem.Click += (s, e) =>
-                {
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        _onExit?.Invoke();
-                    });
-                };
-
-                contextMenu.Items.Add(showItem);
-                contextMenu.Items.Add(new ToolStripSeparator());
-                contextMenu.Items.Add(exitItem);
-
-                _trayIcon.ContextMenuStrip = contextMenu;
-
-                _trayIcon.MouseClick += (s, e) =>
-                {
-                    if (e.Button == MouseButtons.Left && e.Clicks == 2)
-                    {
-                        Dispatcher.UIThread.Post(() =>
-                        {
-                            _onShowWindow?.Invoke();
-                        });
-                    }
-                };
-            }
+                }
+            };
         }
         catch (Exception ex)
         {
@@ -99,5 +109,26 @@ public class TrayIconManager : IDisposable
             _trayIcon?.Dispose();
             _disposed = true;
         }
+    }
+
+    private string? FindAppIcon()
+    {
+        var possiblePaths = new[]
+        {
+            "Assets/app-icon.ico",
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "app-icon.ico"),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "GithubAccelerator.UI", "Assets", "app-icon.ico"),
+            Path.Combine(Environment.CurrentDirectory, "Assets", "app-icon.ico")
+        };
+
+        foreach (var path in possiblePaths)
+        {
+            if (File.Exists(path))
+            {
+                return path;
+            }
+        }
+
+        return null;
     }
 }

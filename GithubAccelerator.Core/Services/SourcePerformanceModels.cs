@@ -75,7 +75,7 @@ public class SourcePerformanceMetrics
     /// <summary>
     /// 是否推荐使用
     /// </summary>
-    public bool IsRecommended => OverallScore >= 60 && SuccessRate >= 0.8;
+    public bool IsRecommended => (OverallScore >= 60 && SuccessRate >= 0.8) || (SpeedScore >= 50 && SuccessRate >= 0.8);
     
     /// <summary>
     /// 推荐等级 (S/A/B/C/D)

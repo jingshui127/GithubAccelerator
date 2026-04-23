@@ -12,9 +12,7 @@ namespace GithubAccelerator.UI.ViewModels;
 
 public enum ChartType
 {
-    ResponseTimeHistory,
-    SourceComparison,
-    ScoreDistribution
+    Overview // 综合视图
 }
 
 public partial class PerformanceChartViewModel : ObservableObject
@@ -24,13 +22,7 @@ public partial class PerformanceChartViewModel : ObservableObject
     private ISourcePerformanceMonitor? _monitor;
 
     [ObservableProperty]
-    private ChartType _selectedChartType = ChartType.ResponseTimeHistory;
-
-    [ObservableProperty]
-    private int _selectedSourceIndex = 0;
-
-    [ObservableProperty]
-    private string[] _sourceNames = Array.Empty<string>();
+    private ChartType _selectedChartType = ChartType.Overview;
 
     [ObservableProperty]
     private string _statusMessage = "就绪";
@@ -45,7 +37,7 @@ public partial class PerformanceChartViewModel : ObservableObject
     private double _chartMaxValue = 100;
 
     [ObservableProperty]
-    private string _chartTitle = "响应时间趋势";
+    private string _chartTitle = "网络性能概览";
 
     [ObservableProperty]
     private string _chartUnit = "ms";
@@ -74,6 +66,15 @@ public partial class PerformanceChartViewModel : ObservableObject
     [ObservableProperty]
     private List<SourcePerformanceMetrics> _currentMetrics = new();
 
+    [ObservableProperty]
+    private double _bestResponseTime = 0;
+
+    [ObservableProperty]
+    private string _bestSourceName = "";
+
+    [ObservableProperty]
+    private double _averageSuccessRate = 0;
+
     public PerformanceChartViewModel()
     {
         _chartService = PerformanceChartService.Instance;
@@ -86,28 +87,7 @@ public partial class PerformanceChartViewModel : ObservableObject
     {
         _monitor = monitor;
         _chartService.SetMonitor(monitor);
-        UpdateSourceNames();
         LoadChartData();
-    }
-
-    partial void OnSelectedChartTypeChanged(ChartType value)
-    {
-        LoadChartData();
-    }
-
-    partial void OnSelectedSourceIndexChanged(int value)
-    {
-        if (SelectedChartType == ChartType.ScoreDistribution)
-        {
-            LoadChartData();
-        }
-    }
-
-    private void UpdateSourceNames()
-    {
-        if (_monitor == null) return;
-        var metrics = _monitor.GetCurrentMetrics();
-        SourceNames = metrics.Select(m => m.Name).ToArray();
     }
 
     private void LoadChartData()
@@ -118,98 +98,42 @@ public partial class PerformanceChartViewModel : ObservableObject
             {
                 IsLoading = true;
 
-                List<ChartSeries> series;
-                switch (SelectedChartType)
+                // 综合视图：显示响应时间趋势
+                var responseTimeSeries = _chartService.GetResponseTimeHistory(30);
+
+                // 更新响应时间趋势
+                ChartTitle = "网络性能概览";
+                ChartUnit = "ms";
+                YAxisName = "响应时间 (ms)";
+                IsLineChart = true;
+                IsBarChart = false;
+
+                if (responseTimeSeries.Count > 0 && responseTimeSeries[0].DataPoints.Count > 0)
                 {
-                    case ChartType.ResponseTimeHistory:
-                        series = _chartService.GetResponseTimeHistory(50);
-                        ChartTitle = "响应时间趋势";
-                        ChartUnit = "ms";
-                        YAxisName = "响应时间 (ms)";
-                        IsLineChart = true;
-                        IsBarChart = false;
-                        if (series.Count > 0 && series[0].DataPoints.Count > 0)
-                        {
-                            var allValues = series.SelectMany(s => s.DataPoints.Select(d => d.Value)).ToList();
-                            ChartMinValue = Math.Floor(allValues.Min() / 100) * 100;
-                            ChartMaxValue = Math.Ceiling(allValues.Max() / 100) * 100;
-                            if (ChartMinValue == ChartMaxValue) ChartMaxValue += 100;
-                            ChartMaxY = ChartMaxValue;
-                            LineChartValues = allValues;
-                        }
-                        else
-                        {
-                            ChartMinValue = 0;
-                            ChartMaxValue = 1000;
-                            ChartMaxY = 1000;
-                            LineChartValues = new List<double>();
-                        }
-                        break;
-
-                    case ChartType.SourceComparison:
-                        series = _chartService.GetSuccessRateComparison();
-                        ChartTitle = "数据源对比";
-                        ChartUnit = "%";
-                        YAxisName = "成功率 (%)";
-                        ChartMinValue = 0;
-                        ChartMaxValue = 120;
-                        ChartMaxY = 120;
-                        IsLineChart = false;
-                        IsBarChart = true;
-                        var barItems = new List<BarItem>();
-                        foreach (var s in series)
-                        {
-                            if (s.DataPoints.Count > 0)
-                            {
-                                barItems.Add(new BarItem
-                                {
-                                    Label = s.Name.Length > 10 ? s.Name.Substring(0, 10) + "..." : s.Name,
-                                    Value = s.DataPoints.Average(d => d.Value)
-                                });
-                            }
-                        }
-                        BarItems = barItems;
-                        break;
-
-                    case ChartType.ScoreDistribution:
-                        series = _chartService.GetScoreDistribution(SelectedSourceIndex);
-                        var metrics = _monitor?.GetCurrentMetrics();
-                        if (metrics != null && SelectedSourceIndex < metrics.Length)
-                        {
-                            ChartTitle = $"{metrics[SelectedSourceIndex].Name} 评分趋势";
-                        }
-                        else
-                        {
-                            ChartTitle = "评分趋势";
-                        }
-                        ChartUnit = "分";
-                        YAxisName = "评分";
-                        ChartMinValue = 0;
-                        ChartMaxValue = 100;
-                        ChartMaxY = 100;
-                        IsLineChart = true;
-                        IsBarChart = false;
-                        if (series.Count > 0 && series[0].DataPoints.Count > 0)
-                        {
-                            LineChartValues = series[0].DataPoints.Select(d => d.Value).ToList();
-                        }
-                        else
-                        {
-                            LineChartValues = new List<double>();
-                        }
-                        break;
-
-                    default:
-                        series = new List<ChartSeries>();
-                        LineChartValues = new List<double>();
-                        BarItems = new List<BarItem>();
-                        break;
+                    var allValues = responseTimeSeries.SelectMany(s => s.DataPoints.Select(d => d.Value)).ToList();
+                    ChartMinValue = 0;
+                    ChartMaxValue = Math.Ceiling(allValues.Max() / 100) * 100;
+                    if (ChartMaxValue < 500) ChartMaxValue = 500;
+                    ChartMaxY = ChartMaxValue;
+                    LineChartValues = allValues;
+                    HasNoData = false;
+                }
+                else
+                {
+                    ChartMinValue = 0;
+                    ChartMaxValue = 500;
+                    ChartMaxY = 500;
+                    LineChartValues = new List<double>();
+                    HasNoData = true;
                 }
 
-                HasNoData = (IsLineChart && LineChartValues.Count == 0) ||
-                            (IsBarChart && BarItems.Count == 0);
+                // 更新最佳数据源信息
+                UpdateBestSourceInfo();
 
-                StatusMessage = $"已加载 {series.Count} 个数据系列，共 {series.Sum(s => s.DataPoints.Count)} 个数据点";
+                // 更新平均成功率
+                UpdateAverageSuccessRate();
+
+                StatusMessage = "数据已更新";
             }
             catch (Exception ex)
             {
@@ -223,6 +147,29 @@ public partial class PerformanceChartViewModel : ObservableObject
         });
     }
 
+    private void UpdateBestSourceInfo()
+    {
+        if (_monitor == null) return;
+        
+        var bestSource = _monitor.GetBestSource();
+        if (bestSource != null)
+        {
+            BestResponseTime = bestSource.AverageResponseTimeMs;
+            BestSourceName = bestSource.Name;
+        }
+    }
+
+    private void UpdateAverageSuccessRate()
+    {
+        if (_monitor == null) return;
+
+        var metrics = _monitor.GetCurrentMetrics();
+        if (metrics.Length > 0)
+        {
+            AverageSuccessRate = metrics.Average(m => m.SuccessRate) * 100;
+        }
+    }
+
     private void OnDataChanged()
     {
         Avalonia.Threading.Dispatcher.UIThread.Post(LoadChartData);
@@ -233,23 +180,5 @@ public partial class PerformanceChartViewModel : ObservableObject
     {
         _historyService.Record(OperationType.SettingsChanged, "刷新性能图表数据");
         LoadChartData();
-    }
-
-    [RelayCommand]
-    private void SwitchToResponseTime()
-    {
-        SelectedChartType = ChartType.ResponseTimeHistory;
-    }
-
-    [RelayCommand]
-    private void SwitchToComparison()
-    {
-        SelectedChartType = ChartType.SourceComparison;
-    }
-
-    [RelayCommand]
-    private void SwitchToScoreDistribution()
-    {
-        SelectedChartType = ChartType.ScoreDistribution;
     }
 }

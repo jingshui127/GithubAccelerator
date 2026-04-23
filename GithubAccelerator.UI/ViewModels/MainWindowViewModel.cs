@@ -96,11 +96,20 @@ public partial class MainWindowViewModel : ObservableObject
 {
     private readonly ISourcePerformanceMonitor _performanceMonitor;
     private readonly GithubHostsService _hostsService;
+    private readonly GithubConnectionService _connectionService;
     private readonly IHostsFileService _hostsFileService;
+    private readonly IDnsFlusher _dnsFlusher;
     private readonly SettingsViewModel _settings;
     private readonly SourceStatisticsService _statsService;
     private System.Timers.Timer? _updateTimer;
     private System.Timers.Timer? _autoUpdateTimer;
+    private System.Timers.Timer? _githubConnectivityTimer;
+
+    [ObservableProperty]
+    private bool _isGitHubAccessible;
+
+    [ObservableProperty]
+    private string _gitHubStatusText = "未测试";
 
     [ObservableProperty]
     private ObservableCollection<SourceStatusViewModel> _sources = new();
@@ -221,6 +230,10 @@ public partial class MainWindowViewModel : ObservableObject
 
     public int SelectedSourcesCount => Sources.Count(s => s.IsSelected);
 
+    public int TotalSourcesCount => Sources.Count;
+
+    public int HealthySourcesCount => Sources.Count(s => s.IsHealthy);
+
     public bool HasFilteredSources => FilteredSources.Count > 0;
 
     private readonly OperationHistoryService _historyService = OperationHistoryService.Instance;
@@ -239,7 +252,9 @@ public partial class MainWindowViewModel : ObservableObject
         var logger = new SerilogLoggerAdapter<SourcePerformanceMonitor>();
         _performanceMonitor = new SourcePerformanceMonitor(httpClient, logger);
         _hostsService = new GithubHostsService();
+        _connectionService = new GithubConnectionService();
         _hostsFileService = new WindowsHostsFileService();
+        _dnsFlusher = PlatformServiceFactory.CreateDnsFlusher();
 
         _historyService.OnOperationRecorded += OnOperationRecorded;
         _notificationService.OnNotification += OnNotificationReceived;
@@ -249,24 +264,41 @@ public partial class MainWindowViewModel : ObservableObject
 
         Log.Information("正在加载仪表盘");
         ShowDashboard();
-        
+
         Log.Information("正在初始化数据源");
-        InitializeSources();
+        InitializeSourcesFromConfig();
         ApplySettings();
-        StartAutoUpdate();
         CheckHostsStatus();
 
         // 自动启动监控 - 始终检测所有数据源状态
         Log.Information("启动性能监控");
         _performanceMonitor.StartMonitoring();
         IsMonitoring = true;
-        if (_settings.TestInterval > 0)
-        {
-            _autoUpdateTimer?.Start();
-        }
+
+        StartAutoUpdate();
+
+        // 立即测试 GitHub 连接
+        Log.Information("启动时立即测试 GitHub 连接");
+        _ = TestGitHubConnectionAsync();
+
+        // 立即刷新数据源状态
+        Log.Information("启动时立即刷新数据源状态");
+        _ = RefreshSources();
+
         StatusMessage = "已启动自动检测，正在测试所有数据源...";
 
         IsDarkMode = ThemeManager.IsDarkMode;
+
+        // 启动时检查是否需要自动应用Hosts
+        if (_settings.AutoApplyHosts)
+        {
+            _ = Task.Run(async () =>
+            {
+                // 等待2秒让性能监控收集数据
+                await Task.Delay(2000);
+                await AutoApplyHostsOnStartup();
+            });
+        }
 
         foreach (var record in _historyService.GetRecentRecords(20))
         {
@@ -523,6 +555,13 @@ public partial class MainWindowViewModel : ObservableObject
     private void ApplySettings()
     {
         UpdateAutoUpdateTimer();
+        
+        // 更新 GitHub 访问速度测试间隔
+        if (GitHubLatency != null)
+        {
+            var monitorService = GithubAccelerator.UI.Services.GitHubLatencyMonitorService.Instance;
+            monitorService.SetCheckInterval(TimeSpan.FromSeconds(10)); // 10秒一次
+        }
     }
 
     private void UpdateAutoUpdateTimer()
@@ -536,6 +575,34 @@ public partial class MainWindowViewModel : ObservableObject
         {
             _autoUpdateTimer.Start();
         }
+    }
+
+    private void InitializeSourcesFromConfig()
+    {
+        var hostSources = _hostsService.GetHostsSources();
+        foreach (var source in hostSources)
+        {
+            var vm = new SourceStatusViewModel
+            {
+                Name = source.Name,
+                Url = source.Url,
+                IsHealthy = source.IsHealthy,
+                ResponseTime = source.LastResponseTimeMs > 0 ? (long)source.LastResponseTimeMs : 0
+            };
+            vm.OnApplyRequested += OnSingleSourceApplyRequested;
+            vm.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(SourceStatusViewModel.IsSelected))
+                {
+                    OnPropertyChanged(nameof(HasSelectedSources));
+                    OnPropertyChanged(nameof(SelectedSourcesCount));
+                }
+            };
+            Sources.Add(vm);
+        }
+        UpdateBestSource();
+        UpdateFilteredSources();
+        IsLoading = false;
     }
 
     private void InitializeSources()
@@ -674,8 +741,56 @@ public partial class MainWindowViewModel : ObservableObject
         }
         
         UpdateBestSource();
+        await TestGitHubConnection();
         StatusMessage = $"已刷新 {metrics.Length} 个数据源状态";
         _historyService.Record(OperationType.SourcesRefreshed, $"刷新了 {metrics.Length} 个数据源");
+    }
+
+    [RelayCommand]
+    private async Task TestGitHubConnection()
+    {
+        await TestGitHubConnectionAsync(showNotification: true);
+    }
+
+    private async Task TestGitHubConnectionAsync(bool showNotification = false)
+    {
+        try
+        {
+            var results = await _connectionService.TestAllConnectionsAsync();
+            var successCount = results.Count(r => r.IsSuccess);
+            var totalCount = results.Count;
+            
+            IsGitHubAccessible = successCount > 0;
+            
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (IsGitHubAccessible)
+                {
+                    var avgLatency = results.Where(r => r.IsSuccess).Average(r => r.LatencyMs);
+                    GitHubStatusText = $"可访问 ({avgLatency:F0}ms)";
+                }
+                else
+                {
+                    GitHubStatusText = "无法访问";
+                    if (showNotification)
+                    {
+                        StatusMessage = "⚠️ GitHub 无法访问！请检查网络或使用代理";
+                        _notificationService.Warning("GitHub 连接", "无法访问 GitHub，TCP 端口可能被封锁");
+                    }
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                GitHubStatusText = "测试失败";
+                if (showNotification)
+                {
+                    StatusMessage = $"⚠️ GitHub 连接测试失败: {ex.Message}";
+                }
+            });
+        }
     }
 
     [RelayCommand]
@@ -700,11 +815,13 @@ public partial class MainWindowViewModel : ObservableObject
                 
                 if (best == null)
                 {
-                    // 如果还是没有可用的源，直接使用第一个数据源的URL
                     if (Sources.Count > 0)
                     {
                         var firstSource = Sources.FirstOrDefault();
-                        await ApplyHostsFromSource(firstSource.Name, firstSource.Url);
+                        if (firstSource != null)
+                        {
+                            await ApplyHostsFromSource(firstSource.Name, firstSource.Url);
+                        }
                         return;
                     }
                     
@@ -740,7 +857,25 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 IsHostsApplied = true;
                 CurrentHostsSource = sourceName;
-                StatusMessage = $"Hosts 已成功应用，源：{sourceName}";
+                
+                try
+                {
+                    if (_settings.AutoFlushDns)
+                    {
+                        await _dnsFlusher.FlushDnsCacheAsync();
+                        StatusMessage = $"Hosts 已成功应用，源：{sourceName}（DNS缓存已刷新）";
+                    }
+                    else
+                    {
+                        StatusMessage = $"Hosts 已成功应用，源：{sourceName}";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "刷新DNS缓存失败");
+                    StatusMessage = $"Hosts 已成功应用，源：{sourceName}（建议手动刷新DNS缓存）";
+                }
+                
                 _historyService.Record(OperationType.HostsApplied, $"从 {sourceName} 应用 Hosts 成功", true);
                 _statsService.RecordSourceUsed(sourceName, sourceUrl, 0, true);
                 _notificationService.Success("Hosts 应用", $"已从 {sourceName} 成功应用 Hosts");
@@ -802,7 +937,25 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 IsHostsApplied = true;
                 CurrentHostsSource = $"{selectedSources.Count} 个源";
-                StatusMessage = $"已成功应用 {selectedSources.Count} 个数据源";
+                
+                try
+                {
+                    if (_settings.AutoFlushDns)
+                    {
+                        await _dnsFlusher.FlushDnsCacheAsync();
+                        StatusMessage = $"已成功应用 {selectedSources.Count} 个数据源（DNS缓存已刷新）";
+                    }
+                    else
+                    {
+                        StatusMessage = $"已成功应用 {selectedSources.Count} 个数据源";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "刷新DNS缓存失败");
+                    StatusMessage = $"已成功应用 {selectedSources.Count} 个数据源（建议手动刷新DNS缓存）";
+                }
+                
                 _historyService.Record(OperationType.HostsApplied, $"应用 {selectedSources.Count} 个数据源成功", true);
                 _notificationService.Success("Hosts 应用", $"已成功应用 {selectedSources.Count} 个数据源");
             }
@@ -854,9 +1007,13 @@ public partial class MainWindowViewModel : ObservableObject
 
     private void StartAutoUpdate()
     {
-        _updateTimer = new System.Timers.Timer(5000);
+        _updateTimer = new System.Timers.Timer(60000);
         _updateTimer.Elapsed += async (s, e) => await AutoUpdateAsync();
         _updateTimer.Start();
+        
+        _githubConnectivityTimer = new System.Timers.Timer(600000);
+        _githubConnectivityTimer.Elapsed += async (s, e) => await TestGitHubConnectionAsync();
+        _githubConnectivityTimer.Start();
     }
 
     private async Task AutoUpdateAsync()
@@ -899,9 +1056,9 @@ public partial class MainWindowViewModel : ObservableObject
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // 忽略自动更新错误
+            Log.Warning(ex, "自动更新时发生错误");
         }
     }
 
@@ -917,9 +1074,9 @@ public partial class MainWindowViewModel : ObservableObject
                 StatusMessage = "Hosts 已应用";
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // 忽略错误
+            Log.Warning(ex, "检查Hosts状态时发生错误");
         }
     }
 
@@ -1092,6 +1249,43 @@ public partial class MainWindowViewModel : ObservableObject
         {
             StatusMessage = $"导入异常：{ex.Message}";
             _notificationService.Error("数据导入", $"导入异常：{ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private async Task FlushDnsCacheAsync()
+    {
+        try
+        {
+            StatusMessage = "正在刷新DNS缓存...";
+            await _dnsFlusher.FlushDnsCacheAsync();
+            StatusMessage = "DNS缓存已成功刷新";
+            _historyService.Record(OperationType.SettingsChanged, "手动刷新DNS缓存成功", true);
+            _notificationService.Success("DNS刷新", "DNS缓存已成功刷新");
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"DNS缓存刷新失败：{ex.Message}";
+            _notificationService.Error("DNS刷新", $"刷新失败：{ex.Message}，请以管理员身份运行");
+        }
+    }
+
+    private async Task AutoApplyHostsOnStartup()
+    {
+        try
+        {
+            if (IsHostsApplied)
+            {
+                Log.Information("Hosts 已应用，跳过自动应用");
+                return;
+            }
+
+            Log.Information("启动自动应用Hosts");
+            await ApplyHosts();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("启动自动应用Hosts失败: {0}", ex.Message);
         }
     }
 }

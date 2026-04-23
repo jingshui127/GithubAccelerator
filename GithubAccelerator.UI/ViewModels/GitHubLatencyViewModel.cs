@@ -10,8 +10,8 @@ namespace GithubAccelerator.UI.ViewModels
 {
     public partial class GitHubLatencyViewModel : ObservableObject
     {
-        private readonly GitHubLatencyMonitorService _monitorService;
-        private readonly OperationHistoryService _historyService;
+        private readonly GitHubLatencyMonitorService _monitorService = GitHubLatencyMonitorService.Instance;
+        private readonly OperationHistoryService _historyService = OperationHistoryService.Instance;
         private bool _isInitialized = false;
 
         [ObservableProperty]

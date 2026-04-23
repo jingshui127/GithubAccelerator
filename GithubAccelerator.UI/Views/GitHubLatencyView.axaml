@@ -18,8 +18,8 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
                     <TextBlock Text="🌐" FontSize="20"/>
                     <StackPanel>
-                        <TextBlock Text="GitHub 访问延迟" FontSize="16" FontWeight="SemiBold"/>
-                        <TextBlock Text="{Binding StatusMessage}" FontSize="11" 
+                        <TextBlock Text="GitHub 真实访问速度" FontSize="16" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding StatusMessage}" FontSize="11"
                                    Foreground="{DynamicResource SecondaryTextBrush}"/>
                     </StackPanel>
                 </StackPanel>
@@ -49,7 +49,7 @@
                     CornerRadius="8" BorderThickness="1"
                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
                 <ctrl:SimpleLineChart Values="{Binding ChartValues}"
-                                      YAxisLabel="延迟 (ms)"
+                                      YAxisLabel="响应时间 (ms)"
                                       XAxisLabel="测试次数"
                                       MinY="0"
                                       MaxY="{Binding ChartMaxY}"
@@ -65,10 +65,10 @@
                         Background="{DynamicResource ControlFillColorSecondaryBrush}"
                         BorderThickness="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
                     <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="Current" FontSize="11" 
+                        <TextBlock Text="当前" FontSize="11"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    HorizontalAlignment="Center"/>
-                        <TextBlock FontSize="18" FontWeight="Bold" 
+                        <TextBlock FontSize="18" FontWeight="Bold"
                                    HorizontalAlignment="Center">
                             <Run Text="{Binding CurrentLatency}"/>
                             <Run Text=" ms" FontSize="12"/>
@@ -80,10 +80,10 @@
                         Background="{DynamicResource ControlFillColorSecondaryBrush}"
                         BorderThickness="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
                     <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="Average" FontSize="11" 
+                        <TextBlock Text="平均" FontSize="11"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    HorizontalAlignment="Center"/>
-                        <TextBlock FontSize="18" FontWeight="Bold" 
+                        <TextBlock FontSize="18" FontWeight="Bold"
                                    HorizontalAlignment="Center">
                             <Run Text="{Binding AverageLatency}"/>
                             <Run Text=" ms" FontSize="12"/>
@@ -95,10 +95,10 @@
                         Background="{DynamicResource ControlFillColorSecondaryBrush}"
                         BorderThickness="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
                     <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="Min" FontSize="11" 
+                        <TextBlock Text="最快" FontSize="11"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    HorizontalAlignment="Center"/>
-                        <TextBlock FontSize="18" FontWeight="Bold" 
+                        <TextBlock FontSize="18" FontWeight="Bold"
                                    HorizontalAlignment="Center">
                             <Run Text="{Binding MinLatency}"/>
                             <Run Text=" ms" FontSize="12"/>
@@ -110,10 +110,10 @@
                         Background="{DynamicResource ControlFillColorSecondaryBrush}"
                         BorderThickness="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
                     <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="Max" FontSize="11" 
+                        <TextBlock Text="最慢" FontSize="11"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    HorizontalAlignment="Center"/>
-                        <TextBlock FontSize="18" FontWeight="Bold" 
+                        <TextBlock FontSize="18" FontWeight="Bold"
                                    HorizontalAlignment="Center">
                             <Run Text="{Binding MaxLatency}"/>
                             <Run Text=" ms" FontSize="12"/>

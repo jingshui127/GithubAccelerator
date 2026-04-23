@@ -74,13 +74,13 @@ public class IntegrationTests
     {
         var service = new WindowsHostsFileService();
         var contentWithMultipleBlocks = @"127.0.0.1 localhost
-# GitHub520 Host Start
+# === GitHub Accelerator Start ===
 140.82.114.4 github.com
-# GitHub520 Host End
+# === GitHub Accelerator End ===
 192.168.1.1 local
-# GitHub520 Host Start
+# === GitHub Accelerator Start ===
 140.82.113.4 gitlab.com
-# GitHub520 Host End
+# === GitHub Accelerator End ===
 10.0.0.1 minecraft
 ";
 
@@ -92,7 +92,7 @@ public class IntegrationTests
         Assert.DoesNotContain("gitlab.com", result);
         Assert.Contains("localhost", result);
         Assert.Contains("minecraft", result);
-        Assert.DoesNotContain("# GitHub520 Host Start", result);
+        Assert.DoesNotContain("# === GitHub Accelerator Start ===", result);
     }
 
     [Fact]
@@ -100,9 +100,9 @@ public class IntegrationTests
     {
         var service = new WindowsHostsFileService();
         var content = @"127.0.0.1 localhost
-# GitHub520 Host Start
+# === GitHub Accelerator Start ===
 140.82.114.4 github.com
-# GitHub520 Host End
+# === GitHub Accelerator End ===
 ";
 
         var isApplied = service.IsGithubHostsApplied(content);
@@ -199,9 +199,9 @@ public class IntegrationTests
     {
         var service = new WindowsHostsFileService();
         var contentWithUnicode = @"127.0.0.1 localhost
-# GitHub520 Host Start
+# === GitHub Accelerator Start ===
 140.82.114.4 github.com
-# GitHub520 Host End
+# === GitHub Accelerator End ===
 # 注释行
 ";
 

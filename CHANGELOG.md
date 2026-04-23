@@ -9,18 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - 待添加新功能
+- DNS缓存自动刷新功能：应用Hosts后自动刷新系统DNS缓存
+- 手动刷新DNS缓存按钮
+- 自动刷新DNS缓存设置开关
+- 开机自动应用Hosts功能：启动时自动检测并应用最佳数据源
 
 ### Changed
 - 待变更内容
 
-### Deprecated
-- 待废弃内容
-
-### Removed
-- 待移除内容
-
 ### Fixed
-- 待修复问题
+- 深度修复推荐算法：IsRecommended过滤条件增加SpeedScore通道，确保低延迟源不被过滤
+- 修复SpeedScore和OverallScore计算中successRate权重未归一化到0-100范围的问题
+- 修复SmartSourceSelector排序逻辑：改为优先按SpeedScore降序排序，再按响应时间升序排序
+- 修复DataExportImportServiceTests测试失败问题
 
 ### Security
 - 待安全更新
