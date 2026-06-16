@@ -157,11 +157,24 @@
                         </Button>
 
                         <!-- 系统工具 -->
-                        <TextBlock Text="系统工具" 
-                                   FontSize="10" 
+                        <TextBlock Text="系统工具"
+                                   FontSize="10"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    Margin="12,16,0,4"/>
+
+                        <Button Command="{Binding ShowQuickGuideCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10"
+                                CornerRadius="8"
+                                BorderThickness="0"
+                                Classes="NavButton">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="❓" FontSize="16"/>
+                                <TextBlock Text="使用指南" FontSize="13"/>
+                            </StackPanel>
+                        </Button>
 
                         <Button Command="{Binding ShowSettingsCommand}"
                                 HorizontalAlignment="Stretch"

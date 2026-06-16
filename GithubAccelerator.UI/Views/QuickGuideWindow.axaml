@@ -1,0 +1,187 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="580"
+        x:Class="GithubAccelerator.UI.Views.QuickGuideWindow"
+        Title="快速上手指南"
+        Width="560" Height="580"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        CanResize="False">
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="0">
+        <!-- 标题栏 -->
+        <Border Grid.Row="0" CornerRadius="8,8,0,0"
+                Background="{DynamicResource AccentFillColorDefaultBrush}"
+                Padding="20,14">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" Spacing="2">
+                    <TextBlock Text="🚀 快速上手指南" FontSize="18" FontWeight="SemiBold"
+                               Foreground="White"/>
+                    <TextBlock Text="GitHub 加速器 Pro v1.3.0" FontSize="12"
+                               Foreground="#CCFFFFFF"/>
+                </StackPanel>
+                <Button Grid.Column="1" Content="✕" Click="CloseButton_Click"
+                        Background="Transparent" Foreground="White"
+                        BorderThickness="0" FontSize="16" Padding="8,4"
+                        Cursor="Hand"/>
+            </Grid>
+        </Border>
+
+        <!-- 内容区 -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Padding="20,16">
+            <StackPanel Spacing="16">
+
+                <!-- 步骤 1 -->
+                <Border CornerRadius="8" Padding="16"
+                        Background="{DynamicResource CardFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <StackPanel Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Border CornerRadius="12" Width="28" Height="28"
+                                    Background="#E3F2FD">
+                                <TextBlock Text="1" FontWeight="Bold" FontSize="14"
+                                           Foreground="#1976D2"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="以管理员身份运行" FontSize="15" FontWeight="SemiBold"/>
+                        </StackPanel>
+                        <TextBlock TextWrapping="Wrap" FontSize="13"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   LineHeight="22">
+                            写入系统 hosts 文件需要管理员权限。
+                            右键点击 GithubAccelerator.UI.exe →
+                            <Run FontStyle="Italic" Foreground="#1976D2">「以管理员身份运行」</Run>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <!-- 步骤 2 -->
+                <Border CornerRadius="8" Padding="16"
+                        Background="{DynamicResource CardFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <StackPanel Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Border CornerRadius="12" Width="28" Height="28"
+                                    Background="#E8F5E9">
+                                <TextBlock Text="2" FontWeight="Bold" FontSize="14"
+                                           Foreground="#388E3C"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="等待数据源检测完成" FontSize="15" FontWeight="SemiBold"/>
+                        </StackPanel>
+                        <TextBlock TextWrapping="Wrap" FontSize="13"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   LineHeight="22">
+                            启动后自动检测所有数据源状态。
+                            <Run Foreground="#388E3C">● 绿色 = 可用</Run>，
+                            <Run Foreground="#FF5722">● 红色 = 超时</Run>，
+                            推荐使用评分最高的源。
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <!-- 步骤 3 -->
+                <Border CornerRadius="8" Padding="16"
+                        Background="{DynamicResource CardFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <StackPanel Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Border CornerRadius="12" Width="28" Height="28"
+                                    Background="#FFF3E0">
+                                <TextBlock Text="3" FontWeight="Bold" FontSize="14"
+                                           Foreground="#F57C00"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="点击「应用」写入 Hosts" FontSize="15" FontWeight="SemiBold"/>
+                        </StackPanel>
+                        <TextBlock TextWrapping="Wrap" FontSize="13"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   LineHeight="22">
+                            选择评分高的数据源，点击右侧
+                            <Run FontStyle="Italic" Foreground="#F57C00">「应用」</Run> 按钮。
+                            成功后底部会显示绿色提示。
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <!-- 步骤 4 -->
+                <Border CornerRadius="8" Padding="16"
+                        Background="{DynamicResource CardFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <StackPanel Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Border CornerRadius="12" Width="28" Height="28"
+                                    Background="#F3E5F5">
+                                <TextBlock Text="4" FontWeight="Bold" FontSize="14"
+                                           Foreground="#7B1FA2"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="打开浏览器访问 GitHub" FontSize="15" FontWeight="SemiBold"/>
+                        </StackPanel>
+                        <TextBlock TextWrapping="Wrap" FontSize="13"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   LineHeight="22">
+                            应用成功后打开浏览器访问 github.com。
+                            如仍无法访问，可手动刷新 DNS：
+                            打开 CMD 运行
+                            <Run FontStyle="Italic" Foreground="#7B1FA2" FontFamily="Consolas">ipconfig /flushdns</Run>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <!-- 提示卡片 -->
+                <Border CornerRadius="8" Padding="16"
+                        Background="#FFF8E1"
+                        BorderBrush="#FFE082" BorderThickness="1">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="💡 小提示" FontSize="14" FontWeight="SemiBold" Foreground="#F57F17"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#795548" LineHeight="20">
+                            • 「多源DNS探测」是国内优化的数据源，推荐优先使用&#x0A;
+                            • 点击数据源的「预览」按钮可查看获取到的 IP 地址&#x0A;
+                            • 开启「自动切换」后会自动选择最佳数据源应用
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <!-- 反馈信息 -->
+                <Border CornerRadius="8" Padding="16"
+                        Background="#E3F2FD"
+                        BorderBrush="#90CAF9" BorderThickness="1">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="📮 问题反馈 &amp; 建议" FontSize="14" FontWeight="SemiBold" Foreground="#1565C0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#455A64" LineHeight="20">
+                            如遇到问题或有功能建议，欢迎联系：&#x0A;
+                            QQ: <Run FontWeight="Bold" Foreground="#1976D2">2492123056</Run>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- 底部操作栏 -->
+        <Border Grid.Row="2" CornerRadius="0,0,8,8"
+                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="0,1,0,0"
+                Padding="16,12">
+            <StackPanel Spacing="10">
+                <!-- 不再提示复选框 -->
+                <CheckBox x:Name="DontShowAgainCheckBox" Content="不再显示此指南"
+                          FontSize="12" IsChecked="False"
+                          Foreground="{DynamicResource SecondaryTextBrush}"/>
+
+                <!-- 按钮 -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+                    <Button Content="我知道了" Click="CloseButton_Click"
+                            Padding="28,9" FontSize="13" FontWeight="Medium"
+                            Background="{DynamicResource AccentFillColorDefaultBrush}"
+                            Foreground="White" BorderThickness="0" Cursor="Hand"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

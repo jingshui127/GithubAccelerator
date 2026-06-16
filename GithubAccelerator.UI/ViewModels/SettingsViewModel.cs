@@ -35,6 +35,9 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _autoFlushDns = true;
 
+    [ObservableProperty]
+    private bool _showQuickGuideOnStartup = true;
+
     private string _logLevel = "Information";
     
     public string LogLevel
@@ -89,6 +92,7 @@ public partial class SettingsViewModel : ObservableObject
                     MinimizeToTray = settings.MinimizeToTray;
                     StartMinimized = settings.StartMinimized;
                     AutoFlushDns = settings.AutoFlushDns;
+                    ShowQuickGuideOnStartup = settings.ShowQuickGuideOnStartup;
                     _logLevel = settings.LogLevel;
                     LogService.Instance.SetLogLevel(_logLevel);
                 }

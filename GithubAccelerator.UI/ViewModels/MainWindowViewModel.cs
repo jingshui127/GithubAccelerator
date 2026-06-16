@@ -344,6 +344,9 @@ public partial class MainWindowViewModel : ObservableObject
 
         IsDarkMode = ThemeManager.IsDarkMode;
 
+        // 首次启动时自动显示快速指南
+        _ = ShowQuickGuideOnFirstLaunchAsync();
+
         // 启动时检查是否需要自动应用Hosts
         if (_settings.AutoApplyHosts)
         {
@@ -605,6 +608,65 @@ public partial class MainWindowViewModel : ObservableObject
         {
             System.Diagnostics.Debug.WriteLine($"ShowAbout error: {ex}");
         }
+    }
+
+    [RelayCommand]
+    private async Task ShowQuickGuide()
+    {
+        try
+        {
+            var window = App.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                ? desktop.MainWindow
+                : null;
+
+            if (window == null) return;
+
+            var dontShowAgain = await QuickGuideWindow.ShowAsync(window);
+            if (dontShowAgain)
+            {
+                _settings.ShowQuickGuideOnStartup = false;
+                SaveSettings();
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "显示快速指南失败");
+        }
+    }
+
+    /// <summary>
+    /// 首次启动时自动显示快速指南（延迟3秒，等UI加载完成）
+    /// </summary>
+    private async Task ShowQuickGuideOnFirstLaunchAsync()
+    {
+        if (!_settings.ShowQuickGuideOnStartup) return;
+
+        await Task.Delay(3000); // 等 UI 加载完成
+
+        try
+        {
+            var window = App.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                ? desktop.MainWindow
+                : null;
+
+            if (window == null) return;
+
+            var dontShowAgain = await QuickGuideWindow.ShowAsync(window);
+            if (dontShowAgain)
+            {
+                _settings.ShowQuickGuideOnStartup = false;
+                SaveSettings();
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "首次启动显示快速指南失败");
+        }
+    }
+
+    private void SaveSettings()
+    {
+        _settings.Save();
     }
 
     private void ApplySettings()
