@@ -91,6 +91,11 @@ public class SourcePerformanceMetrics
             return "D";
         }
     }
+
+    /// <summary>
+    /// 是否为 DNS 探测数据源
+    /// </summary>
+    public bool IsDnsProbe { get; set; }
 }
 
 /// <summary>

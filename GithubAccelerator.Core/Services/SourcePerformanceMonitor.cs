@@ -88,11 +88,12 @@ public class SourcePerformanceMonitor : ISourcePerformanceMonitor, IDisposable
             {
                 Url = source.Url
             };
-            
+
             _currentMetrics[source.Url] = new SourcePerformanceMetrics
             {
                 Url = source.Url,
-                Name = source.Name
+                Name = source.Name,
+                IsDnsProbe = source.IsDnsProbe
             };
         }
     }
@@ -157,10 +158,12 @@ public class SourcePerformanceMonitor : ISourcePerformanceMonitor, IDisposable
             catch (Exception ex)
             {
                 _logger.LogDebug(ex, "测试数据源 {Url} 失败", source.Url);
+                var existingMetrics = _currentMetrics.GetValueOrDefault(source.Url);
                 return new SourcePerformanceMetrics
                 {
                     Url = source.Url,
                     Name = source.Name,
+                    IsDnsProbe = existingMetrics?.IsDnsProbe ?? source.IsDnsProbe,
                     SuccessRate = 0,
                     LastTestTime = DateTime.Now
                 };
@@ -176,6 +179,13 @@ public class SourcePerformanceMonitor : ISourcePerformanceMonitor, IDisposable
     /// </summary>
     private async Task<SourcePerformanceMetrics> TestSingleSourceAsync(string url, string name)
     {
+        // DNS 探测源走特殊测试路径
+        var isDnsProbe = url.StartsWith("dns:") || url == "chinaz:dns";
+        if (isDnsProbe)
+        {
+            return await TestDnsProbeSourceAsync(url, name);
+        }
+
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var record = new SourceTestRecord
         {
@@ -222,22 +232,96 @@ public class SourcePerformanceMonitor : ISourcePerformanceMonitor, IDisposable
             record.ErrorMessage = ex.Message;
             _logger.LogDebug(ex, "测试数据源 {Url} 异常", url);
         }
-        
+
         // 失败情况
+        var existingMetrics = _currentMetrics.GetValueOrDefault(url);
         var failedMetrics = new SourcePerformanceMetrics
         {
             Url = url,
             Name = name,
+            IsDnsProbe = existingMetrics?.IsDnsProbe ?? false,
             LastTestTime = DateTime.Now,
             RecentTestCount = 1,
             ConsecutiveFailures = 1,
             SuccessRate = 0
         };
-        
+
         UpdateHistory(url, record, failedMetrics);
         return failedMetrics;
     }
-    
+
+    /// <summary>
+    /// 测试 DNS 探测数据源（通过多源 DNS 查询获取 IP）
+    /// </summary>
+    private async Task<SourcePerformanceMetrics> TestDnsProbeSourceAsync(string url, string name)
+    {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var record = new SourceTestRecord
+        {
+            TestTime = DateTime.Now,
+            Url = url
+        };
+
+        try
+        {
+            var chinazService = ChinazDnsService.Instance;
+
+            // 快速检测：只查 github.com 一个域名，避免全量查询太慢
+            var ips = await chinazService.GetAvailableIpsAsync("github.com");
+            stopwatch.Stop();
+
+            record.ResponseTimeMs = stopwatch.ElapsedMilliseconds;
+            record.IsSuccess = ips.Any();
+            record.DataSize = ips.Count * 20; // 估算数据量
+
+            if (ips.Any())
+            {
+                // 模拟数据质量分析（DNS 探测源固定覆盖 4 个 GitHub 域名）
+                record.GithubDomainCount = 4;
+                record.DataSize = ips.Count * 25;
+
+                var qualityAnalysis = (GithubDomainCount: 4, DataSize: ips.Count * 25);
+                var metrics = CalculateMetrics(url, name, record, qualityAnalysis);
+                metrics.IsDnsProbe = true;
+
+                // DNS 探测源给予基础高分（因为 IP 是实时查询的）
+                if (metrics.OverallScore < 60) metrics.OverallScore = 65;
+                if (metrics.SpeedScore < 50) metrics.SpeedScore = 55;
+
+                UpdateHistory(url, record, metrics);
+                _logger.LogInformation("DNS探测源测试成功：{Count} 个IP，耗时 {Ms}ms", ips.Count, stopwatch.ElapsedMilliseconds);
+                return metrics;
+            }
+            else
+            {
+                _logger.LogWarning("DNS探测源未获取到任何IP");
+            }
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            record.ResponseTimeMs = stopwatch.ElapsedMilliseconds;
+            record.ErrorMessage = ex.Message;
+            _logger.LogDebug(ex, "DNS探测源测试异常");
+        }
+
+        // 失败情况
+        var failedMetrics = new SourcePerformanceMetrics
+        {
+            Url = url,
+            Name = name,
+            IsDnsProbe = true,
+            LastTestTime = DateTime.Now,
+            RecentTestCount = 1,
+            ConsecutiveFailures = 1,
+            SuccessRate = 0,
+            AverageResponseTimeMs = record.ResponseTimeMs
+        };
+
+        UpdateHistory(url, record, failedMetrics);
+        return failedMetrics;
+    }
+
     /// <summary>
     /// 数据质量分析
     /// </summary>
@@ -370,6 +454,7 @@ public class SourcePerformanceMonitor : ISourcePerformanceMonitor, IDisposable
         {
             Url = url,
             Name = name,
+            IsDnsProbe = _currentMetrics.GetValueOrDefault(url)?.IsDnsProbe ?? false,
             AverageResponseTimeMs = avgResponseTime,
             SuccessRate = successRate,
             DataIntegrityScore = integrityScore,

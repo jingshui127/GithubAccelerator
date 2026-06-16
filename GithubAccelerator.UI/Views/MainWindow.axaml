@@ -54,7 +54,7 @@
                                    FontSize="14" 
                                    FontWeight="Bold"
                                    HorizontalAlignment="Center"/>
-                        <TextBlock Text="v1.2.0" 
+                        <TextBlock Text="v1.3.0" 
                                    FontSize="10" 
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    HorizontalAlignment="Center"/>

@@ -13,6 +13,7 @@ public class HostsSource
     public bool IsHealthy { get; set; } = true;
     public long LastResponseTimeMs { get; set; }
     public DateTime? LastCheckTime { get; set; }
+    public bool IsDnsProbe { get; set; } = false; // 是否为DNS探测数据源
 }
 
 public class GithubHostsService
@@ -65,6 +66,14 @@ public class GithubHostsService
             Name = "ittuann",
             Description = "ittuann提供的GitHub IP Hosts，自动更新",
             Priority = 6
+        },
+        new HostsSource
+        {
+            Url = "dns:probe",
+            Name = "多源DNS探测",
+            Description = "通过LocalDNS/Google DoH/Cloudflare DoH/AliDNS多源查询获取GitHub可用IP",
+            Priority = 0,
+            IsDnsProbe = true
         }
     };
 
@@ -75,7 +84,7 @@ public class GithubHostsService
     public async Task<HostsSource[]> CheckSourcesHealthAsync()
     {
         var results = new HostsSource[HostsSources.Length];
-        
+
         var tasks = HostsSources.Select(async (source, index) =>
         {
             var info = new HostsSource
@@ -83,18 +92,34 @@ public class GithubHostsService
                 Url = source.Url,
                 Name = source.Name,
                 Description = source.Description,
-                Priority = source.Priority
+                Priority = source.Priority,
+                IsDnsProbe = source.IsDnsProbe
             };
 
             try
             {
-                var sw = Stopwatch.StartNew();
-                using var response = await HttpClient.GetAsync(source.Url, HttpCompletionOption.ResponseHeadersRead);
-                sw.Stop();
+                if (source.IsDnsProbe)
+                {
+                    // DNS 探测源快速检测
+                    var sw = Stopwatch.StartNew();
+                    var chinazService = ChinazDnsService.Instance;
+                    var ips = await chinazService.GetAvailableIpsAsync("github.com");
+                    sw.Stop();
 
-                info.IsHealthy = response.IsSuccessStatusCode;
-                info.LastResponseTimeMs = sw.ElapsedMilliseconds;
-                info.LastCheckTime = DateTime.Now;
+                    info.IsHealthy = ips.Any();
+                    info.LastResponseTimeMs = sw.ElapsedMilliseconds;
+                    info.LastCheckTime = DateTime.Now;
+                }
+                else
+                {
+                    var sw = Stopwatch.StartNew();
+                    using var response = await HttpClient.GetAsync(source.Url, HttpCompletionOption.ResponseHeadersRead);
+                    sw.Stop();
+
+                    info.IsHealthy = response.IsSuccessStatusCode;
+                    info.LastResponseTimeMs = sw.ElapsedMilliseconds;
+                    info.LastCheckTime = DateTime.Now;
+                }
             }
             catch
             {
@@ -196,6 +221,12 @@ public class GithubHostsService
 
     private async Task<string?> TryFetchFromSourceAsync(HostsSource source)
     {
+        // 处理 DNS 探测数据源
+        if (source.IsDnsProbe)
+        {
+            return await TryFetchFromDnsProbeAsync(source);
+        }
+
         try
         {
             var sw = Stopwatch.StartNew();
@@ -221,6 +252,39 @@ public class GithubHostsService
             source.IsHealthy = false;
             source.LastResponseTimeMs = -1;
             source.LastCheckTime = DateTime.Now;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 通过站长之家 DNS 探测获取 hosts 数据
+    /// </summary>
+    private async Task<string?> TryFetchFromDnsProbeAsync(HostsSource source)
+    {
+        try
+        {
+            var sw = Stopwatch.StartNew();
+            var chinazService = ChinazDnsService.Instance;
+            var content = await chinazService.GenerateHostsContentAsync();
+            sw.Stop();
+
+            source.LastResponseTimeMs = sw.ElapsedMilliseconds;
+            source.LastCheckTime = DateTime.Now;
+
+            if (!string.IsNullOrEmpty(content) && ContainsGithubHosts(content))
+            {
+                source.IsHealthy = true;
+                return content;
+            }
+
+            source.IsHealthy = false;
+        }
+        catch (Exception ex)
+        {
+            source.IsHealthy = false;
+            source.LastResponseTimeMs = -1;
+            source.LastCheckTime = DateTime.Now;
+            OnLog?.Invoke($"⚠ DNS探测失败: {ex.Message}");
         }
         return null;
     }

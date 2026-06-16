@@ -75,7 +75,8 @@ public class SmartSourceSelector : ISmartSourceSelector
             Priority = source.Priority,
             IsHealthy = source.IsHealthy,
             LastResponseTimeMs = source.LastResponseTimeMs,
-            LastCheckTime = source.LastCheckTime
+            LastCheckTime = source.LastCheckTime,
+            IsDnsProbe = source.IsDnsProbe
         };
     }
     

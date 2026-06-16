@@ -1,0 +1,47 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:GithubAccelerator.UI.Views"
+        mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="500"
+        x:Class="GithubAccelerator.UI.Views.SourcePreviewWindow"
+        x:DataType="local:SourcePreviewModel"
+        Title="{Binding Title}"
+        Width="700" Height="500"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+        <!-- 标题 -->
+        <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,12">
+            <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding Subtitle}" FontSize="12"
+                       Foreground="{DynamicResource SecondaryTextBrush}"/>
+        </StackPanel>
+
+        <!-- 内容 -->
+        <Border Grid.Row="1" CornerRadius="8"
+                Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                BorderThickness="1"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                <TextBlock Text="{Binding Content}"
+                           FontFamily="Consolas, Courier New, monospace"
+                           FontSize="12"
+                           Padding="16"
+                           TextWrapping="NoWrap"
+                           Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+            </ScrollViewer>
+        </Border>
+
+        <!-- 底部状态和关闭 -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="12" Margin="0,12,0,0"
+                    HorizontalAlignment="Right">
+            <TextBlock Text="{Binding StatusText}" FontSize="12"
+                       Foreground="{DynamicResource SecondaryTextBrush}"
+                       VerticalAlignment="Center"/>
+            <Button Content="关闭" Click="CloseButton_Click"
+                    Padding="20,8" FontSize="13"/>
+        </StackPanel>
+    </Grid>
+</Window>

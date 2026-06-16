@@ -22,6 +22,9 @@ namespace GithubAccelerator.UI.ViewModels;
 
 public partial class SourceStatusViewModel : ObservableObject
 {
+    private readonly string _sourceUrl = string.Empty;
+    private static readonly HttpClient _httpClient = new();
+
     [ObservableProperty]
     private string _name = string.Empty;
 
@@ -42,6 +45,9 @@ public partial class SourceStatusViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isSelected;
+
+    [ObservableProperty]
+    private bool _isDnsProbe;
 
     public event Action<SourceStatusViewModel>? OnApplyRequested;
 
@@ -75,6 +81,54 @@ public partial class SourceStatusViewModel : ObservableObject
         OnApplyRequested?.Invoke(this);
     }
 
+    [RelayCommand]
+    private async Task PreviewHosts()
+    {
+        var topLevel = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime lifetime
+            ? lifetime.MainWindow
+            : null;
+        if (topLevel == null) return;
+
+        if (IsDnsProbe)
+        {
+            // DNS 探测源：优先使用缓存，秒开预览
+            var cached = ChinazDnsService.CachedContent;
+            if (cached != null)
+            {
+                await SourcePreviewWindow.ShowAsync(
+                    topLevel,
+                    $"📄 预览 - {Name}",
+                    $"多源 DNS 探测生成的 Hosts 数据（缓存于 {ChinazDnsService.CacheAgeDescription}）",
+                    cached);
+                return;
+            }
+
+            // 无缓存时才显示加载中
+            await SourcePreviewWindow.ShowLoadingAsync(
+                topLevel,
+                $"📄 预览 - {Name}",
+                "正在通过多源 DNS 查询 GitHub IP...",
+                async () =>
+                {
+                    var chinaz = ChinazDnsService.Instance;
+                    return await chinaz.GenerateHostsContentAsync();
+                });
+        }
+        else
+        {
+            // 普通远程源：直接加载
+            await SourcePreviewWindow.ShowLoadingAsync(
+                topLevel,
+                $"📄 预览 - {Name}",
+                $"远程数据源 Hosts 内容",
+                async () =>
+                {
+                    var response = await _httpClient.GetStringAsync(Url);
+                    return response;
+                });
+        }
+    }
+
     public void UpdateFromMetrics(SourcePerformanceMetrics metrics)
     {
         Name = metrics.Name;
@@ -83,6 +137,7 @@ public partial class SourceStatusViewModel : ObservableObject
         Score = metrics.OverallScore;
         IsHealthy = metrics.SuccessRate > 0.5;
         LastTestTime = metrics.LastTestTime;
+        IsDnsProbe = metrics.IsDnsProbe;
         OnPropertyChanged(nameof(ResponseTimeText));
         OnPropertyChanged(nameof(ScoreText));
         OnPropertyChanged(nameof(LastTestTimeText));
@@ -633,9 +688,28 @@ public partial class MainWindowViewModel : ObservableObject
         try
         {
             StatusMessage = $"正在从 {source.Name} 获取 Hosts...";
-            
-            var httpClient = new HttpClient();
-            var hostsContent = await httpClient.GetStringAsync(source.Url);
+
+            string hostsContent;
+
+            // DNS 探测源走特殊路径
+            if (source.Url.StartsWith("dns:") || source.Url == "chinaz:dns")
+            {
+                StatusMessage = "正在通过多源 DNS 查询 GitHub IP...";
+                var chinazService = ChinazDnsService.Instance;
+                hostsContent = await chinazService.GenerateHostsContentAsync();
+            }
+            else
+            {
+                var httpClient = new HttpClient();
+                hostsContent = await httpClient.GetStringAsync(source.Url);
+            }
+
+            if (string.IsNullOrEmpty(hostsContent))
+            {
+                StatusMessage = $"获取 Hosts 内容为空";
+                _notificationService.Warning("Hosts 应用", $"{source.Name} 返回的内容为空");
+                return;
+            }
             
             var success = await _hostsFileService.ApplyGithubHostsAsync(hostsContent);
             
@@ -845,11 +919,31 @@ public partial class MainWindowViewModel : ObservableObject
     private async Task ApplyHostsFromSource(string sourceName, string sourceUrl)
     {
         StatusMessage = $"正在从 {sourceName} 获取 Hosts...";
-        
+
         try
         {
-            var httpClient = new HttpClient();
-            var hostsContent = await httpClient.GetStringAsync(sourceUrl);
+            string hostsContent;
+
+            // DNS 探测源走特殊路径：通过多源 DNS 查询生成 hosts
+            if (sourceUrl.StartsWith("dns:") || sourceUrl == "chinaz:dns")
+            {
+                StatusMessage = $"正在通过多源 DNS 查询 GitHub IP...";
+                var chinazService = ChinazDnsService.Instance;
+                hostsContent = await chinazService.GenerateHostsContentAsync();
+            }
+            else
+            {
+                // 普通 HTTP 数据源
+                var httpClient = new HttpClient();
+                hostsContent = await httpClient.GetStringAsync(sourceUrl);
+            }
+
+            if (string.IsNullOrEmpty(hostsContent))
+            {
+                StatusMessage = $"获取 Hosts 内容为空";
+                _notificationService.Warning("Hosts 应用", $"{sourceName} 返回的内容为空");
+                return;
+            }
             
             var success = await _hostsFileService.ApplyGithubHostsAsync(hostsContent);
             
@@ -920,10 +1014,25 @@ public partial class MainWindowViewModel : ObservableObject
                 StatusMessage = $"正在从 {source.Name} 获取 Hosts...";
                 try
                 {
-                    var content = await httpClient.GetStringAsync(source.Url);
-                    allHostsContent.AppendLine($"# Source: {source.Name}");
-                    allHostsContent.AppendLine(content);
-                    allHostsContent.AppendLine();
+                    string content;
+
+                    // DNS 探测源走特殊路径
+                    if (source.Url.StartsWith("dns:") || source.Url == "chinaz:dns")
+                    {
+                        var chinazService = ChinazDnsService.Instance;
+                        content = await chinazService.GenerateHostsContentAsync();
+                    }
+                    else
+                    {
+                        content = await httpClient.GetStringAsync(source.Url);
+                    }
+
+                    if (!string.IsNullOrEmpty(content))
+                    {
+                        allHostsContent.AppendLine($"# Source: {source.Name}");
+                        allHostsContent.AppendLine(content);
+                        allHostsContent.AppendLine();
+                    }
                 }
                 catch (Exception ex)
                 {
