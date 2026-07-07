@@ -1,0 +1,356 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GithubAccelerator.UI.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700"
+             x:Class="GithubAccelerator.UI.Views.DownloadAcceleratorView"
+             x:DataType="vm:DownloadAcceleratorViewModel">
+
+    <Design.DataContext>
+        <vm:DownloadAcceleratorViewModel/>
+    </Design.DataContext>
+
+    <ScrollViewer Padding="24" Background="{DynamicResource BackgroundColor}" HorizontalAlignment="Stretch">
+        <StackPanel Spacing="20" Margin="0,0,0,80">
+
+            <!-- 标题区域 -->
+            <Border Padding="24" CornerRadius="16"
+                    Background="{DynamicResource PrimaryColor}"
+                    BoxShadow="0 4 16 0 #30000000">
+                <Grid ColumnDefinitions="Auto,*">
+                    <Border Grid.Column="0" Width="56" Height="56" CornerRadius="28"
+                            Background="#20FFFFFF" Margin="0,0,20,0">
+                        <TextBlock Text="⚡" FontSize="28" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                        <TextBlock Text="GitHub 下载加速器" FontSize="22" FontWeight="Bold" Foreground="White"/>
+                        <TextBlock Text="将 GitHub 链接转换为可用的加速镜像链接，解决国内访问缓慢的问题"
+                                   FontSize="12" Foreground="#AAFFFFFF" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 输入区域 -->
+            <Border Padding="24" CornerRadius="12"
+                    Background="{DynamicResource ControlFillColorDefaultBrush}"
+                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="1">
+                <StackPanel Spacing="16">
+                    <TextBlock Text="输入 GitHub 链接" FontSize="15" FontWeight="SemiBold"/>
+
+                    <!-- URL 输入 -->
+                    <DockPanel>
+                        <TextBox DockPanel.Dock="Right" IsReadOnly="True"
+                                 Text="{Binding InputUrl}"
+                                 PlaceholderText="粘贴 GitHub 链接到这里..."
+                                 Padding="14,12" FontSize="13"
+                                 AcceptsReturn="False"/>
+
+                        <Button DockPanel.Dock="Right"
+                                Content="📋 粘贴"
+                                Command="{Binding PasteFromClipboardCommand}"
+                                Padding="14,10" FontSize="12"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Stretch"/>
+                    </DockPanel>
+
+                    <!-- 支持的格式提示 -->
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Border Padding="8,4" CornerRadius="6" Background="#E3F2FD">
+                            <TextBlock Text="📄 Raw 文件" FontSize="11" Foreground="#1976D2"/>
+                        </Border>
+                        <Border Padding="8,4" CornerRadius="6" Background="#E8F5E9">
+                            <TextBlock Text="📦 Release/ZIP" FontSize="11" Foreground="#388E3C"/>
+                        </Border>
+                        <Border Padding="8,4" CornerRadius="6" Background="#FFF3E0">
+                            <TextBlock Text="🔗 仓库页面" FontSize="11" Foreground="#F57C00"/>
+                        </Border>
+                        <Border Padding="8,4" CornerRadius="6" Background="#FCE4EC">
+                            <TextBlock Text="🔄 Git Clone" FontSize="11" Foreground="#C62828"/>
+                        </Border>
+                        <Border Padding="8,4" CornerRadius="6" Background="#F3E5F5">
+                            <TextBlock Text="🚀 jsDelivr CDN" FontSize="11" Foreground="#7B1FA2"/>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- 操作按钮 -->
+                    <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
+                        <Button Content="🧹 清空"
+                                Command="{Binding ClearInputCommand}"
+                                Padding="14,8" FontSize="12"/>
+                        <Button Content="⚡ 生成加速链接"
+                                Command="{Binding ConvertUrlCommand}"
+                                Padding="20,10" FontSize="13"
+                                IsEnabled="{Binding !IsBusy}"
+                                Classes="Primary"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- 加载状态 -->
+            <Border IsVisible="{Binding IsBusy}" Padding="40" CornerRadius="12"
+                    Background="{DynamicResource ControlFillColorDefaultBrush}">
+                <StackPanel HorizontalAlignment="Center" Spacing="16">
+                    <ProgressBar IsIndeterminate="True" Width="200" Height="4"/>
+                    <TextBlock Text="正在解析链接..." FontSize="13" HorizontalAlignment="Center"
+                               Classes="SecondaryText"/>
+                </StackPanel>
+            </Border>
+
+            <!-- 状态消息 -->
+            <Border IsVisible="{Binding StatusMessage, Converter={StaticResource StringNotEmptyConverter}}"
+                    Padding="16" CornerRadius="8"
+                    Background="{DynamicResource InfoBackground}">
+                <TextBlock Text="{Binding StatusMessage}" FontSize="13" TextWrapping="Wrap"/>
+            </Border>
+
+            <!-- 结果区域 -->
+            <Border IsVisible="{Binding HasResults}"
+                    Padding="24" CornerRadius="12"
+                    Background="{DynamicResource ControlFillColorDefaultBrush}"
+                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="1">
+                <StackPanel Spacing="20">
+
+                    <!-- 原始链接信息 -->
+                    <Grid ColumnDefinitions="Auto,*">
+                        <TextBlock Grid.Column="0" Text="原始链接：" FontSize="13" FontWeight="SemiBold"
+                                   VerticalAlignment="Top" Margin="0,0,8,0"/>
+                        <Border Grid.Column="1" Padding="12" CornerRadius="8"
+                                Background="{DynamicResource ControlStrongFillDefaultBrush}">
+                            <TextBlock Text="{Binding Result.OriginalUrl}" FontSize="12"
+                                       TextWrapping="Wrap" Foreground="#666666"/>
+                        </Border>
+                    </Grid>
+
+                    <!-- URL 类型标签 -->
+                    <Border Padding="12,8" CornerRadius="8"
+                            HorizontalAlignment="Left"
+                            Background="{DynamicResource PrimaryColor}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="检测类型：" FontSize="12" Foreground="#AAFFFFFF"/>
+                            <TextBlock Text="{Binding Result.UrlTypeText}" FontSize="13"
+                                       FontWeight="SemiBold" Foreground="White"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 加速链接列表 -->
+                    <StackPanel IsVisible="{Binding Result.HasMirrorUrls}" Spacing="12">
+                        <TextBlock Text="🚀 可用加速链接" FontSize="15" FontWeight="SemiBold"/>
+
+                        <ItemsControl ItemsSource="{Binding MirrorUrlItems}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ConvertedUrlItemViewModel">
+                                    <Border Padding="16" Margin="0,0,0,8" CornerRadius="10"
+                                            Background="{DynamicResource CardBackground}"
+                                            BorderBrush="{DynamicResource AccentColor}"
+                                            BorderThickness="1,1,1,3">
+                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+                                            <!-- 镜像站图标和名称 -->
+                                            <StackPanel Grid.Column="0" Margin="0,0,16,0" MinWidth="120">
+                                                <TextBlock Text="{Binding SiteName}" FontSize="14"
+                                                           FontWeight="Medium"/>
+                                                <TextBlock Text="{Binding Description}" FontSize="11"
+                                                           Classes="SecondaryText"/>
+                                            </StackPanel>
+
+                                            <!-- 加速链接 -->
+                                            <Border Grid.Column="1" Padding="10,8" CornerRadius="6"
+                                                    Background="{DynamicResource ControlStrongFillDefaultBrush}"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Url}" FontSize="12"
+                                                           TextWrapping="NoWrap"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </Border>
+
+                                            <!-- 操作按钮 -->
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
+                                                        Margin="12,0,0,0" VerticalAlignment="Center">
+                                                <Button Content="📋"
+                                                        Command="{Binding CopyCommand}"
+                                                        Width="36" Height="36"
+                                                        ToolTip.Tip="复制链接"
+                                                        CornerRadius="18"/>
+                                                <Button Content="🌐"
+                                                        Command="{Binding OpenBrowserCommand}"
+                                                        Width="36" Height="36"
+                                                        ToolTip.Tip="在浏览器中打开"
+                                                        CornerRadius="18"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- jsDelivr 链接（如果有） -->
+                    <Border IsVisible="{Binding Result.HasJsDelivrUrl}"
+                            Padding="16" CornerRadius="10"
+                            Background="#F3E5F5"
+                            BorderBrush="#9C27B0"
+                            BorderThickness="1,1,1,3">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                            <StackPanel Grid.Column="0" Margin="0,0,16,0" MinWidth="140">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="🚀" FontSize="16"/>
+                                    <TextBlock Text="jsDelivr CDN" FontSize="14" FontWeight="Medium"/>
+                                </StackPanel>
+                                <TextBlock Text="全球 CDN 加速 | 推荐用于静态资源" FontSize="11"
+                                           Classes="SecondaryText"/>
+                            </StackPanel>
+
+                            <Border Grid.Column="1" Padding="10,8" CornerRadius="6"
+                                    Background="White"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Result.JsDelivrUrl}" FontSize="12"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </Border>
+
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
+                                        Margin="12,0,0,0" VerticalAlignment="Center">
+                                <Button Content="📋"
+                                        Command="{Binding CopyJsDelivrCommand}"
+                                        Width="36" Height="36"
+                                        ToolTip.Tip="复制 jsDelivr 链接"
+                                        CornerRadius="18"
+                                        Background="#9C27B0"
+                                        Foreground="White"/>
+                                <Button Content="🌐"
+                                        Command="{Binding OpenJsDelivrBrowserCommand}"
+                                        Width="36" Height="36"
+                                        ToolTip.Tip="在浏览器中打开"
+                                        CornerRadius="18"
+                                        Background="#7B1FA2"
+                                        Foreground="White"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Git Clone 命令（如果有） -->
+                    <StackPanel IsVisible="{Binding Result.HasGitCloneCommands}" Spacing="12">
+                        <TextBlock Text="🔧 Git Clone 加速命令" FontSize="15" FontWeight="SemiBold"/>
+
+                        <ItemsControl ItemsSource="{Binding GitCloneCommandItems}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:GitCloneCommandViewModel">
+                                    <Border Padding="16" Margin="0,0,0,8" CornerRadius="10"
+                                            Background="#E8F5E9"
+                                            BorderBrush="#4CAF50"
+                                            BorderThickness="1,1,1,3">
+                                        <Grid ColumnDefinitions="Auto,*,Auto">
+                                            <StackPanel Grid.Column="0" Margin="0,0,16,0" MinWidth="100">
+                                                <TextBlock Text="{Binding MirrorName}" FontSize="13"
+                                                           FontWeight="Medium" Foreground="#2E7D32"/>
+                                                <TextBlock Text="{Binding Description}" FontSize="11"
+                                                           Foreground="#66BB6A"/>
+                                            </StackPanel>
+
+                                            <Border Grid.Column="1" Padding="10,8" CornerRadius="6"
+                                                    Background="White"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Command}" FontSize="12"
+                                                           FontFamily="Consolas"
+                                                           TextWrapping="NoWrap"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </Border>
+
+                                            <Button Grid.Column="2" Content="📋"
+                                                    Command="{Binding CopyCommand}"
+                                                    Width="36" Height="36"
+                                                    Margin="12,0,0,0"
+                                                    ToolTip.Tip="复制命令"
+                                                    CornerRadius="18"
+                                                    Background="#4CAF50"
+                                                    Foreground="White"
+                                                    VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- 一键复制所有 -->
+                    <Border Padding="16" CornerRadius="10"
+                            Background="{DynamicResource AccentColorLight}"
+                            HorizontalAlignment="Stretch">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="💡 提示：点击下方按钮可一键复制所有加速链接" FontSize="12"
+                                           Foreground="#666666"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="📋 复制全部链接"
+                                    Command="{Binding CopyAllCommand}"
+                                    Padding="16,8" FontSize="12"
+                                    Classes="Primary"/>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <!-- 使用说明 -->
+            <Border Padding="24" CornerRadius="12"
+                    Background="{DynamicResource ControlFillColorDefaultBrush}"
+                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="1">
+                <StackPanel Spacing="16">
+                    <TextBlock Text="📖 使用说明" FontSize="15" FontWeight="SemiBold"/>
+
+                    <StackPanel Spacing="12">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <TextBlock Grid.Column="0" Text="1️⃣" FontSize="16" Margin="0,0,12,0"
+                                       VerticalAlignment="Top"/>
+                            <StackPanel Grid.Column="1" Spacing="4">
+                                <TextBlock Text="粘贴 GitHub 链接" FontSize="13" FontWeight="Medium"/>
+                                <TextBlock Text="支持 raw 文件、release 下载、仓库主页、git clone 命令等多种格式"
+                                           FontSize="12" Classes="SecondaryText" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="Auto,*">
+                            <TextBlock Grid.Column="0" Text="2️⃣" FontSize="16" Margin="0,0,12,0"
+                                       VerticalAlignment="Top"/>
+                            <StackPanel Grid.Column="1" Spacing="4">
+                                <TextBlock Text="点击生成加速链接" FontSize="13" FontWeight="Medium"/>
+                                <TextBlock Text="系统会自动识别链接类型并生成对应的加速镜像地址"
+                                           FontSize="12" Classes="SecondaryText" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="Auto,*">
+                            <TextBlock Grid.Column="0" Text="3️⃣" FontSize="16" Margin="0,0,12,0"
+                                       VerticalAlignment="Top"/>
+                            <StackPanel Grid.Column="1" Spacing="4">
+                                <TextBlock Text="复制或打开加速链接" FontSize="13" FontWeight="Medium"/>
+                                <TextBlock Text="使用加速后的链接进行下载或访问，速度会显著提升"
+                                           FontSize="12" Classes="SecondaryText" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- 可用镜像站状态 -->
+                    <Separator Margin="0,8,0,8"/>
+                    <TextBlock Text="当前可用镜像站" FontSize="13" FontWeight="Medium"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Border Padding="10,6" CornerRadius="6" Background="#E8F5E9" BorderBrush="#4CAF50" BorderThickness="1">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Border Width="8" Height="8" CornerRadius="4" Background="#4CAF50" VerticalAlignment="Center"/>
+                                <TextBlock Text="ghfast.top - 全功能加速" FontSize="11" Foreground="#2E7D32"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Padding="10,6" CornerRadius="6" Background="#F3E5F5" BorderBrush="#9C27B0" BorderThickness="1">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Border Width="8" Height="8" CornerRadius="4" Background="#9C27B0" VerticalAlignment="Center"/>
+                                <TextBlock Text="jsDelivr CDN - 静态资源专用" FontSize="11" Foreground="#7B1FA2"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

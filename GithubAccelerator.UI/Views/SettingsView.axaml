@@ -11,8 +11,8 @@
     </UserControl.DataContext>
 
     <Grid RowDefinitions="*,Auto">
-        <ScrollViewer Grid.Row="0" Padding="24" Background="{DynamicResource BackgroundColor}">
-            <StackPanel Spacing="24" MaxWidth="600" Margin="0,0,0,24">
+        <ScrollViewer Grid.Row="0" Padding="24" Background="{DynamicResource BackgroundColor}" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="24" MaxWidth="600">
 
                 <!-- 监控设置 -->
                 <StackPanel Spacing="12">
@@ -30,6 +30,9 @@
                                                Minimum="30" Maximum="3600"
                                                Margin="0,8,0,0"
                                                HorizontalAlignment="Left" Width="200"/>
+                                <TextBlock Text="{Binding TestIntervalError}" 
+                                           FontSize="12" Foreground="Red" 
+                                           Margin="0,4,0,0" />
                             </StackPanel>
                         </StackPanel>
                     </Border>
@@ -170,6 +173,10 @@
         <Border Grid.Row="1" Padding="16" Background="{DynamicResource ControlFillColorDefaultBrush}"
                 BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="12">
+                <Button Content="📤 导出设置" Command="{Binding ExportSettingsCommand}"
+                        Padding="16,10" FontSize="14"/>
+                <Button Content="📥 导入设置" Command="{Binding ImportSettingsCommand}"
+                        Padding="16,10" FontSize="14"/>
                 <Button Content="💾 保存设置" Command="{Binding SaveSettingsCommand}"
                         Padding="24,10" FontSize="14"/>
             </StackPanel>

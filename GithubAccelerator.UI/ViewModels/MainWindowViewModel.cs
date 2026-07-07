@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Security.Principal;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia.Controls;
@@ -173,6 +174,9 @@ public partial class MainWindowViewModel : ObservableObject
     private bool _isMonitoring;
 
     [ObservableProperty]
+    private bool _isAdmin;
+
+    [ObservableProperty]
     private string _bestSourceName = string.Empty;
 
     [ObservableProperty]
@@ -227,6 +231,12 @@ public partial class MainWindowViewModel : ObservableObject
     private bool _isGitHubLatencyVisible;
 
     [ObservableProperty]
+    private DownloadAcceleratorViewModel? _downloadAccelerator;
+
+    [ObservableProperty]
+    private bool _isDownloadAcceleratorVisible;
+
+    [ObservableProperty]
     private string _hostsContent = string.Empty;
 
     [ObservableProperty]
@@ -246,6 +256,9 @@ public partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isGitHubLatencySelected;
+
+    [ObservableProperty]
+    private bool _isDownloadAcceleratorSelected;
 
     [ObservableProperty]
     private bool _isHostsContentSelected;
@@ -291,6 +304,21 @@ public partial class MainWindowViewModel : ObservableObject
 
     public bool HasFilteredSources => FilteredSources.Count > 0;
 
+    private void CheckAdminPrivileges()
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        var principal = new WindowsPrincipal(identity);
+        IsAdmin = principal.IsInRole(WindowsBuiltInRole.Administrator);
+        if (!IsAdmin)
+        {
+            Log.Warning("应用程序未以管理员身份运行，部分功能可能受限");
+        }
+        else
+        {
+            Log.Information("应用程序以管理员身份运行");
+        }
+    }
+
     private readonly OperationHistoryService _historyService = OperationHistoryService.Instance;
     private readonly NotificationService _notificationService = NotificationService.Instance;
 
@@ -300,7 +328,10 @@ public partial class MainWindowViewModel : ObservableObject
     {
         Log.Information("MainWindowViewModel 初始化开始");
         
-        _settings = SettingsViewModel.Create();
+        CheckAdminPrivileges();
+        
+        var startupManager = PlatformServiceFactory.CreateStartupManager();
+        _settings = SettingsViewModel.Create(startupManager);
         _statsService = SourceStatisticsService.Instance;
 
         var httpClient = new HttpClient();
@@ -576,6 +607,30 @@ public partial class MainWindowViewModel : ObservableObject
         IsHostsGroupVisible = false;
         IsPerformanceChartVisible = false;
         IsGitHubLatencyVisible = true;
+        IsDownloadAcceleratorVisible = false;
+    }
+
+    [RelayCommand]
+    private void ShowDownloadAccelerator()
+    {
+        if (DownloadAccelerator == null)
+        {
+            DownloadAccelerator = new DownloadAcceleratorViewModel();
+        }
+
+        var downloadAcceleratorView = new GithubAccelerator.UI.Views.DownloadAcceleratorView();
+        downloadAcceleratorView.DataContext = DownloadAccelerator;
+        CurrentView = downloadAcceleratorView;
+        CurrentPageTitle = "下载加速器";
+        ResetNavigationSelection();
+        IsDownloadAcceleratorSelected = true;
+        IsDashboardVisible = false;
+        IsSettingsVisible = false;
+        IsLogViewerVisible = false;
+        IsHostsGroupVisible = false;
+        IsPerformanceChartVisible = false;
+        IsGitHubLatencyVisible = false;
+        IsDownloadAcceleratorVisible = true;
     }
 
     private void ResetNavigationSelection()
@@ -588,6 +643,7 @@ public partial class MainWindowViewModel : ObservableObject
         IsBackupSelected = false;
         IsSettingsSelected = false;
         IsLogViewerSelected = false;
+        IsDownloadAcceleratorSelected = false;
     }
 
     [RelayCommand]

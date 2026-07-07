@@ -127,8 +127,9 @@ public class OperationHistoryService
             var json = JsonSerializer.Serialize(_records, _jsonOptions);
             File.WriteAllText(_historyFilePath, json);
         }
-        catch
+        catch (Exception ex)
         {
+            Serilog.Log.Warning(ex, "保存操作历史失败");
         }
     }
 
@@ -145,8 +146,9 @@ public class OperationHistoryService
                 _records.AddRange(records);
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Serilog.Log.Warning(ex, "加载操作历史失败");
         }
     }
 }
