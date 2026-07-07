@@ -187,8 +187,9 @@ namespace GithubAccelerator.UI.Services
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Serilog.Log.Warning(ex, "加载数据源统计失败");
                 _statistics = new Dictionary<string, SourceStatistics>();
             }
         }
@@ -200,8 +201,9 @@ namespace GithubAccelerator.UI.Services
                 var json = JsonSerializer.Serialize(_statistics, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(_statsFilePath, json);
             }
-            catch
+            catch (Exception ex)
             {
+                Serilog.Log.Warning(ex, "保存数据源统计失败");
             }
         }
     }

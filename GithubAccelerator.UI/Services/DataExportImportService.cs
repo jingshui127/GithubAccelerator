@@ -20,11 +20,15 @@ public class ExportData
 public class AppSettingsData
 {
     public bool IsDarkMode { get; set; }
-    public bool AutoStartMonitoring { get; set; }
-    public int MonitoringIntervalSeconds { get; set; } = 30;
-    public bool MinimizeToTray { get; set; }
-    public bool AutoUpdateHosts { get; set; }
-    public int AutoUpdateIntervalMinutes { get; set; } = 120;
+    public int TestInterval { get; set; } = 600;
+    public bool AutoStart { get; set; }
+    public bool AutoApplyHosts { get; set; }
+    public bool AutoSwitchBestSource { get; set; }
+    public bool MinimizeToTray { get; set; } = true;
+    public bool StartMinimized { get; set; }
+    public bool AutoFlushDns { get; set; } = true;
+    public bool ShowQuickGuideOnStartup { get; set; } = true;
+    public string LogLevel { get; set; } = "Information";
 }
 
 public class DataExportImportService
@@ -41,7 +45,7 @@ public class DataExportImportService
     public event Action<string>? OnExportProgress;
     public event Action<string>? OnImportProgress;
 
-    public async Task<bool> ExportAsync(string filePath)
+    public async Task<bool> ExportAsync(string filePath, ViewModels.SettingsViewModel? settings = null)
     {
         try
         {
@@ -53,15 +57,19 @@ public class DataExportImportService
                 ExportTime = DateTime.Now,
                 Groups = new List<HostsGroup>(HostsGroupService.Instance.Groups),
                 OperationHistory = new List<OperationRecord>(OperationHistoryService.Instance.Records),
-                Settings = new AppSettingsData
+                Settings = settings != null ? new AppSettingsData
                 {
                     IsDarkMode = ThemeManager.IsDarkMode,
-                    AutoStartMonitoring = false,
-                    MonitoringIntervalSeconds = 30,
-                    MinimizeToTray = false,
-                    AutoUpdateHosts = false,
-                    AutoUpdateIntervalMinutes = 120
-                }
+                    TestInterval = settings.TestInterval,
+                    AutoStart = settings.AutoStart,
+                    AutoApplyHosts = settings.AutoApplyHosts,
+                    AutoSwitchBestSource = settings.AutoSwitchBestSource,
+                    MinimizeToTray = settings.MinimizeToTray,
+                    StartMinimized = settings.StartMinimized,
+                    AutoFlushDns = settings.AutoFlushDns,
+                    ShowQuickGuideOnStartup = settings.ShowQuickGuideOnStartup,
+                    LogLevel = settings.LogLevel
+                } : new AppSettingsData { IsDarkMode = ThemeManager.IsDarkMode }
             };
 
             OnExportProgress?.Invoke("正在序列化数据...");
@@ -165,7 +173,7 @@ public class DataExportImportService
         }
     }
 
-    public async Task<bool> ApplyImportedDataAsync(ExportData data)
+    public async Task<bool> ApplyImportedDataAsync(ExportData data, ViewModels.SettingsViewModel? settings = null)
     {
         try
         {
@@ -192,18 +200,31 @@ public class DataExportImportService
                 }
             }
 
-            if (data.Settings != null)
+            if (data.Settings != null && settings != null)
             {
                 if (data.Settings.IsDarkMode != ThemeManager.IsDarkMode)
                 {
                     ThemeManager.ToggleTheme();
                 }
+                
+                settings.TestInterval = data.Settings.TestInterval;
+                settings.AutoStart = data.Settings.AutoStart;
+                settings.AutoApplyHosts = data.Settings.AutoApplyHosts;
+                settings.AutoSwitchBestSource = data.Settings.AutoSwitchBestSource;
+                settings.MinimizeToTray = data.Settings.MinimizeToTray;
+                settings.StartMinimized = data.Settings.StartMinimized;
+                settings.AutoFlushDns = data.Settings.AutoFlushDns;
+                settings.ShowQuickGuideOnStartup = data.Settings.ShowQuickGuideOnStartup;
+                settings.LogLevel = data.Settings.LogLevel;
+                
+                settings.Save();
             }
 
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            Serilog.Log.Error(ex, "应用导入数据失败");
             return false;
         }
     }

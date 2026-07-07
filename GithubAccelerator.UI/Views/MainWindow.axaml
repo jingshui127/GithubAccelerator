@@ -25,15 +25,14 @@
         <KeyBinding Gesture="Ctrl+2" Command="{Binding ShowPerformanceChartCommand}"/>
         <KeyBinding Gesture="Ctrl+3" Command="{Binding ShowGitHubLatencyCommand}"/>
         <KeyBinding Gesture="Ctrl+4" Command="{Binding ShowSettingsCommand}"/>
+        <KeyBinding Gesture="Ctrl+5" Command="{Binding ShowDownloadAcceleratorCommand}"/>
     </Window.KeyBindings>
 
     <Design.DataContext>
         <vm:MainWindowViewModel/>
     </Design.DataContext>
 
-    <Window.DataContext>
-        <vm:MainWindowViewModel/>
-    </Window.DataContext>
+    
 
     <Grid ColumnDefinitions="Auto,*">
         <!-- 侧边栏导航 -->
@@ -54,7 +53,7 @@
                                    FontSize="14" 
                                    FontWeight="Bold"
                                    HorizontalAlignment="Center"/>
-                        <TextBlock Text="v1.3.0" 
+                        <TextBlock Text="v1.4.0" 
                                    FontSize="10" 
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    HorizontalAlignment="Center"/>
@@ -107,6 +106,19 @@
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <TextBlock Text="🌐" FontSize="16"/>
                                 <TextBlock Text="GitHub延迟" FontSize="13"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Command="{Binding ShowDownloadAcceleratorCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10"
+                                CornerRadius="8"
+                                BorderThickness="0"
+                                Classes="NavButton">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="⚡" FontSize="16"/>
+                                <TextBlock Text="下载加速器" FontSize="13"/>
                             </StackPanel>
                         </Button>
 
@@ -163,19 +175,6 @@
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    Margin="12,16,0,4"/>
 
-                        <Button Command="{Binding ShowQuickGuideCommand}"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left"
-                                Padding="12,10"
-                                CornerRadius="8"
-                                BorderThickness="0"
-                                Classes="NavButton">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock Text="❓" FontSize="16"/>
-                                <TextBlock Text="使用指南" FontSize="13"/>
-                            </StackPanel>
-                        </Button>
-
                         <Button Command="{Binding ShowSettingsCommand}"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
@@ -186,6 +185,19 @@
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <TextBlock Text="⚙️" FontSize="16"/>
                                 <TextBlock Text="设置" FontSize="13"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Command="{Binding ShowQuickGuideCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10"
+                                CornerRadius="8"
+                                BorderThickness="0"
+                                Classes="NavButton">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="❓" FontSize="16"/>
+                                <TextBlock Text="使用指南" FontSize="13"/>
                             </StackPanel>
                         </Button>
 
@@ -210,16 +222,29 @@
                         BorderThickness="0,1,0,0"
                         BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
                     <StackPanel Spacing="8">
-                        <!-- 监控状态 -->
-                        <Border Padding="8,6" CornerRadius="8"
-                                Background="{Binding IsMonitoring, Converter={StaticResource BoolToColorConverter}, ConverterParameter='#107C10|#6B6B6B'}">
-                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                                <TextBlock Text="{Binding IsMonitoring, Converter={StaticResource BoolToStringConverter}, ConverterParameter='●|○'}" 
-                                          FontSize="10" Foreground="White"/>
-                                <TextBlock Text="{Binding IsMonitoring, Converter={StaticResource BoolToStringConverter}, ConverterParameter='监控中|已停止'}" 
-                                          FontSize="11" Foreground="White"/>
-                            </StackPanel>
-                        </Border>
+                        <!-- 状态指示器 -->
+                        <Grid ColumnDefinitions="*,*">
+                            <!-- 监控状态 -->
+                            <Border Grid.Column="0" Padding="6,4" CornerRadius="6" Margin="0,0,4,0"
+                                    Background="{Binding IsMonitoring, Converter={StaticResource BoolToColorConverter}, ConverterParameter='#107C10|#6B6B6B'}">
+                                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                                    <TextBlock Text="{Binding IsMonitoring, Converter={StaticResource BoolToStringConverter}, ConverterParameter='●|○'}" 
+                                              FontSize="10" Foreground="White"/>
+                                    <TextBlock Text="{Binding IsMonitoring, Converter={StaticResource BoolToStringConverter}, ConverterParameter='监控中|已停止'}" 
+                                              FontSize="10" Foreground="White"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- 管理员状态 -->
+                            <Border Grid.Column="1" Padding="6,4" CornerRadius="6" Margin="4,0,0,0"
+                                    Background="{Binding IsAdmin, Converter={StaticResource BoolToColorConverter}, ConverterParameter='#107C10|#D13438'}">
+                                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                                    <TextBlock Text="🛡️" FontSize="10"/>
+                                    <TextBlock Text="{Binding IsAdmin, Converter={StaticResource BoolToStringConverter}, ConverterParameter='管理员|普通用户'}" 
+                                              FontSize="10" Foreground="White"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
 
                         <!-- 快捷操作 -->
                         <Grid ColumnDefinitions="*,*">
