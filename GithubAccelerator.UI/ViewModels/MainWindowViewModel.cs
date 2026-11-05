@@ -394,6 +394,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly AccelerationStateMachine _accelState = new();
     private CancellationTokenSource? _applyCts;
     private string? _applyIssue;
+    private ElevationResult? _lastElevationResult;
 
     /// <summary>进行中（可取消）：由状态机派生，避免"按钮灰着但后台在跑"。</summary>
     public bool IsApplyingHosts => _accelState.IsBusy;
@@ -592,8 +593,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         IsDarkMode = ThemeManager.IsDarkMode;
 
-        // 首次启动时自动显示快速指南
-        _ = ShowQuickGuideOnFirstLaunchAsync();
+        // 首次启动时显示单页引导（双击 + 一次点击即可用）
+        _ = ShowFirstRunGuideOnFirstLaunchAsync();
 
         // 启动时检查是否需要自动应用Hosts
         if (_settings.AutoApplyHosts)
@@ -924,53 +925,114 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         try
         {
-            var window = App.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
-                ? desktop.MainWindow
-                : null;
-
-            if (window == null) return;
-
-            var dontShowAgain = await QuickGuideWindow.ShowAsync(window);
-            if (dontShowAgain)
-            {
-                _settings.ShowQuickGuideOnStartup = false;
-                SaveSettings();
-            }
+            await ShowFirstRunGuideAsync();
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "显示快速指南失败");
+            Log.Error(ex, "显示使用指南失败");
         }
     }
 
     /// <summary>
-    /// 首次启动时自动显示快速指南（延迟3秒，等UI加载完成）
+    /// 首次启动时自动显示单页引导（延迟 3 秒，等 UI 加载完成）。
+    /// 只在从未完成过引导时出现；跳过也算完成，之后可从左侧「使用指南」重新进入。
     /// </summary>
-    private async Task ShowQuickGuideOnFirstLaunchAsync()
+    private async Task ShowFirstRunGuideOnFirstLaunchAsync()
     {
+        if (_settings.HasCompletedFirstRunGuide) return;
         if (!_settings.ShowQuickGuideOnStartup) return;
 
         await Task.Delay(3000); // 等 UI 加载完成
 
         try
         {
-            var window = App.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
-                ? desktop.MainWindow
-                : null;
-
-            if (window == null) return;
-
-            var dontShowAgain = await QuickGuideWindow.ShowAsync(window);
-            if (dontShowAgain)
-            {
-                _settings.ShowQuickGuideOnStartup = false;
-                SaveSettings();
-            }
+            await ShowFirstRunGuideAsync();
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "首次启动显示快速指南失败");
+            Log.Error(ex, "首次启动显示引导失败");
         }
+        finally
+        {
+            // 关闭后清理提权结果，避免影响后续判断
+            _lastElevationResult = null;
+        }
+    }
+
+    /// <summary>
+    /// 打开首启引导并记录"已完成"。Started/Skipped 才写入设置；失败则下次启动仍会显示。
+    /// </summary>
+    private async Task ShowFirstRunGuideAsync()
+    {
+        var window = App.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+            ? desktop.MainWindow
+            : null;
+
+        if (window == null) return;
+
+        var viewModel = new FirstRunGuideViewModel(
+            ProbeFirstRunNetworkAsync,
+            StartAccelerationFromGuideAsync,
+            SaveFirstRunGuideOptions);
+
+        // 打开即检测一次网络，用户不用再点第二次
+        _ = viewModel.CheckNetworkAsync();
+
+        var result = await FirstRunGuideWindow.ShowAsync(window, viewModel);
+        if (result is FirstRunGuideResult.Started or FirstRunGuideResult.Skipped)
+        {
+            _settings.HasCompletedFirstRunGuide = true;
+            SaveSettings();
+        }
+    }
+
+    /// <summary>首启网络检测：只做可读结论，不把状态码暴露给用户。</summary>
+    private async Task<FirstRunNetworkResult> ProbeFirstRunNetworkAsync()
+    {
+        try
+        {
+            var (latency, _, success) = await _connectionService.TestGitHubLatencyAsync();
+            return success
+                ? new FirstRunNetworkResult(true, latency)
+                : new FirstRunNetworkResult(false, 0);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "首启网络检测失败");
+            return new FirstRunNetworkResult(false, 0);
+        }
+    }
+
+    /// <summary>引导里点击"开始加速"：复用既有写入流程，把结果翻译成引导可展示的原因。</summary>
+    private async Task<FirstRunStartResult> StartAccelerationFromGuideAsync()
+    {
+        _lastElevationResult = null;
+        _applyIssue = null;
+
+        await ApplyHosts();
+
+        if (_lastElevationResult == ElevationResult.Started)
+            return new FirstRunStartResult(FirstRunStartKind.Success);
+        if (_lastElevationResult == ElevationResult.Cancelled)
+            return new FirstRunStartResult(FirstRunStartKind.ElevationDenied);
+        if (_lastElevationResult == ElevationResult.Failed)
+            return new FirstRunStartResult(FirstRunStartKind.WriteFailed, ElevationService.LastError);
+
+        if (IsHostsApplied) return new FirstRunStartResult(FirstRunStartKind.Success);
+        if (_applyIssue == "所有数据源均不可用")
+            return new FirstRunStartResult(FirstRunStartKind.MirrorUnavailable, _applyIssue);
+        if (!string.IsNullOrEmpty(_applyIssue))
+            return new FirstRunStartResult(FirstRunStartKind.WriteFailed, _applyIssue);
+
+        return new FirstRunStartResult(FirstRunStartKind.Incomplete, StatusMessage);
+    }
+
+    /// <summary>引导里的两个勾选项（默认都关闭）落到设置里，并立即生效。</summary>
+    private void SaveFirstRunGuideOptions(bool autoStart, bool diagnosticsEnabled)
+    {
+        _settings.AutoStart = autoStart;
+        _settings.DiagnosticsEnabled = diagnosticsEnabled;
+        SaveSettings();
     }
 
     private void SaveSettings()
@@ -1452,6 +1514,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         Log.Information("[Elevation] 按需提权，intent={Intent}", intent);
 
         var result = ElevationService.RelaunchElevated(intent);
+        _lastElevationResult = result;
         switch (result)
         {
             case ElevationResult.Started:
