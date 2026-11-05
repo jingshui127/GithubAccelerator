@@ -51,7 +51,7 @@ public sealed record GitLegacyCleanupResult(
 /// </summary>
 public sealed class GitUrlRewriteService
 {
-    /// <summary>推荐镜像（2026-11-05 实测 raw 内容与 git smart HTTP 均可用）。</summary>
+    /// <summary>默认镜像。可用性以 <see cref="MirrorHealthService"/> 的实测结果为准：2026-11-05 本机实测 release 仅有响应（未做完整性校验），raw/页面超时。</summary>
     public const string DefaultMirrorBaseUrl = "https://ghfast.top";
 
     public const string InsteadOfValue = "https://github.com/";

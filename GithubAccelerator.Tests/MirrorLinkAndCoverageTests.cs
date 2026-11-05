@@ -21,7 +21,7 @@ public class MirrorLinkAndCoverageTests
         Assert.True(result.IsUnsupported);
         Assert.False(result.HasResults);
         Assert.Contains("api.github.com", result.UnsupportedReason);
-        Assert.Contains("无法加速", result.UnsupportedReason);
+        Assert.Contains("直连可用", result.UnsupportedReason);
     }
 
     [Fact]
@@ -102,7 +102,27 @@ public class MirrorLinkAndCoverageTests
 
         Assert.False(plan.CanOpen);
         Assert.True(plan.OfferOriginalLink);
-        Assert.Contains("无法加速", plan.Message);
+        Assert.Contains("无需加速", plan.Message);
+    }
+
+    [Fact]
+    public void AvailableMirrors_DemotesGhproxyToLastWithTimeoutWarning()
+    {
+        var mirrors = MirrorUrlService.AvailableMirrors;
+
+        Assert.Equal("GHProxy", mirrors[^1].Name);
+        Assert.Contains("不建议使用", mirrors[^1].Description);
+        Assert.Contains("69.66s", mirrors[^1].Description);
+        Assert.Equal("ghproxy.net", MirrorUrlService.GitCloneMirrors[^1].Name);
+    }
+
+    [Fact]
+    public void GhfastDescription_DoesNotClaimFullVerification()
+    {
+        var ghfast = MirrorUrlService.AvailableMirrors.First(m => m.Name == "ghfast.top");
+
+        Assert.Contains("未做完整性", ghfast.Description);
+        Assert.DoesNotContain("实测可用", ghfast.Description);
     }
 
     [Fact]

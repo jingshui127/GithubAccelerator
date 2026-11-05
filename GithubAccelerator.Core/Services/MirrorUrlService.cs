@@ -13,10 +13,10 @@ public class MirrorUrlService
     /// </summary>
     public static readonly MirrorSite[] AvailableMirrors = new[]
     {
-        new MirrorSite("ghfast.top", "https://ghfast.top", "https://ghfast.top/{url}", "全功能加速（实测可用）"),
-        new MirrorSite("GHProxy", "https://ghproxy.net", "https://ghproxy.net/{url}", "全功能加速"),
-        new MirrorSite("gh.api.99988866.xyz", "https://gh.api.99988866.xyz", "https://gh.api.99988866.xyz/{url}", "国内高可用"),
+        new MirrorSite("ghfast.top", "https://ghfast.top", "https://ghfast.top/{url}", "release 仅验证 HTTP 状态与前 638KB，未做完整性与哈希校验"),
+        new MirrorSite("gh.api.99988866.xyz", "https://gh.api.99988866.xyz", "https://gh.api.99988866.xyz/{url}", "国内线路（可用性以健康检测为准）"),
         new MirrorSite("jsDelivr CDN", "https://cdn.jsdelivr.net", null, "静态资源专用（实测可用）"),
+        new MirrorSite("GHProxy", "https://ghproxy.net", "https://ghproxy.net/{url}", "严重超时（实测 69.66s），不建议使用"),
     };
 
     /// <summary>
@@ -25,7 +25,7 @@ public class MirrorUrlService
     public static readonly GitCloneMirror[] GitCloneMirrors = new[]
     {
         new GitCloneMirror("gitclone.com", "git clone https://gitclone.com/github.com/{path}.git", "推荐（实测可用）"),
-        new GitCloneMirror("ghproxy.net", "git clone https://ghproxy.net/https://github.com/{path}.git", "通过代理克隆"),
+        new GitCloneMirror("ghproxy.net", "git clone https://ghproxy.net/https://github.com/{path}.git", "严重超时（实测 69.66s），不建议使用"),
     };
 
     private readonly IMirrorHealthService _health;
@@ -106,8 +106,8 @@ public class MirrorUrlService
         if (host != null && UnsupportedHosts.Contains(host))
         {
             result.UnsupportedReason = host == "github.com/login"
-                ? "github.com/login 是需要登录的操作，镜像站无法替代登录，本工具无法加速。"
-                : $"{host} 不在本工具的镜像覆盖范围：镜像前缀只能改写 github.com / raw.githubusercontent.com / codeload.github.com 的下载路径，接口或包管理请求需要鉴权，无法加速。";
+                ? "github.com/login 需要登录，直接访问 GitHub 即可（直连可用，无需加速）；镜像不能代替登录。"
+                : $"{host} 直连可用，无需加速；镜像前缀只改写下载路径，不覆盖需要鉴权的接口请求。";
             result.UrlType = GithubUrlType.Unsupported;
             return result;
         }
@@ -310,7 +310,7 @@ public class MirrorResult
         GithubUrlType.Repository => "🔗 仓库页面",
         GithubUrlType.GitClone => "🔄 Git Clone 命令",
         GithubUrlType.JsDelivr => "🚀 jsDelivr CDN 链接",
-        GithubUrlType.Unsupported => "⛔ 本工具无法加速的域名",
+        GithubUrlType.Unsupported => "⛔ 直连可用，无需走镜像",
         _ => "❓ 未知类型"
     };
 
