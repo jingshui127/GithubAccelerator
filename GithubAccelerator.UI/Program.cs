@@ -1,5 +1,7 @@
 using Avalonia;
+using GithubAccelerator.UI.Services;
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace GithubAccelerator.UI;
@@ -16,6 +18,8 @@ sealed class Program
         // 注意：NewLife XTrace 初始化后也会自动捕获，这里只是启动早期兜底
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+
+        LaunchContext.Parse(args);
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }

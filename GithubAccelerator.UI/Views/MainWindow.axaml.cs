@@ -6,6 +6,7 @@ using GithubAccelerator.UI.Helpers;
 using GithubAccelerator.UI.ViewModels;
 using System;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace GithubAccelerator.UI.Views;
 
@@ -57,6 +58,17 @@ public partial class MainWindow : Window
             onShowWindow: ShowWindow,
             onExit: ExitApplication
         );
+    }
+
+    protected override void OnOpened(EventArgs e)
+    {
+        base.OnOpened(e);
+
+        // 提权重启后接续用户上次未完成的操作
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            _ = viewModel.RunPendingLaunchIntentAsync();
+        }
     }
 
     private void MainWindow_PropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)

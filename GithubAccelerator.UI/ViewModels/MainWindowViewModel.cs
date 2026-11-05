@@ -956,10 +956,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     // ===== CanExecute 约束：高代价命令在执行期间禁用，避免重复触发 =====
 
-    private bool CanApplyHosts() => !IsApplyingHosts && IsAdmin;
+    private bool CanApplyHosts() => !IsApplyingHosts;
     private bool CanRunSpeedTest() => !IsApplyingHosts;
     private bool CanRefreshSources() => !IsLoading;
-    private bool CanClearHosts() => IsHostsApplied && IsAdmin;
+    private bool CanClearHosts() => IsHostsApplied;
 
     partial void OnIsApplyingHostsChanged(bool value)
     {
@@ -980,6 +980,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanClearHosts))]
     private async Task ClearAppliedHosts()
     {
+        // 写系统 Hosts 需要管理员权限：按需提权，提权后由新实例接续本操作
+        if (!IsAdmin)
+        {
+            await RequestElevationAsync(LaunchIntent.ClearHosts);
+            return;
+        }
+
         try
         {
             var currentContent = await _hostsFileService.ReadHostsFileAsync();
@@ -1325,6 +1332,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanApplyHosts))]
     private async Task ApplyHosts()
     {
+        // 写系统 Hosts 需要管理员权限：按需提权，提权后由新实例接续本操作
+        if (!IsAdmin)
+        {
+            await RequestElevationAsync(LaunchIntent.ApplyHosts);
+            return;
+        }
+
         try
         {
             await ApplyHostsFromAllSources();
@@ -1334,6 +1348,79 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             StatusMessage = $"Hosts 应用失败：{ex.Message}";
             _historyService.Record(OperationType.HostsApplied, $"应用 Hosts 异常：{ex.Message}", false, ex.StackTrace);
             _notificationService.Error("Hosts 应用", $"应用失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 需要管理员权限时按需提权：以管理员身份重启自身，并带上原操作意图。
+    /// 用户取消 UAC 时保持当前进程可用，并明确告知系统 Hosts 未被修改。
+    /// </summary>
+    private Task RequestElevationAsync(LaunchIntent intent)
+    {
+        StatusMessage = "需要管理员权限写入系统 Hosts，正在请求提权…";
+        Log.Information("[Elevation] 按需提权，intent={Intent}", intent);
+
+        var result = ElevationService.RelaunchElevated(intent);
+        switch (result)
+        {
+            case ElevationResult.Started:
+                Log.Information("[Elevation] 已启动管理员实例，当前实例退出");
+                // 释放单实例互斥体，交给提权后的实例接续执行
+                if (Avalonia.Application.Current?.ApplicationLifetime
+                    is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+                {
+                    desktop.Shutdown();
+                }
+                else
+                {
+                    Environment.Exit(0);
+                }
+                break;
+
+            case ElevationResult.Cancelled:
+                StatusMessage = "已取消提权，系统 Hosts 未被修改";
+                Log.Information("[Elevation] 用户取消 UAC，未修改 Hosts");
+                _notificationService.Info("已取消提权",
+                    "Hosts 未被修改。可以稍后重试，或右键以管理员身份运行本应用。");
+                break;
+
+            default:
+                StatusMessage = $"提权失败：{ElevationService.LastError}";
+                Log.Warning("[Elevation] 提权失败：{Error}", ElevationService.LastError);
+                _notificationService.Error("提权失败",
+                    $"无法以管理员身份重启：{ElevationService.LastError}");
+                break;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 提权重启后接续用户上次未完成的操作（由主窗口打开时调用）。
+    /// </summary>
+    public async Task RunPendingLaunchIntentAsync()
+    {
+        var intent = LaunchContext.ConsumeIntent();
+        if (intent == LaunchIntent.None) return;
+
+        if (!IsAdmin)
+        {
+            Log.Warning("[Elevation] 接续意图 {Intent} 失败：仍未获得管理员权限", intent);
+            _notificationService.Info("未获得管理员权限", "Hosts 未被修改，请稍后重试。");
+            return;
+        }
+
+        StatusMessage = "已获得管理员权限，正在继续上次操作…";
+        Log.Information("[Elevation] 接续提权前的操作：{Intent}", intent);
+
+        switch (intent)
+        {
+            case LaunchIntent.ApplyHosts:
+                await ApplyHosts();
+                break;
+            case LaunchIntent.ClearHosts:
+                await ClearAppliedHosts();
+                break;
         }
     }
 
