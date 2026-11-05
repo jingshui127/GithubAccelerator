@@ -162,6 +162,16 @@
                                    VerticalAlignment="Center" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                         
                         <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4">
+                            <Border Padding="8,4" CornerRadius="4" VerticalAlignment="Center"
+                                    Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                                <TextBlock Text="{Binding AccelerationStateText}" FontSize="10"
+                                           Classes="SecondaryText" TextTrimming="CharacterEllipsis" MaxWidth="220"
+                                           ToolTip.Tip="当前加速状态（唯一状态，不会同时出现两个）"/>
+                            </Border>
+                            <Button Content="取消" 
+                                    Command="{Binding CancelApplyCommand}"
+                                    IsVisible="{Binding CanCancelApply}"
+                                    Padding="10,6" FontSize="12" ToolTip.Tip="取消进行中的加速（不会写入 Hosts）"/>
                             <Button Content="✅" 
                                     Command="{Binding ApplySelectedSourcesCommand}"
                                     Padding="12,6" FontSize="12" ToolTip.Tip="应用选中源"
