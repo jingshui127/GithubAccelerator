@@ -112,26 +112,50 @@
                             BorderThickness="1">
                         <StackPanel Spacing="16">
                             <StackPanel>
-                                <TextBlock Text="当前 Git Proxy" FontSize="14" FontWeight="SemiBold"/>
-                                <TextBlock Text="{Binding GitProxyStatus}" FontSize="12" Classes="SecondaryText"/>
+                                <TextBlock Text="Git 加速状态" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding GitRewriteStatus}" FontSize="12" Classes="SecondaryText"
+                                           TextWrapping="Wrap"/>
                             </StackPanel>
 
                             <StackPanel>
-                                <TextBlock Text="代理地址" FontSize="14" FontWeight="SemiBold"/>
-                                <TextBlock Text="设置 git 的 http/https 代理，加速 clone/push/pull" FontSize="12" Classes="SecondaryText"/>
-                                <TextBox Text="{Binding GitProxyUrl}"
+                                <TextBlock Text="镜像前缀" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock Text="用 url.&lt;镜像&gt;.insteadOf 改写 https://github.com/ 开头的地址，只影响 clone/fetch/pull；push 需要鉴权，仍直连 GitHub"
+                                           FontSize="12" Classes="SecondaryText" TextWrapping="Wrap"/>
+                                <TextBox Text="{Binding GitMirrorBaseUrl}"
                                          Margin="0,8,0,0"
                                          HorizontalAlignment="Stretch"/>
                             </StackPanel>
 
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button Content="设置代理" Command="{Binding SetGitProxyCommand}"
+                                <Button Content="开启 Git 加速" Command="{Binding EnableGitRewriteCommand}"
                                         Padding="16,6" FontSize="13"/>
-                                <Button Content="清除代理" Command="{Binding UnsetGitProxyCommand}"
+                                <Button Content="停止加速" Command="{Binding DisableGitRewriteCommand}"
                                         Padding="16,6" FontSize="13"/>
-                                <Button Content="使用推荐代理" Command="{Binding UseRecommendedGitProxyCommand}"
+                                <Button Content="使用推荐镜像" Command="{Binding UseRecommendedGitRewriteCommand}"
                                         Padding="16,6" FontSize="13"/>
                             </StackPanel>
+
+                            <Border Padding="12" CornerRadius="6"
+                                    Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                    BorderThickness="1">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="清理历史 Git Proxy 污染" FontSize="14" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding LegacyProxyStatus}" FontSize="12" Classes="SecondaryText"
+                                               TextWrapping="Wrap"/>
+                                    <ItemsControl ItemsSource="{Binding LegacyProxyEntryLines}"
+                                                  IsVisible="{Binding HasLegacyProxyEntries}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding}" FontSize="12" TextWrapping="Wrap"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <Button Content="清理以上条目" Command="{Binding CleanupLegacyGitProxyCommand}"
+                                            IsVisible="{Binding HasLegacyProxyEntries}"
+                                            Padding="16,6" FontSize="13"/>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </Border>
                 </StackPanel>
