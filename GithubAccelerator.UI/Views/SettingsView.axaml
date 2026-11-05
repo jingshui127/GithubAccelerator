@@ -111,17 +111,6 @@
                             BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                             BorderThickness="1">
                         <StackPanel Spacing="16">
-                            <Border IsVisible="{Binding !IsAdmin}"
-                                    Padding="12,8"
-                                    CornerRadius="6"
-                                    Background="#FFF3E0"
-                                    BorderBrush="#FF9800"
-                                    BorderThickness="1">
-                                <TextBlock Text="当前未以管理员身份运行，Git Proxy 设置/清除功能不可用。请右键以管理员身份运行本应用。"
-                                           FontSize="12"
-                                           Foreground="#E65100"
-                                           TextWrapping="Wrap"/>
-                            </Border>
                             <StackPanel>
                                 <TextBlock Text="当前 Git Proxy" FontSize="14" FontWeight="SemiBold"/>
                                 <TextBlock Text="{Binding GitProxyStatus}" FontSize="12" Classes="SecondaryText"/>
@@ -137,13 +126,10 @@
 
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Button Content="设置代理" Command="{Binding SetGitProxyCommand}"
-                                        IsEnabled="{Binding IsAdmin}"
                                         Padding="16,6" FontSize="13"/>
                                 <Button Content="清除代理" Command="{Binding UnsetGitProxyCommand}"
-                                        IsEnabled="{Binding IsAdmin}"
                                         Padding="16,6" FontSize="13"/>
                                 <Button Content="使用推荐代理" Command="{Binding UseRecommendedGitProxyCommand}"
-                                        IsEnabled="{Binding IsAdmin}"
                                         Padding="16,6" FontSize="13"/>
                             </StackPanel>
                         </StackPanel>

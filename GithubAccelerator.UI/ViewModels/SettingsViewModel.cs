@@ -321,12 +321,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         try
         {
-            if (!IsAdmin)
-            {
-                ToastService.Instance.Error("需要管理员权限", "修改 Git 全局配置需要管理员权限，请右键以管理员身份运行本应用后再试");
-                return;
-            }
-
+            // Git 全局配置写入用户目录（~/.gitconfig），不需要管理员权限
             // 先检查 Git 可用性
             var check = await _gitProxyService.CheckGitAvailabilityAsync();
             if (!check.IsAvailable)
@@ -360,12 +355,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         try
         {
-            if (!IsAdmin)
-            {
-                ToastService.Instance.Error("需要管理员权限", "修改 Git 全局配置需要管理员权限，请右键以管理员身份运行本应用后再试");
-                return;
-            }
-
+            // Git 全局配置写入用户目录（~/.gitconfig），不需要管理员权限
             var check = await _gitProxyService.CheckGitAvailabilityAsync();
             if (!check.IsAvailable)
             {
