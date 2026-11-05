@@ -55,13 +55,6 @@
                                 </StackPanel>
                             </StackPanel>
 
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <ToggleSwitch IsChecked="{Binding StartMinimized}" HorizontalAlignment="Left"/>
-                                <StackPanel>
-                                    <TextBlock Text="启动时最小化" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="启动后自动最小化到托盘" FontSize="12" Classes="SecondaryText"/>
-                                </StackPanel>
-                            </StackPanel>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -179,15 +172,7 @@
                                 <ToggleSwitch IsChecked="{Binding MinimizeToTray}" HorizontalAlignment="Left"/>
                                 <StackPanel>
                                     <TextBlock Text="最小化到托盘" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="最小化窗口时隐藏到系统托盘" FontSize="12" Classes="SecondaryText"/>
-                                </StackPanel>
-                            </StackPanel>
-
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <ToggleSwitch IsChecked="{Binding CloseToTray}" HorizontalAlignment="Left"/>
-                                <StackPanel>
-                                    <TextBlock Text="关闭到托盘" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="点击关闭按钮时隐藏到托盘而非退出程序" FontSize="12" Classes="SecondaryText"/>
+                                    <TextBlock Text="最小化窗口时隐藏到系统托盘（切换后立即生效）" FontSize="12" Classes="SecondaryText"/>
                                 </StackPanel>
                             </StackPanel>
 

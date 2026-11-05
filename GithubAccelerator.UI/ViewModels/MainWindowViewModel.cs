@@ -580,6 +580,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public bool MinimizeToTray => _settings.MinimizeToTray;
 
+    /// <summary>主窗口读取托盘类设置的入口，保证"改了立即生效"。</summary>
+    internal SettingsViewModel Settings => _settings;
+
     public MainWindowViewModel()
     {
         Log.Information("MainWindowViewModel 初始化开始");
@@ -622,11 +625,18 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _performanceMonitor.StartMonitoring();
         IsMonitoring = true;
 
-        // 启动定时更新（合并原 _updateTimer 和 _autoUpdateTimer：间隔取 TestInterval 与 60 秒的较小值）
-        var updateInterval = Math.Min(60, _settings.TestInterval) * 1000;
+        // 定时更新间隔直接取设置值（界面下限为 30 秒）；改设置后立即重设间隔。
+        var updateInterval = Math.Max(30, _settings.TestInterval) * 1000;
         _updateTimer = new System.Timers.Timer(updateInterval);
         _updateTimer.Elapsed += async (s, e) => await AutoUpdateAsync();
         _updateTimer.Start();
+        _settings.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(SettingsViewModel.TestInterval) && _updateTimer != null)
+            {
+                _updateTimer.Interval = Math.Max(30, _settings.TestInterval) * 1000;
+            }
+        };
 
         // 启动 GitHub 连通性定时检查（10 分钟一次）
         _githubConnectivityTimer = new System.Timers.Timer(600000);

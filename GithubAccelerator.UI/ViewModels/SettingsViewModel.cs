@@ -55,8 +55,6 @@ public partial class SettingsViewModel : ObservableObject
         public bool AutoApplyHosts { get; set; }
         public bool AutoSwitchBestSource { get; set; }
         public bool MinimizeToTray { get; set; } = true;
-        public bool CloseToTray { get; set; } = true;
-        public bool StartMinimized { get; set; }
         public bool ShowTrayNotifications { get; set; } = true;
         public bool AutoFlushDns { get; set; } = true;
         public bool ShowQuickGuideOnStartup { get; set; } = true;
@@ -111,12 +109,6 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _minimizeToTray = true;
-
-    [ObservableProperty]
-    private bool _closeToTray = true;
-
-    [ObservableProperty]
-    private bool _startMinimized = false;
 
     [ObservableProperty]
     private bool _showTrayNotifications = true;
@@ -202,8 +194,6 @@ public partial class SettingsViewModel : ObservableObject
                 AutoApplyHosts = AutoApplyHosts,
                 AutoSwitchBestSource = AutoSwitchBestSource,
                 MinimizeToTray = MinimizeToTray,
-                CloseToTray = CloseToTray,
-                StartMinimized = StartMinimized,
                 ShowTrayNotifications = ShowTrayNotifications,
                 AutoFlushDns = AutoFlushDns,
                 ShowQuickGuideOnStartup = ShowQuickGuideOnStartup,
@@ -242,8 +232,6 @@ public partial class SettingsViewModel : ObservableObject
                     AutoApplyHosts = settings.AutoApplyHosts;
                     AutoSwitchBestSource = settings.AutoSwitchBestSource;
                     MinimizeToTray = settings.MinimizeToTray;
-                    CloseToTray = settings.CloseToTray;
-                    StartMinimized = settings.StartMinimized;
                     ShowTrayNotifications = settings.ShowTrayNotifications;
                     AutoFlushDns = settings.AutoFlushDns;
                     ShowQuickGuideOnStartup = settings.ShowQuickGuideOnStartup;
@@ -290,8 +278,6 @@ public partial class SettingsViewModel : ObservableObject
         AutoApplyHosts = false;
         AutoSwitchBestSource = false;
         MinimizeToTray = true;
-        CloseToTray = true;
-        StartMinimized = false;
         ShowTrayNotifications = true;
         AutoFlushDns = true;
         ShowQuickGuideOnStartup = true;

@@ -25,7 +25,6 @@ public class AppSettingsData
     public bool AutoApplyHosts { get; set; }
     public bool AutoSwitchBestSource { get; set; }
     public bool MinimizeToTray { get; set; } = true;
-    public bool StartMinimized { get; set; }
     public bool AutoFlushDns { get; set; } = true;
     public bool ShowQuickGuideOnStartup { get; set; } = true;
     public bool DiagnosticsEnabled { get; set; }
@@ -67,7 +66,6 @@ public class DataExportImportService
                     AutoApplyHosts = settings.AutoApplyHosts,
                     AutoSwitchBestSource = settings.AutoSwitchBestSource,
                     MinimizeToTray = settings.MinimizeToTray,
-                    StartMinimized = settings.StartMinimized,
                     AutoFlushDns = settings.AutoFlushDns,
                     ShowQuickGuideOnStartup = settings.ShowQuickGuideOnStartup,
                     DiagnosticsEnabled = settings.DiagnosticsEnabled,
@@ -215,7 +213,6 @@ public class DataExportImportService
                 settings.AutoApplyHosts = data.Settings.AutoApplyHosts;
                 settings.AutoSwitchBestSource = data.Settings.AutoSwitchBestSource;
                 settings.MinimizeToTray = data.Settings.MinimizeToTray;
-                settings.StartMinimized = data.Settings.StartMinimized;
                 settings.AutoFlushDns = data.Settings.AutoFlushDns;
                 settings.ShowQuickGuideOnStartup = data.Settings.ShowQuickGuideOnStartup;
                 settings.DiagnosticsEnabled = data.Settings.DiagnosticsEnabled;
