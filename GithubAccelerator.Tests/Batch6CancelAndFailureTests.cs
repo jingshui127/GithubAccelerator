@@ -26,7 +26,7 @@ public class Batch6CancelAndFailureTests
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        var progress = new List<(int Done, int Total)>();
+        var progress = new System.Collections.Concurrent.ConcurrentBag<(int Done, int Total)>();
         var results = await service.ProbeAllAsync(cts.Token, (done, total) => progress.Add((done, total)));
 
         Assert.Equal(6, results.Count);
@@ -34,7 +34,7 @@ public class Batch6CancelAndFailureTests
         Assert.Equal(0, calls);
         // 进度按完成项计数，取消时也要收尾，不能停在半截。
         Assert.Equal(6, progress.Count);
-        Assert.Equal((6, 6), progress[^1]);
+        Assert.Contains((6, 6), progress);
     }
 
     [Fact]
