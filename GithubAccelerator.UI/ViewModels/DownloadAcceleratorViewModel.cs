@@ -112,9 +112,8 @@ public partial class DownloadAcceleratorViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            // 在后台线程执行耗时转换，但 Result 赋值必须在 UI 线程
-            // （OnResultChanged 会更新 ObservableProperty，跨线程会触发 Avalonia 崩溃）
-            var result = await Task.Run(() => _mirrorService.ConvertUrl(InputUrl));
+            // 转换后按实测镜像健康度排序；探测本身是异步 IO，直接在后台等待，不阻塞 UI。
+            var result = await Task.Run(() => _mirrorService.ConvertUrlAsync(InputUrl));
             Result = result;
             HasResults = Result.HasResults;
 
@@ -130,7 +129,10 @@ public partial class DownloadAcceleratorViewModel : ObservableObject
                 };
                 var typeName = Result.UrlType != GithubUrlType.Unknown && typeNames.ContainsKey(Result.UrlType)
                     ? typeNames[Result.UrlType] : "链接";
-                StatusMessage = $"检测到 {typeName}，已生成 {Result.MirrorUrls.Count + (Result.GitCloneCommands.Count > 0 ? 1 : 0) + (!string.IsNullOrEmpty(Result.JsDelivrUrl) ? 1 : 0)} 个加速方案";
+                var healthNote = string.IsNullOrWhiteSpace(Result.HealthMessage)
+                    ? string.Empty
+                    : $"；{Result.HealthMessage}";
+                StatusMessage = $"检测到 {typeName}，已生成 {Result.MirrorUrls.Count + (Result.GitCloneCommands.Count > 0 ? 1 : 0) + (!string.IsNullOrEmpty(Result.JsDelivrUrl) ? 1 : 0)} 个加速方案{healthNote}";
             }
             else
             {

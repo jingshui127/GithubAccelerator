@@ -8,26 +8,72 @@ namespace GithubAccelerator.Core.Services;
 public class MirrorUrlService
 {
     /// <summary>
-    /// 可用的镜像站配置（按推荐顺序排列，仅包含测试可用的站点）
+    /// 可用的镜像站配置。已移除 2026-11-05 实测 DNS 不可解析的 gitmirror.com 与
+    /// github.com.cnpmjs.org；保留的站点由 <see cref="MirrorHealthService"/> 按实测健康度动态排序。
     /// </summary>
     public static readonly MirrorSite[] AvailableMirrors = new[]
     {
-        new MirrorSite("GHProxy", "https://ghproxy.net", "https://ghproxy.net/{url}", "全功能加速（推荐）"),
+        new MirrorSite("ghfast.top", "https://ghfast.top", "https://ghfast.top/{url}", "全功能加速（实测可用）"),
+        new MirrorSite("GHProxy", "https://ghproxy.net", "https://ghproxy.net/{url}", "全功能加速"),
         new MirrorSite("gh.api.99988866.xyz", "https://gh.api.99988866.xyz", "https://gh.api.99988866.xyz/{url}", "国内高可用"),
-        new MirrorSite("ghfast.top", "https://ghfast.top", "https://ghfast.top/{url}", "全功能加速"),
-        new MirrorSite("jsDelivr CDN", "https://cdn.jsdelivr.net", null, "静态资源专用"),
-        new MirrorSite("GitMirror", "https://gitmirror.com", "https://gitmirror.com/accelerate/{url}", "镜像浏览"),
+        new MirrorSite("jsDelivr CDN", "https://cdn.jsdelivr.net", null, "静态资源专用（实测可用）"),
     };
 
     /// <summary>
-    /// Git Clone 镜像配置
+    /// Git Clone 镜像配置。已移除 2026-11-05 实测 DNS 不可解析的 github.com.cnpmjs.org。
     /// </summary>
     public static readonly GitCloneMirror[] GitCloneMirrors = new[]
     {
-        new GitCloneMirror("gitclone.com", "git clone https://gitclone.com/github.com/{path}.git", "推荐"),
-        new GitCloneMirror("github.com.cnpmjs.org", "git clone https://github.com.cnpmjs.org/{path}.git", "cnpm 镜像"),
+        new GitCloneMirror("gitclone.com", "git clone https://gitclone.com/github.com/{path}.git", "推荐（实测可用）"),
         new GitCloneMirror("ghproxy.net", "git clone https://ghproxy.net/https://github.com/{path}.git", "通过代理克隆"),
     };
+
+    private readonly IMirrorHealthService _health;
+
+    public MirrorUrlService(IMirrorHealthService? health = null)
+    {
+        _health = health ?? new MirrorHealthService();
+    }
+
+    /// <summary>
+    /// 在同步转换的基础上按实测镜像健康度排序，并给出全源不可达时的可读提示。
+    /// </summary>
+    public async Task<MirrorResult> ConvertUrlAsync(string inputUrl, CancellationToken cancellationToken = default)
+    {
+        var result = ConvertUrl(inputUrl);
+        if (!result.HasMirrorUrls) return result;
+
+        try
+        {
+            var report = await _health.CheckAsync(cancellationToken);
+            result.HealthMessage = report.Message;
+
+            var originalOrder = result.MirrorUrls.Select((url, index) => (url, index)).ToList();
+            result.MirrorUrls = originalOrder
+                .OrderBy(x => HealthRank(x.url.SiteName, report))
+                .ThenBy(x => x.index)
+                .Select(x => x.url)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            result.HealthMessage = $"镜像健康检测失败：{ex.Message}；以下链接可能仍可手动尝试";
+        }
+
+        return result;
+    }
+
+    private static int HealthRank(string siteName, MirrorHealthReport report)
+    {
+        for (var i = 0; i < report.Ordered.Count; i++)
+        {
+            if (string.Equals(report.Ordered[i].Name, siteName, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+        return int.MaxValue;
+    }
 
     /// <summary>
     /// 解析 GitHub URL 并生成所有可用的加速链接
@@ -204,6 +250,9 @@ public class MirrorResult
     public List<GitCloneCommand> GitCloneCommands { get; set; } = new();
     public string? JsDelivrUrl { get; set; }
     public string ErrorMessage { get; set; } = "";
+
+    /// <summary>镜像池实测健康度说明（含全源不可达时的可读提示）。</summary>
+    public string HealthMessage { get; set; } = "";
 
     /// <summary>
     /// URL 类型显示文本

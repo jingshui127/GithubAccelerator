@@ -13,14 +13,22 @@ public interface IDownloadAccelerationService
     bool IsGithubRawUrl(string url);
 }
 
+/// <summary>
+/// URL 前缀型下载加速。镜像地址统一来自 <see cref="MirrorUrlService.AvailableMirrors"/>，
+/// 避免这里再维护一份互不一致、包含已停服站点的列表。
+/// </summary>
 public class DownloadAccelerationService : IDownloadAccelerationService
 {
-    private readonly Dictionary<string, string[]> _mirrors = new()
+    private static readonly MirrorSite[] ProxyMirrors = MirrorUrlService.AvailableMirrors
+        .Where(m => m.UrlTemplate != null)
+        .ToArray();
+
+    private static readonly string[] SupportedHosts =
     {
-        { "github.com", new[] { "ghproxy.net", "gh.api.99988866.xyz" } },
-        { "raw.githubusercontent.com", new[] { "raw.fastgit.org", "raw.gitmirror.com", "raw.sevencdn.com" } },
-        { "githubusercontent.com", new[] { "ghproxy.net" } },
-        { "github-releases.githubusercontent.com", new[] { "ghproxy.net" } }
+        "github.com",
+        "raw.githubusercontent.com",
+        "githubusercontent.com",
+        "github-releases.githubusercontent.com"
     };
 
     public string AccelerateUrl(string url)
@@ -28,30 +36,8 @@ public class DownloadAccelerationService : IDownloadAccelerationService
         if (string.IsNullOrWhiteSpace(url))
             return url;
 
-        try
-        {
-            var uri = new Uri(url);
-            var host = uri.Host.ToLower();
-
-            if (_mirrors.TryGetValue(host, out var mirrors))
-            {
-                return $"https://{mirrors[0]}/https://{host}{uri.PathAndQuery}";
-            }
-
-            foreach (var (originalHost, mirrorList) in _mirrors)
-            {
-                if (host.EndsWith(originalHost))
-                {
-                    return $"https://{mirrorList[0]}/https://{host}{uri.PathAndQuery}";
-                }
-            }
-        }
-        catch
-        {
-            // Invalid URL, return original
-        }
-
-        return url;
+        var accelerated = GetAcceleratedUrls(url);
+        return accelerated.Length > 1 ? accelerated[1] : url;
     }
 
     public string[] GetAcceleratedUrls(string url)
@@ -64,22 +50,14 @@ public class DownloadAccelerationService : IDownloadAccelerationService
         try
         {
             var uri = new Uri(url);
-            var host = uri.Host.ToLower();
+            var host = uri.Host.ToLowerInvariant();
+            var matched = MatchedHost(host);
+            if (matched == null) return results.ToArray();
 
-            if (_mirrors.TryGetValue(host, out var mirrors))
+            foreach (var mirror in ProxyMirrors)
             {
-                results.AddRange(mirrors.Select(m => $"https://{m}/https://{host}{uri.PathAndQuery}"));
-            }
-            else
-            {
-                foreach (var (originalHost, mirrorList) in _mirrors)
-                {
-                    if (host.EndsWith(originalHost))
-                    {
-                        results.AddRange(mirrorList.Select(m => $"https://{m}/https://{host}{uri.PathAndQuery}"));
-                        break;
-                    }
-                }
+                var target = $"https://{host}{uri.PathAndQuery}";
+                results.Add(mirror.UrlTemplate!.Replace("{url}", target));
             }
         }
         catch
@@ -88,6 +66,18 @@ public class DownloadAccelerationService : IDownloadAccelerationService
         }
 
         return results.ToArray();
+    }
+
+    private static string? MatchedHost(string host)
+    {
+        foreach (var candidate in SupportedHosts)
+        {
+            if (host == candidate || host.EndsWith("." + candidate))
+            {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     public bool IsGithubUrl(string url)
