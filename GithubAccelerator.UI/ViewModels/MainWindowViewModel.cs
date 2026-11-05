@@ -433,6 +433,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _applyCts?.Dispose();
         _applyCts = new CancellationTokenSource();
         _applyIssue = null;
+        AccelerationProgressText = "已完成 0 项，准备开始…";
+        HasAllSourcesFailure = false;
+        AllSourcesFailureText = string.Empty;
         RaiseAccelerationStateChanged();
         StatusMessage = "开始加速…";
         return true;
@@ -457,10 +460,17 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _applyIssue = null;
         _applyCts?.Dispose();
         _applyCts = null;
+        AccelerationProgressText = string.Empty;
         RaiseAccelerationStateChanged();
     }
 
     private bool IsCancelRequested => _applyCts?.IsCancellationRequested == true;
+
+    /// <summary>设置确定进度：只报已完成的项数，不猜百分比。</summary>
+    private void SetAccelerationProgress(int done, int total, string phase)
+    {
+        AccelerationProgressText = $"已完成 {done}/共 {total} 项（{phase}）";
+    }
 
     /// <summary>取消当前进行中的任务：不会写入 Hosts，回到上一个稳定状态。</summary>
     [RelayCommand(CanExecute = nameof(CanCancelApply))]
@@ -478,6 +488,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         _accelState.Cancel();
         _applyIssue = null;
+        AccelerationProgressText = string.Empty;
         RaiseAccelerationStateChanged();
         StatusMessage = "已取消：Hosts 未被修改";
         Log.Information("[State] 加速已取消，Hosts 未修改");
@@ -499,6 +510,17 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>失败自救提示：一句人话原因 + 一个按钮；成功或用户关闭后清空。</summary>
     [ObservableProperty]
     private FailureAdvice? _failureAdvice;
+
+    /// <summary>进行中任务的确定进度：已完成 X/共 N 项（不编造百分比）。</summary>
+    [ObservableProperty]
+    private string _accelerationProgressText = string.Empty;
+
+    /// <summary>全部数据源失败详情：检测时间 + 每个源的原因 + 直连动作。</summary>
+    [ObservableProperty]
+    private bool _hasAllSourcesFailure = false;
+
+    [ObservableProperty]
+    private string _allSourcesFailureText = string.Empty;
 
     public bool HasFailureAdvice => FailureAdvice != null;
     public string FailureCauseText => FailureAdvice?.Cause ?? string.Empty;
@@ -1676,6 +1698,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         StatusMessage = "正在从全部数据源拉取 Hosts（并行）...";
         XTrace.WriteLine("[ApplyHosts/All] 开始从全部源拉取 Hosts");
+        var totalSteps = _settings.AutoFlushDns ? 5 : 4;
+        SetAccelerationProgress(0, totalSteps, "拉取数据源");
 
         // 1. 并行拉取所有源
         var sources = GithubHostsService.HostsSources;
@@ -1733,15 +1757,17 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 StatusMessage = msg;
                 XTrace.WriteLine($"[ApplyHosts/Optimizer] {msg}");
             };
-            var optimizedContent = await optimizer.OptimizeAsync(mergedHosts);
+            var optimizedContent = await optimizer.OptimizeAsync(mergedHosts, _applyCts?.Token ?? default);
             XTrace.WriteLine($"[ApplyHosts/All] 优化完成，内容长度={optimizedContent.Length}");
+            SetAccelerationProgress(3, totalSteps, "IP 优选完成");
 
             // 取消检查点：优化完成后、写 Hosts 之前
             AbortIfCanceled();
             if (!_accelState.IsBusy) return;
 
-            // 4. 写入 hosts 文件
+            // 4. 写入 hosts 文件（原子替换；取消只发生在写入前，不会留下半写状态）
             var success = await ApplyAcceleratedHostsAsync(optimizedContent);
+            if (success) SetAccelerationProgress(4, totalSteps, "Hosts 写入完成");
 
             if (success)
             {
@@ -1756,6 +1782,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     if (_settings.AutoFlushDns)
                     {
                         await _dnsFlusher.FlushDnsCacheAsync();
+                        SetAccelerationProgress(totalSteps, totalSteps, "DNS 缓存已刷新");
                         StatusMessage = "Hosts 已成功应用（多源智能合并 + IP优选，DNS缓存已刷新）";
                     }
                     else
@@ -1829,12 +1856,17 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         using var _trace = StardustMonitorService.Instance.BeginTrace("ApplyHosts", sourceName);
 
+        var totalSteps = _settings.AutoFlushDns ? 4 : 3;
+        SetAccelerationProgress(0, totalSteps, $"拉取 {sourceName}");
+
         try
         {
             var (hostsContent, usedUrl, fetchError) = await FetchHostsContentAsync(sourceName, sourceUrl, mirrorUrls);
 
             AbortIfCanceled();
             if (!_accelState.IsBusy) return;
+
+            SetAccelerationProgress(1, totalSteps, "拉取完成");
 
             if (string.IsNullOrEmpty(hostsContent))
             {
@@ -1862,7 +1894,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                         StatusMessage = msg;
                         XTrace.WriteLine($"[ApplyHosts/Optimizer] {msg}");
                     };
-                    hostsContent = await optimizer.OptimizeAsync(hostsContent);
+                    hostsContent = await optimizer.OptimizeAsync(hostsContent, _applyCts?.Token ?? default);
+                    SetAccelerationProgress(2, totalSteps, "IP 优选完成");
                     XTrace.WriteLine($"[ApplyHosts] IP 优化完成，新内容长度={hostsContent.Length}");
                     StardustMonitorService.Instance.ReportInfo("HostsOptimized", $"source={sourceName}");
                 }
@@ -1885,6 +1918,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             if (!_accelState.IsBusy) return;
 
             var success = await ApplyAcceleratedHostsAsync(hostsContent);
+            if (success) SetAccelerationProgress(3, totalSteps, "Hosts 写入完成");
 
             if (success)
             {
@@ -1899,6 +1933,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     if (_settings.AutoFlushDns)
                     {
                         await _dnsFlusher.FlushDnsCacheAsync();
+                        SetAccelerationProgress(totalSteps, totalSteps, "DNS 缓存已刷新");
                         StatusMessage = $"Hosts 已成功应用，源：{sourceName}（DNS缓存已刷新）";
                     }
                     else
@@ -2013,12 +2048,21 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             allHostsContent.AppendLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
             allHostsContent.AppendLine();
 
+            var totalSteps = selectedSources.Count + (_settings.AutoFlushDns ? 3 : 2);
+            var doneSteps = 0;
+            SetAccelerationProgress(0, totalSteps, "准备拉取数据源");
+
             foreach (var source in selectedSources)
             {
+                AbortIfCanceled();
+                if (!_accelState.IsBusy) return;
+
                 StatusMessage = $"正在从 {source.Name} 获取 Hosts...";
                 try
                 {
                     var (content, _, _) = await FetchHostsContentAsync(source.Name, source.Url, source.MirrorUrls);
+                    doneSteps++;
+                    SetAccelerationProgress(doneSteps, totalSteps, $"已拉取 {source.Name}");
 
                     if (!string.IsNullOrEmpty(content))
                     {
@@ -2049,19 +2093,22 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     StatusMessage = msg;
                     XTrace.WriteLine($"[ApplySel/Optimizer] {msg}");
                 };
-                mergedContent = await optimizer.OptimizeAsync(mergedContent);
+                mergedContent = await optimizer.OptimizeAsync(mergedContent, _applyCts?.Token ?? default);
+                SetAccelerationProgress(++doneSteps, totalSteps, "IP 优选完成");
             }
             catch (Exception ex)
             {
                 XTrace.WriteLine($"[ApplySel] 优化失败，使用原始内容：{ex.Message}");
                 _applyIssue = "IP 优选未完成（已应用原始内容）";
+                SetAccelerationProgress(++doneSteps, totalSteps, "IP 优选跳过");
             }
 
             AbortIfCanceled();
             if (!_accelState.IsBusy) return;
 
             var success = await ApplyAcceleratedHostsAsync(mergedContent);
-            
+            if (success) SetAccelerationProgress(++doneSteps, totalSteps, "Hosts 写入完成");
+
             if (success)
             {
                 IsHostsApplied = true;
@@ -2072,6 +2119,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     if (_settings.AutoFlushDns)
                     {
                         await _dnsFlusher.FlushDnsCacheAsync();
+                        SetAccelerationProgress(++doneSteps, totalSteps, "DNS 缓存已刷新");
                         StatusMessage = $"已成功应用 {selectedSources.Count} 个数据源（DNS缓存已刷新）";
                     }
                     else

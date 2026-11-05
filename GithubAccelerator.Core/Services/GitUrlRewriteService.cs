@@ -154,8 +154,13 @@ public sealed class GitUrlRewriteService
     /// <summary>
     /// 写入 insteadOf。已有用户同名配置或其它针对 github.com 的改写时不覆盖，返回冲突原因。
     /// </summary>
-    public async Task<GitRewriteEnableResult> EnableAsync(string mirrorBaseUrl)
+    /// <param name="onProgress">每完成一步回调 (已完成, 共 N 项)，不编造百分比。</param>
+    public async Task<GitRewriteEnableResult> EnableAsync(string mirrorBaseUrl, Action<int, int>? onProgress = null)
     {
+        const int totalSteps = 4;
+        var doneSteps = 0;
+        void Step() => onProgress?.Invoke(++doneSteps, totalSteps);
+
         await _lock.WaitAsync();
         try
         {
@@ -164,6 +169,7 @@ public sealed class GitUrlRewriteService
             {
                 return new GitRewriteEnableResult(false, $"未检测到 Git：{check.ErrorMessage}", null, false);
             }
+            Step();
 
             string baseUrl;
             try
@@ -178,6 +184,7 @@ public sealed class GitUrlRewriteService
             var prefix = baseUrl + "/" + InsteadOfValue;
             var mainKey = $"url.{prefix}.insteadOf";
             var rules = await GetUrlRulesAsync();
+            Step();
 
             // 已存在完全相同的改写：不再写入，也不据为己有。
             var sameRule = rules.FirstOrDefault(r => SameKey(r.Key, mainKey) && r.Value == InsteadOfValue);
@@ -243,6 +250,7 @@ public sealed class GitUrlRewriteService
                 Log.Warning("[GitRewrite] {Message}", error);
                 return new GitRewriteEnableResult(false, error, null, false);
             }
+            Step();
 
             // push 保护：镜像站不支持带鉴权的写入转发；若用户已有 push 改写则保持原样。
             var pushRules = rules.Where(r => ParseUrlRule(r.Key)?.Name.Equals("pushinsteadof", StringComparison.OrdinalIgnoreCase) == true
@@ -284,6 +292,7 @@ public sealed class GitUrlRewriteService
                 pushEntry.Pending = false;
             }
             SaveProvenance(provenance);
+            Step();
 
             Log.Information("[GitRewrite] 已启用 url 改写: {Prefix}", prefix);
             var pushNote = pushRules.Count == 0 ? "push 保持直连" : "push 沿用你的既有配置";
@@ -298,7 +307,8 @@ public sealed class GitUrlRewriteService
     }
 
     /// <summary>只撤销本程序写入且当前仍存在的条目，用户自己添加的值不动。</summary>
-    public async Task<GitRewriteDisableResult> DisableAsync()
+    /// <param name="onProgress">每完成一步回调 (已完成, 共 N 项)，不编造百分比。</param>
+    public async Task<GitRewriteDisableResult> DisableAsync(Action<int, int>? onProgress = null)
     {
         await _lock.WaitAsync();
         try
@@ -313,8 +323,14 @@ public sealed class GitUrlRewriteService
             var owned = provenance.Entries.Where(e => e.Owned).ToList();
             if (owned.Count == 0)
             {
+                onProgress?.Invoke(1, 1);
                 return new GitRewriteDisableResult(true, "没有由本程序写入的改写，无需清理", Array.Empty<string>());
             }
+
+            // 步骤 = 检测 git + 逐条撤销 + 清理来源记录
+            var totalSteps = owned.Count + 2;
+            var doneSteps = 1;
+            onProgress?.Invoke(doneSteps, totalSteps);
 
             var removed = new List<string>();
             var failures = new List<string>();
@@ -328,10 +344,12 @@ public sealed class GitUrlRewriteService
                     if (result.ExitCode != 0)
                     {
                         failures.Add($"{entry.Key}: {FirstLine(result.Error)}");
+                        onProgress?.Invoke(++doneSteps, totalSteps);
                         continue;
                     }
                     removed.Add(entry.Key);
                 }
+                onProgress?.Invoke(++doneSteps, totalSteps);
             }
 
             if (failures.Count > 0)
@@ -345,6 +363,7 @@ public sealed class GitUrlRewriteService
 
             provenance.Entries.RemoveAll(e => e.Owned);
             SaveProvenance(provenance);
+            onProgress?.Invoke(++doneSteps, totalSteps);
             Log.Information("[GitRewrite] 已撤销 {Count} 条由本程序写入的改写", removed.Count);
             return new GitRewriteDisableResult(true,
                 removed.Count == 0 ? "没有需要移除的改写（可能已被手动删除）" : $"已移除 {removed.Count} 条本程序写入的配置",

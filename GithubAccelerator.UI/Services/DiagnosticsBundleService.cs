@@ -63,8 +63,13 @@ public sealed class DiagnosticsBundleService
     }
 
     /// <summary>生成到临时目录并返回预览；不会打包、不会外发。</summary>
-    public async Task<DiagnosticsPreview> CreatePreviewAsync()
+    /// <param name="onProgress">每完成一个收集步骤回调 (已完成, 共 N 项)，不编造百分比。</param>
+    public async Task<DiagnosticsPreview> CreatePreviewAsync(Action<int, int>? onProgress = null)
     {
+        const int totalSteps = 8;
+        var doneSteps = 0;
+        void Step() => onProgress?.Invoke(++doneSteps, totalSteps);
+
         CleanupStaging();
         var folder = Path.Combine(_stagingRoot, DateTime.Now.ToString("yyyyMMdd_HHmmss_fff"));
         Directory.CreateDirectory(folder);
@@ -74,7 +79,9 @@ public sealed class DiagnosticsBundleService
 
         AddText(files, folder, "README.txt", "说明文件（本包只在本机生成，不会自动上传）",
             BuildReadme(), redacted: false);
+        Step();
         AddText(files, folder, "system-info.txt", "操作系统 / .NET 版本 / 程序版本", _systemInfo(), redacted: true);
+        Step();
 
         var settingsPath = Path.Combine(_appDataDir, "settings.json");
         if (File.Exists(settingsPath))
@@ -82,6 +89,7 @@ public sealed class DiagnosticsBundleService
             AddText(files, folder, "settings-redacted.json", "当前设置（已脱敏，不含路径与密钥）",
                 _sanitizer.Sanitize(await ReadAllTextSharedAsync(settingsPath)), redacted: true);
         }
+        Step();
 
         var provenancePath = Path.Combine(_appDataDir, "git-url-rewrite.json");
         if (File.Exists(provenancePath))
@@ -89,19 +97,24 @@ public sealed class DiagnosticsBundleService
             AddText(files, folder, "git-url-rewrite-redacted.json", "本程序写入 git 改写项的来源记录（已脱敏）",
                 _sanitizer.Sanitize(await ReadAllTextSharedAsync(provenancePath)), redacted: true);
         }
+        Step();
 
         var logs = await AddLogsAsync(files, folder);
         if (!logs) files.Add(new DiagnosticsFileEntry("logs/", "未找到日志文件", 0, false));
+        Step();
 
         AddText(files, folder, "git-config-filtered.txt",
             "仅本程序涉及的 git 全局键（url.*.insteadOf / http(s).proxy），不含 user.name 等个人信息",
             _sanitizer.Sanitize(await _gitConfig()), redacted: true);
+        Step();
 
         AddText(files, folder, "mirror-health.txt", "本次镜像池健康检测结果",
             BuildMirrorReport(await _mirrorHealth()), redacted: false);
+        Step();
 
         AddText(files, folder, "hosts-block.txt", "只包含本程序自己写入的 Hosts 标记块（不含整份 hosts）",
             await ReadOwnHostsBlockAsync(), redacted: false);
+        Step();
 
         var sortedFiles = files.OrderBy(f => f.RelativePath, StringComparer.OrdinalIgnoreCase).ToList();
         var totalBytes = sortedFiles.Sum(f => f.SizeBytes);

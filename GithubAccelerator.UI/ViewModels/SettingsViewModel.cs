@@ -144,6 +144,10 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private string _gitRewriteAdvice = string.Empty;
 
+    /// <summary>写入/回滚 git 改写时的确定进度：已完成 X/共 N 项。</summary>
+    [ObservableProperty]
+    private string _gitRewriteProgressText = string.Empty;
+
     public bool HasGitRewriteAdvice => !string.IsNullOrWhiteSpace(GitRewriteAdvice);
 
     partial void OnGitRewriteAdviceChanged(string value)
@@ -357,8 +361,10 @@ public partial class SettingsViewModel : ObservableObject
     {
         try
         {
+            GitRewriteProgressText = "已完成 0 项，准备开始…";
             // 写入用户目录下的 ~/.gitconfig，不需要管理员权限。
-            var result = await _gitRewriteService.EnableAsync(GitMirrorBaseUrl);
+            var result = await _gitRewriteService.EnableAsync(GitMirrorBaseUrl,
+                (done, total) => GitRewriteProgressText = $"已完成 {done}/共 {total} 项");
             if (result.Success)
             {
                 GitRewriteAdvice = string.Empty;
@@ -378,6 +384,10 @@ public partial class SettingsViewModel : ObservableObject
             ToastService.Instance.Error("未能开启 Git 加速", ex.Message);
             GitRewriteStatus = $"开启失败：{ex.Message}";
         }
+        finally
+        {
+            GitRewriteProgressText = string.Empty;
+        }
     }
 
     [RelayCommand]
@@ -385,7 +395,9 @@ public partial class SettingsViewModel : ObservableObject
     {
         try
         {
-            var result = await _gitRewriteService.DisableAsync();
+            GitRewriteProgressText = "已完成 0 项，准备开始…";
+            var result = await _gitRewriteService.DisableAsync(
+                (done, total) => GitRewriteProgressText = $"已完成 {done}/共 {total} 项");
             if (result.Success)
             {
                 ToastService.Instance.Success("Git 加速已停止", result.Message);
@@ -399,6 +411,10 @@ public partial class SettingsViewModel : ObservableObject
         catch (Exception ex)
         {
             ToastService.Instance.Error("停止失败", ex.Message);
+        }
+        finally
+        {
+            GitRewriteProgressText = string.Empty;
         }
     }
 
