@@ -68,7 +68,7 @@
 |---|---|---|
 | 浏览器打开 github.com / 网页 | Hosts 加速 | ✅ 覆盖（主路径） |
 | raw 文件、README 图片 | Hosts + 镜像链接 | 🟢 可用，镜像池按实测健康度排序（P1-8 已做） |
-| Release / archive 下载 | 生成 ghproxy 等链接，需手动复制 | 🟡 可用但多一步（P2-2） |
+| Release / archive 下载 | 生成镜像链接，需手动复制/打开 | 🟡 可用但多一步（P2-2 不做） |
 | `git clone / pull / push` | HTTPS 远程改为 `url.insteadOf`；push 直连；SSH 未覆盖 | 🟢 HTTP 远程可用（P1-1 已做），SSH 见 P2-3 |
 | `docker pull ghcr.io/...` | 无法由本程序自动加速 | ⛔ 仅文档指引（P1-2） |
 | GitHub Pages（`*.github.io`） | 在域名清单内 | ✅ 覆盖 |
@@ -406,7 +406,7 @@ Maven（`~/.m2/settings.xml` 的 `<proxies>`）：
 | 条目 | 结果 | 判定依据 | 决策 |
 |---|---|---|---|
 | ghfast.top | 200 / 973ms / 内容正确 | 取回 13 字节 `Hello World!` | 保留，健康排序第 1 |
-| GHProxy ghproxy.net | 200 / 895ms / 内容正确 | 取回 `Hello World!`（19:35 同一条目曾 8s 超时，网络波动） | 保留，运行时按实测排序 |
+| GHProxy ghproxy.net | 21:45 复测：raw 502、页面/codeload 超时、git ls-remote 69.66s | 早先 19:48 的 895ms 仅为瞬时；复测证实严重超时 | **降为末位并标注"严重超时，不建议使用"**（见 §九） |
 | gh.api.99988866.xyz | 000 / 674ms / TLS 握手失败 | `SEC_E_ILLEGAL_MESSAGE`，未取回内容 | 保留但排末位（证据不足以判定停服） |
 | jsDelivr CDN | 000 / 10039ms 超时（19:35 为 2794ms 正常） | 直连 CDN，非前缀代理 | 保留；不可达时自动降级 |
 | GitMirror gitmirror.com | DNS 无法解析 / 76ms | `Could not resolve host` | **移除** |
@@ -464,6 +464,8 @@ Maven（`~/.m2/settings.xml` 的 `<proxies>`）：
 ---
 
 ### P2 级（可选，按收益排序）
+
+> **状态：自用版全部不做。** 具体理由见 §8.6 汇总表（逐项一句）。
 
 - **P2-1 托盘快捷开关**：托盘当前只有"显示窗口/退出"（[MainWindow.axaml.cs#L53-L60](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Views/MainWindow.axaml.cs#L53-L60)），加"加速开/关 + 当前状态"更符合"装完就不管"的使用方式。不做则用户每次都要开窗口。
 - **P2-2 应用内下载器**：现在只生成链接（[MirrorUrlService#L108-L160](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/MirrorUrlService.cs#L108-L160)）。做"粘贴链接→自动选最快镜像→下载到指定目录→失败自动换镜像"。工作量最大，收益对开发者明显，可后置。
@@ -617,14 +619,15 @@ Maven（`~/.m2/settings.xml` 的 `<proxies>`）：
 | P1-8 | ✅ 已做 | 镜像池移除死站 + 运行时健康检查 |
 | P1-9 | ✅ 已做 | 仅手动检查更新（私有仓库无公共通道，不假装自动更新） |
 | P1-10 | ✅ 已做（本批） | 检测时间/逐源原因/一键直连/`AcceleratedUnavailable`；last-good 快照未做 |
-| P2-1 | ⏸ 未做 | 托盘加速开关与状态；下版本（本批不扩 UI） |
-| P2-2 | ⏸ 未做 | 应用内下载器；下版本（工作量最大） |
-| P2-3 | ⏸ 未做 | SSH over 443 仅文档指引，未做复制按钮 |
-| P2-4 | ⏸ 未做 | Hosts 内容仅有行格式/IP 正则，无严格校验 |
+| P2-1 | ⛔ 不做（自用版） | 托盘加速开关：自用只需开窗口操作，托盘加开关会引入又一组状态同步，收益低 |
+| P2-2 | ⛔ 不做（自用版） | 应用内下载器：工作量 2–3 人日，自用可复制链接到浏览器/下载工具，性价比不足 |
+| P2-3 | ⛔ 不做（自用版） | SSH over 443：本机实测 `ssh.github.com:443` TLS 握手失败，做了也无法验证；仅保留文档指引 |
+| P2-4 | ⛔ 不做（自用版） | Hosts 内容强校验：自用且只写入已验收的源，强校验需维护 IP 段表，维护成本高于风险 |
 | P2-5 | ⛔ 判定不做 | 审计确认 WinForms 为托盘依赖，无第二套 UI；不删（详见 §8.1） |
-| P2-6 | ⏸ 未做 | 无 `global.json`；本批不涉及构建一致性 |
+| P2-6 | ⛔ 不做（自用版） | 锁定 SDK：自用机器已固定 .NET 10；加 `global.json` 对自用无实际收益 |
 
-> 按 22 项计：**已做 14 项 / 部分完成 1 项（P0-5）/ 判定不做 2 项（P1-2、P2-5）/ 未做 5 项（P2-1、P2-2、P2-3、P2-4、P2-6）**。未做项均为"下版本"或"工作量过大"，不是遗漏。
+> 按 22 项计：**已做 14 项 / 部分完成 1 项（P0-5）/ 不做 7 项（P1-2、P2-1~P2-6）**，无"未做悬空"项。
+
 
 ---
 
@@ -641,8 +644,8 @@ Maven（`~/.m2/settings.xml` 的 `<proxies>`）：
 | 方法 | 覆盖场景 | 需不需要出口 | 实测结果 | 实测时间 | 副作用 | 结论 |
 |---|---|---|---|---|---|---|
 | 直连（baseline） | 全部 | 不需要 | raw 200 内容一致 0.52s；api 200 0.34s；codeload 200 1.23s；git ls-remote 成功 0.96s；**github.com 页面 12s 超时；release 下载 12s 超时** | 21:45 | 无 | 基线：git/raw/codeload 直连可用，页面与 release 下载不可用 |
-| 前缀反代 `ghfast.top` | git/raw/release/codeload/页面 | 不需要 | **raw 超时；页面超时；codeload 403；release 返回 200（12s，仅收到 638044 字节即中断，未做完整性校验）** | 21:45 | 不改全局配置 | 仅 release 有响应，完整性未验证 → **部分可用，不作主选** |
-| 前缀反代 `ghproxy.net` | git/raw/release/codeload/页面 | 不需要 | raw 502；页面超时；codeload 超时；**git ls-remote 成功但耗时 69.66s** | 21:45 | 不改全局配置 | 仅 git 协议可用且很慢 → 可作兜底，不作首选 |
+| 前缀反代 `ghfast.top` | git/raw/release/codeload/页面 | 不需要 | **raw 超时；页面超时；codeload 403；release HTTP 200，仅收到前 638044 字节（12s 截断）** | 21:45 | 不改全局配置 | 仅验证 HTTP 状态与前 638KB，**未做完整性与哈希校验**，不得表述为"已验证可用" |
+| 前缀反代 `ghproxy.net` | git/raw/release/codeload/页面 | 不需要 | raw 502；页面超时；codeload 超时；**git ls-remote 成功但耗时 69.66s** | 21:45 | 不改全局配置 | **已从可用池移除**（降为末位并显式标注"严重超时、不建议使用"） |
 | 前缀反代 `gh.api.99988866.xyz` | git/raw/页面 | 不需要 | raw 连接失败（0.6s）；页面 12s 超时 | 21:45 | 不改全局配置 | 不可用 → 排除 |
 | 国内 Git 镜像 `gitclone.com` | git 协议 | 不需要 | **git ls-remote 成功 0.49s** | 21:45 | 不改全局配置 | 可集成（仅 git clone/fetch/pull） |
 | CDN `cdn.jsdelivr.net` | 仓库内文件（非 release） | 不需要 | **200 内容一致 7.20s** | 21:45 | 不改全局配置 | 可集成（仅仓库文件，release 二进制不覆盖） |
@@ -660,12 +663,14 @@ Maven（`~/.m2/settings.xml` 的 `<proxies>`）：
 
 | 类别 | 是否已配置镜像改写 | 本机当前实测 |
 |---|---|---|
-| git 协议（clone/fetch/pull） | 是（`insteadOf` + `gitclone.com`） | gitclone.com 通过；ghproxy 通过但慢；直连也可用 |
+| git 协议（clone/fetch/pull） | 是（`insteadOf` + `gitclone.com`） | gitclone.com 通过；ghproxy 通过但 69.66s（已降级）；直连也可用 |
 | `raw.githubusercontent.com` | 是（前缀 + jsDelivr） | 直连通过；jsDelivr 通过；ghfast 当前超时 |
 | `releases/download`（含 302 到 `objects.githubusercontent.com`） | 是（`github.com` 与 `githubusercontent.com` 前缀） | 直连超时；ghfast 仅部分字节；**`objects` 签名 URL 未取得，未实测** |
 | `codeload.github.com` | **本批补齐** | 直连通过；ghfast 403；ghproxy 超时 |
 
-### 9.3 策略设计（提案，未落地 UI）
+### 9.3 策略设计（判定不做，提案备查）
+
+> 结论：**不做策略列表界面、不加多策略勾选**。代码中没有策略选择相关死代码；界面只保留一个"打开镜像版页面"入口 + 状态提示。以下提案仅供后续版本参考，未进入实现。
 
 1. **策略清单**：每条策略声明"覆盖的域名/场景 + 限制 + 三条状态"，不再用一排无差别开关。候选：①Git 改写（git 协议）②前缀镜像（raw/release/页面）③CDN（仓库文件）④离线预下载（文档型）。
 2. **状态标签只有三种**：`可用`（最近一次检测内容校验通过）、`不可用（原因 + 检测时间）`、`需自备出口`（如 `HTTPS_PROXY`；只显示说明，不渲染开关）。未实测一律显示"不可用/未验证"，不允许默认看起来可用。
@@ -674,12 +679,12 @@ Maven（`~/.m2/settings.xml` 的 `<proxies>`）：
 
 ### 9.4 直白结论
 
-**在不引入出口节点的前提下，本项目最多做到：git clone/fetch/pull、raw 文件、release 安装包、codeload 归档（可用性取决于镜像当下状态）+ 公开页面走镜像版浏览。** 无法覆盖：`api.github.com` 接口、需要登录的操作（star/issue/私有仓库）、页面内脚本请求、`ghcr.io` 容器镜像、`git push` 鉴权。且本机当前镜像池可用率偏低（稳定通过的只有 gitclone.com 的 git 协议与 jsDelivr 的仓库文件），因此**"通用加速"不成立**：只能按场景选可用路径，并把失败如实展示。
+**在不引入出口节点的前提下，本项目最多做到：git clone/fetch/pull、raw 文件、release 安装包、codeload 归档（可用性取决于镜像当下状态）+ 公开页面走镜像版浏览。** 不需要加速：`api.github.com` 接口与需要登录的操作（**直连可用，无需加速**）。不可能覆盖：页面内脚本请求、`ghcr.io` 容器镜像、`git push` 鉴权。且本机当前镜像池可用率偏低（稳定通过的只有 gitclone.com 的 git 协议与 jsDelivr 的仓库文件，ghproxy 严重超时已降级），因此**"通用加速"不成立**：只能按场景选可用路径，并把失败如实展示。
 
 ### 9.5 相关截图
 
 - [batch6-mirror-link-entry.png](file:///E:/CsharpCode/repos/GithubAccelerator/docs/screenshots/batch6-mirror-link-entry.png)：下载加速器入口（含"镜像版页面不是 github.com"与"不装证书/不改系统代理"说明）
-- [batch6-mirror-unsupported.png](file:///E:/CsharpCode/repos/GithubAccelerator/docs/screenshots/batch6-mirror-unsupported.png)：`api.github.com` 明确"无法加速" + 原始链接回退
+- [batch6-mirror-unsupported.png](file:///E:/CsharpCode/repos/GithubAccelerator/docs/screenshots/batch6-mirror-unsupported.png)：`api.github.com` 提示"直连可用，无需加速" + 原始链接回退
 - [batch6-boundary-guide.png](file:///E:/CsharpCode/repos/GithubAccelerator/docs/screenshots/batch6-boundary-guide.png)：首启引导的"能做什么 / 不能做什么"
 
 
