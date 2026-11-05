@@ -196,6 +196,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly GithubHostsService _hostsService;
     private readonly GithubConnectionService _connectionService;
     private readonly IHostsFileService _hostsFileService;
+    private readonly IHostsBackupService _backupService;
     private readonly IDnsFlusher _dnsFlusher;
     private readonly DownloadAccelerationService _downloadAccelerationService;
     private readonly SettingsViewModel _settings;
@@ -452,6 +453,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _hostsService = new GithubHostsService();
         _connectionService = new GithubConnectionService();
         _hostsFileService = new WindowsHostsFileService();
+        _backupService = new HostsBackupService(_hostsFileService);
         _dnsFlusher = PlatformServiceFactory.CreateDnsFlusher();
         _downloadAccelerationService = new DownloadAccelerationService();
 
@@ -990,41 +992,59 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         try
         {
             var currentContent = await _hostsFileService.ReadHostsFileAsync();
-            const string startMarker = "# === GitHub Accelerator Start ===";
-            const string endMarker = "# === GitHub Accelerator End ===";
-            
-            if (currentContent.Contains(startMarker))
+            if (!_hostsFileService.IsGithubHostsApplied(currentContent))
             {
-                await _hostsFileService.BackupHostsFileAsync();
-                
-                var startIndex = currentContent.IndexOf(startMarker, StringComparison.Ordinal);
-                var endIndex = currentContent.IndexOf(endMarker, startIndex, StringComparison.Ordinal);
-                
-                if (endIndex >= 0)
-                {
-                    endIndex += endMarker.Length;
-                    var cleanedContent = currentContent.Substring(0, startIndex) + currentContent.Substring(endIndex);
-                    
-                    var hostsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "drivers", "etc", "hosts");
-                    await File.WriteAllTextAsync(hostsPath, cleanedContent.Trim());
-                    
-                    IsHostsApplied = false;
-                    CurrentHostsSource = string.Empty;
-                    StatusMessage = "已清除我们添加的 Hosts 内容";
-                    _historyService.Record(OperationType.HostsApplied, "清除 Hosts 成功", true);
-                    _notificationService.Success("Hosts 清除", "已成功清除我们添加的 Hosts 内容");
-                    return;
-                }
+                IsHostsApplied = false;
+                StatusMessage = "当前没有我们添加的内容";
+                _notificationService.Info("Hosts 清除", "当前没有我们添加的内容");
+                return;
             }
-            
-            StatusMessage = "没有找到需要清除的内容";
-            _notificationService.Info("Hosts 清除", "当前没有我们添加的内容");
+
+            // 只删除本项目标记块：块外内容（含用户手工修改）保持原样；
+            // 若块内容与上次写入不一致，服务会返回"可能被手动修改"的说明。
+            var beforeModified = _hostsFileService.IsBlockModified(currentContent);
+            var success = await _hostsFileService.RestoreOriginalHostsAsync();
+
+            if (success)
+            {
+                IsHostsApplied = false;
+                CurrentHostsSource = string.Empty;
+                StatusMessage = beforeModified
+                    ? "已移除加速块（该块内容与上次写入不一致，可能被手动修改过；块外内容未改动）"
+                    : "已清除我们添加的 Hosts 内容";
+                _historyService.Record(OperationType.HostsApplied, "清除 Hosts 成功", true);
+                _notificationService.Success("Hosts 清除",
+                    beforeModified
+                        ? "已移除加速块。检测到块内容与上次写入不同，可能是手动修改过；块外内容保持原样。"
+                        : "已成功清除我们添加的 Hosts 内容");
+                return;
+            }
+
+            StatusMessage = "清除失败：Hosts 文件未能原子替换，原文件保持不变";
+            _notificationService.Error("Hosts 清除", StatusMessage);
         }
         catch (Exception ex)
         {
             StatusMessage = $"清除失败：{ex.Message}";
             _notificationService.Error("Hosts 清除", $"清除失败：{ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// 加速写入的统一入口：首次写入前保存"首启前完整快照"，供高级恢复使用。
+    /// </summary>
+    private async Task<bool> ApplyAcceleratedHostsAsync(string hostsContent)
+    {
+        try
+        {
+            await _backupService.EnsureFirstRunSnapshotAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "创建首启前 Hosts 快照失败，继续应用加速");
+        }
+
+        return await _hostsFileService.ApplyGithubHostsAsync(hostsContent);
     }
 
     [RelayCommand]
@@ -1133,7 +1153,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         var hostsWasApplied = IsHostsApplied;
         string? originalHostsBlock = null;
         string? originalHostsContent = null;
-        var hostsPath = GetHostsPath();
 
         try
         {
@@ -1146,8 +1165,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             // 1. 测量"应用前"：如果我们的 hosts 已应用，先临时移除，测真实无加速状态
             if (hostsWasApplied && !string.IsNullOrEmpty(originalHostsBlock))
             {
-                var cleaned = RemoveGithubHostsBlock(originalHostsContent);
-                await File.WriteAllTextAsync(hostsPath, cleaned);
+                if (!await _hostsFileService.RestoreOriginalHostsAsync())
+                {
+                    StatusMessage = "测速中止：无法临时移除 Hosts 加速块（原文件保持不变）";
+                    return;
+                }
                 await _dnsFlusher.FlushDnsCacheAsync();
                 await Task.Delay(600);
                 IsHostsApplied = false;
@@ -1159,10 +1181,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             // 2. 测量"应用后"：恢复或应用 hosts
             if (hostsWasApplied && !string.IsNullOrEmpty(originalHostsBlock))
             {
-                var cleaned = await _hostsFileService.ReadHostsFileAsync();
-                var restored = RemoveGithubHostsBlock(cleaned);
-                restored = (restored + "\n" + originalHostsBlock).Trim() + "\n";
-                await File.WriteAllTextAsync(hostsPath, restored);
+                if (!await _hostsFileService.ApplyGithubHostsAsync(originalHostsBlock))
+                {
+                    StatusMessage = "测速完成，但恢复加速块失败：请重新点击加速";
+                }
                 IsHostsApplied = true;
             }
             else
@@ -1221,12 +1243,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             PostApplyLatency = "-- ms";
             LatencyImprovement = "--";
 
-            // 出现异常时尝试恢复原始 hosts
+            // 出现异常时尝试恢复原始 hosts（整体还原，不走标记块路径）
             if (!string.IsNullOrEmpty(originalHostsContent))
             {
                 try
                 {
-                    await File.WriteAllTextAsync(hostsPath, originalHostsContent);
+                    await _hostsFileService.ReplaceHostsFileAsync(originalHostsContent);
                     IsHostsApplied = _hostsFileService.IsGithubHostsApplied(originalHostsContent);
                 }
                 catch (Exception restoreEx)
@@ -1293,35 +1315,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         < 1000 => $"{ms} ms",
         _ => $"{ms / 1000.0:F1}s"
     };
-
-    private static string GetHostsPath()
-    {
-        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "drivers", "etc", "hosts");
-    }
-
-    private static string RemoveGithubHostsBlock(string content)
-    {
-        const string startMarker = "# === GitHub Accelerator Start ===";
-        const string endMarker = "# === GitHub Accelerator End ===";
-
-        var startIndex = content.IndexOf(startMarker, StringComparison.Ordinal);
-        while (startIndex >= 0)
-        {
-            var endIndex = content.IndexOf(endMarker, startIndex, StringComparison.Ordinal);
-            if (endIndex < 0)
-            {
-                content = content.Substring(0, startIndex);
-                break;
-            }
-
-            content = content.Substring(0, startIndex) + content.Substring(endIndex + endMarker.Length);
-            startIndex = content.IndexOf(startMarker, StringComparison.Ordinal);
-        }
-
-        content = System.Text.RegularExpressions.Regex.Replace(content, @"^\s*[\r\n]+", "", System.Text.RegularExpressions.RegexOptions.Multiline);
-        content = content.TrimStart('\r', '\n');
-        return content.Trim();
-    }
 
     private async Task ApplyBestHostsForSpeedTestAsync()
     {
@@ -1492,7 +1485,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             XTrace.WriteLine($"[ApplyHosts/All] 优化完成，内容长度={optimizedContent.Length}");
 
             // 4. 写入 hosts 文件
-            var success = await _hostsFileService.ApplyGithubHostsAsync(optimizedContent);
+            var success = await ApplyAcceleratedHostsAsync(optimizedContent);
 
             if (success)
             {
@@ -1546,7 +1539,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
             // 优化失败，退化为直接应用合并后的原始内容
             StatusMessage = "IP 优化失败，使用原始合并内容...";
-            var success = await _hostsFileService.ApplyGithubHostsAsync(mergedHosts);
+            var success = await ApplyAcceleratedHostsAsync(mergedHosts);
             if (success)
             {
                 IsHostsApplied = true;
@@ -1618,7 +1611,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 XTrace.WriteLine($"[ApplyHosts] 跳过 IP 优化（DNS 探测源），source={sourceName}");
             }
 
-            var success = await _hostsFileService.ApplyGithubHostsAsync(hostsContent);
+            var success = await ApplyAcceleratedHostsAsync(hostsContent);
 
             if (success)
             {
@@ -1781,7 +1774,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 XTrace.WriteLine($"[ApplySel] 优化失败，使用原始内容：{ex.Message}");
             }
 
-            var success = await _hostsFileService.ApplyGithubHostsAsync(mergedContent);
+            var success = await ApplyAcceleratedHostsAsync(mergedContent);
             
             if (success)
             {
