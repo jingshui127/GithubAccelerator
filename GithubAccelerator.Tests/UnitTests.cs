@@ -169,10 +169,7 @@ public class WindowsHostsFileServiceTests
         "127.0.0.1 localhost")]
     public void RemoveGithubHostsBlock_RemovesCorrectly(string input, string expected)
     {
-        var service = new WindowsHostsFileService();
-        var method = typeof(WindowsHostsFileService).GetMethod("RemoveGithubHostsBlock",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static);
-        var result = (string)method!.Invoke(service, new object[] { input })!;
+        var result = HostsContent.RemoveBlock(input, separatorAdded: true).Content;
         Assert.Equal(expected.Trim(), result.Trim());
     }
 }

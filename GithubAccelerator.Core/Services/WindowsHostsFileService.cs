@@ -1,54 +1,32 @@
 using System.IO;
-using System.Text;
-using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace GithubAccelerator.Services;
 
 public class WindowsHostsFileService : IHostsFileService
 {
     private const string HostsFilePath = @"C:\Windows\System32\drivers\etc\hosts";
-    private const string BackupFilePath = @"C:\Windows\System32\drivers\etc\hosts.backup";
-    private const string TempFilePath = @"C:\Windows\System32\drivers\etc\hosts.tmp";
-    private const string GithubHostsStartMarker = "# === GitHub Accelerator Start ===";
-    private const string GithubHostsEndMarker = "# === GitHub Accelerator End ===";
 
-    /// <summary>
-    /// 原子性地写入 Hosts 文件：先写入临时文件，再用 File.Replace 替换。
-    /// 避免断电/崩溃导致系统 Hosts 损坏。
-    /// </summary>
-    private static async Task<bool> AtomicWriteAsync(string content)
+    private readonly HostsFileManager _manager;
+
+    public WindowsHostsFileService() : this(HostsFilePath)
     {
-        var tempPath = TempFilePath + "." + Environment.CurrentManagedThreadId + "." + Guid.NewGuid().ToString("N");
-        try
-        {
-            await File.WriteAllTextAsync(tempPath, content);
-            if (File.Exists(HostsFilePath))
-            {
-                // File.Replace 原子替换，要求目标文件已存在
-                File.Replace(tempPath, HostsFilePath, null);
-            }
-            else
-            {
-                File.Move(tempPath, HostsFilePath);
-            }
-            return true;
-        }
-        catch
-        {
-            // 清理临时文件
-            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-            return false;
-        }
+    }
+
+    /// <summary>允许注入路径，便于在临时目录做等价文件测试。</summary>
+    public WindowsHostsFileService(string hostsPath, string? stateFilePath = null)
+    {
+        _manager = new HostsFileManager(hostsPath, stateFilePath);
     }
 
     public async Task<bool> BackupHostsFileAsync()
     {
         try
         {
-            if (!File.Exists(HostsFilePath))
+            if (!File.Exists(_manager.FilePath))
                 return false;
 
-            await Task.Run(() => File.Copy(HostsFilePath, BackupFilePath, true));
+            await Task.Run(() => File.Copy(_manager.FilePath, _manager.FilePath + ".backup", true));
             return true;
         }
         catch
@@ -57,107 +35,44 @@ public class WindowsHostsFileService : IHostsFileService
         }
     }
 
-    public async Task<string> ReadHostsFileAsync()
-    {
-        try
-        {
-            return await File.ReadAllTextAsync(HostsFilePath);
-        }
-        catch
-        {
-            return string.Empty;
-        }
-    }
+    public Task<string> ReadHostsFileAsync() => _manager.ReadAsync();
 
     public async Task<bool> ApplyGithubHostsAsync(string hostsContent)
     {
-        try
-        {
-            await BackupHostsFileAsync();
-            var currentContent = await ReadHostsFileAsync();
-            var newContent = RemoveGithubHostsBlock(currentContent);
-
-            // 添加标记区域，确保只管理我们自己的内容
-            newContent += $"\n{GithubHostsStartMarker}\n";
-            newContent += hostsContent.Trim();
-            newContent += $"\n{GithubHostsEndMarker}\n";
-
-            return await AtomicWriteAsync(newContent);
-        }
-        catch
-        {
-            return false;
-        }
+        await BackupHostsFileAsync();
+        var result = await _manager.ApplyBlockAsync(hostsContent);
+        return result.Success;
     }
 
     public async Task<bool> RestoreOriginalHostsAsync()
     {
-        try
-        {
-            if (!File.Exists(BackupFilePath))
-                return false;
-
-            var backupContent = await File.ReadAllTextAsync(BackupFilePath);
-            var currentContent = await ReadHostsFileAsync();
-            var restoredContent = RemoveGithubHostsBlock(currentContent);
-            restoredContent += "\n" + RemoveGithubHostsBlock(backupContent);
-            return await AtomicWriteAsync(restoredContent);
-        }
-        catch
-        {
-            return false;
-        }
+        var result = await _manager.RemoveBlockAsync();
+        return result.Success;
     }
 
-    public bool IsGithubHostsApplied(string hostsContent)
+    public async Task<bool> ReplaceHostsFileAsync(string content)
     {
-        return hostsContent.Contains(GithubHostsStartMarker);
+        var result = await _manager.ReplaceAllAsync(content);
+        return result.Success;
     }
 
-    public string GetCurrentGithubHostsBlock(string hostsContent)
-    {
-        var startIndex = hostsContent.IndexOf(GithubHostsStartMarker, StringComparison.Ordinal);
-        if (startIndex < 0) return string.Empty;
+    public bool IsGithubHostsApplied(string hostsContent) => _manager.IsBlockApplied(hostsContent);
 
-        var endIndex = hostsContent.IndexOf(GithubHostsEndMarker, startIndex, StringComparison.Ordinal);
-        if (endIndex < 0) return hostsContent.Substring(startIndex);
+    public bool IsBlockModified(string hostsContent) => _manager.IsBlockModified(hostsContent);
 
-        return hostsContent.Substring(startIndex, endIndex - startIndex + GithubHostsEndMarker.Length);
-    }
+    public string GetCurrentGithubHostsBlock(string hostsContent) => HostsContent.GetBlock(hostsContent);
 
     public bool RequiresAdminPrivileges()
     {
         try
         {
-            using var fs = File.Open(HostsFilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            using var fs = File.Open(_manager.FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
             return false;
         }
         catch (UnauthorizedAccessException)
         {
             return true;
         }
-    }
-
-    private static string RemoveGithubHostsBlock(string content)
-    {
-        var startIndex = content.IndexOf(GithubHostsStartMarker, StringComparison.Ordinal);
-        while (startIndex >= 0)
-        {
-            var endIndex = content.IndexOf(GithubHostsEndMarker, startIndex, StringComparison.Ordinal);
-            if (endIndex < 0)
-            {
-                content = content.Substring(0, startIndex);
-                break;
-            }
-
-            content = content.Substring(0, startIndex) + content.Substring(endIndex + GithubHostsEndMarker.Length);
-            startIndex = content.IndexOf(GithubHostsStartMarker, StringComparison.Ordinal);
-        }
-        
-        content = Regex.Replace(content, @"^\s*[\r\n]+", "", RegexOptions.Multiline);
-        content = content.TrimStart('\r', '\n');
-        
-        return content.Trim();
     }
 }
 
