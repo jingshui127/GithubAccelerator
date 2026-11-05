@@ -47,6 +47,8 @@ public class MirrorUrlService
         {
             var report = await _health.CheckAsync(cancellationToken);
             result.HealthMessage = report.Message;
+            result.AnyHealthyMirror = report.AnyHealthy;
+            result.HealthCheckedAt = report.CheckedAt;
 
             var originalOrder = result.MirrorUrls.Select((url, index) => (url, index)).ToList();
             result.MirrorUrls = originalOrder
@@ -76,6 +78,17 @@ public class MirrorUrlService
     }
 
     /// <summary>
+    /// 镜像前缀无法覆盖的域名（需要鉴权或不属于下载路径），不做假支持。
+    /// </summary>
+    private static readonly string[] UnsupportedHosts =
+    {
+        "api.github.com",
+        "pkg.github.com",
+        "ghcr.io",
+        "github.com/login"
+    };
+
+    /// <summary>
     /// 解析 GitHub URL 并生成所有可用的加速链接
     /// </summary>
     public MirrorResult ConvertUrl(string inputUrl)
@@ -88,6 +101,16 @@ public class MirrorUrlService
         // 标准化 URL
         var url = NormalizeUrl(inputUrl);
         result.NormalizedUrl = url;
+
+        var host = TryGetHost(url);
+        if (host != null && UnsupportedHosts.Contains(host))
+        {
+            result.UnsupportedReason = host == "github.com/login"
+                ? "github.com/login 是需要登录的操作，镜像站无法替代登录，本工具无法加速。"
+                : $"{host} 不在本工具的镜像覆盖范围：镜像前缀只能改写 github.com / raw.githubusercontent.com / codeload.github.com 的下载路径，接口或包管理请求需要鉴权，无法加速。";
+            result.UrlType = GithubUrlType.Unsupported;
+            return result;
+        }
 
         // 判断 URL 类型
         result.UrlType = DetectUrlType(url);
@@ -158,17 +181,29 @@ public class MirrorUrlService
 
         if (lower.Contains("cdn.jsdelivr.net")) return GithubUrlType.JsDelivr;
         if (lower.Contains("raw.githubusercontent.com")) return GithubUrlType.RawFile;
+        if (lower.Contains("codeload.github.com")) return GithubUrlType.ReleaseOrZip;
         if (lower.Contains("/archive/") || lower.Contains("/releases/download/") || lower.EndsWith(".zip") || lower.EndsWith(".tar.gz"))
             return GithubUrlType.ReleaseOrZip;
-        if (lower.StartsWith("git@") || lower.StartsWith("git clone") || lower.StartsWith("https://github.com/") && !lower.Contains("/blob/") && !lower.Contains("/tree/"))
+        if (lower.StartsWith("git@") || lower.StartsWith("git clone"))
+            return GithubUrlType.GitClone;
+        if (TryGetHost(url) == "github.com")
         {
-            // 简单判断：如果是 git clone 或 git@ 格式
-            if (lower.StartsWith("git ") || lower.StartsWith("git@")) return GithubUrlType.GitClone;
-            // 如果是仓库主页格式且没有具体文件路径
-            if (System.Text.RegularExpressions.Regex.IsMatch(lower, @"github\.com/[^/]+/[^/?]+$"))
-                return GithubUrlType.Repository;
+            // 仓库主页 / 文件页 / clone 地址都可由前缀镜像改写为镜像版页面。
+            return GithubUrlType.Repository;
         }
         return GithubUrlType.Unknown;
+    }
+
+    private static string? TryGetHost(string url)
+    {
+        try
+        {
+            return new Uri(url).Host.ToLowerInvariant();
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private void GenerateRawFileMirrors(MirrorResult result, string url)
@@ -254,6 +289,17 @@ public class MirrorResult
     /// <summary>镜像池实测健康度说明（含全源不可达时的可读提示）。</summary>
     public string HealthMessage { get; set; } = "";
 
+    /// <summary>本次检测是否至少有一个镜像内容校验通过；未检测时为 false（不假装可用）。</summary>
+    public bool AnyHealthyMirror { get; set; }
+
+    /// <summary>镜像检测时间；未检测时为 null。</summary>
+    public DateTimeOffset? HealthCheckedAt { get; set; }
+
+    /// <summary>域名不被镜像覆盖时的明确原因（如 api.github.com）。</summary>
+    public string UnsupportedReason { get; set; } = "";
+
+    public bool IsUnsupported => UrlType == GithubUrlType.Unsupported;
+
     /// <summary>
     /// URL 类型显示文本
     /// </summary>
@@ -264,6 +310,7 @@ public class MirrorResult
         GithubUrlType.Repository => "🔗 仓库页面",
         GithubUrlType.GitClone => "🔄 Git Clone 命令",
         GithubUrlType.JsDelivr => "🚀 jsDelivr CDN 链接",
+        GithubUrlType.Unsupported => "⛔ 本工具无法加速的域名",
         _ => "❓ 未知类型"
     };
 
@@ -308,5 +355,47 @@ public enum GithubUrlType
     ReleaseOrZip,
     Repository,
     GitClone,
-    JsDelivr
+    JsDelivr,
+    Unsupported
+}
+
+/// <summary>
+/// "打开镜像版页面"的决策结果：能开就给出地址，不能开就给出原因与"改用原始链接"选项。
+/// 纯函数，便于测试，不依赖 UI 与网络。
+/// </summary>
+public sealed record MirrorOpenPlan(bool CanOpen, string? Url, string SiteName, string Message, bool OfferOriginalLink);
+
+public static class MirrorOpenPlanner
+{
+    /// <summary>必须始终显示的说明：镜像页不是 github.com。</summary>
+    public const string MirrorNotice = "这是第三方镜像站的页面，不是访问 github.com 本身。";
+
+    public static MirrorOpenPlan Plan(MirrorResult result, DateTimeOffset? now = null)
+    {
+        if (result.IsUnsupported)
+        {
+            return new(false, null, "", $"{result.UnsupportedReason} 建议直接使用原始链接。", true);
+        }
+
+        if (!result.HasMirrorUrls)
+        {
+            if (result.HasGitCloneCommands || result.HasJsDelivrUrl)
+            {
+                return new(false, null, "", "该链接只生成了 Git 命令或 CDN 链接，没有可打开的镜像版页面。", false);
+            }
+            return new(false, null, "", "没有可用的镜像地址：该链接不在镜像覆盖范围内，或镜像转换失败。", true);
+        }
+
+        if (!result.AnyHealthyMirror)
+        {
+            var checkedAt = result.HealthCheckedAt ?? now;
+            var timeText = checkedAt == null ? "本次检测" : $"{checkedAt:yyyy-MM-dd HH:mm} 检测";
+            return new(false, null, "",
+                $"{timeText}：所有加速镜像都不可用（{result.HealthMessage}）。请稍后重试，或改用原始链接直连（可能无法打开）。",
+                true);
+        }
+
+        var best = result.MirrorUrls[0];
+        return new(true, best.Url, best.SiteName, $"{MirrorNotice}（镜像：{best.SiteName}）", false);
+    }
 }

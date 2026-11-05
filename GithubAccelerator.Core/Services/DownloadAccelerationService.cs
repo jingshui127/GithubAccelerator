@@ -28,7 +28,8 @@ public class DownloadAccelerationService : IDownloadAccelerationService
         "github.com",
         "raw.githubusercontent.com",
         "githubusercontent.com",
-        "github-releases.githubusercontent.com"
+        "github-releases.githubusercontent.com",
+        "codeload.github.com"
     };
 
     public string AccelerateUrl(string url)
