@@ -172,6 +172,27 @@
                     </Border>
                 </StackPanel>
 
+                <!-- 隐私与诊断 -->
+                <StackPanel Spacing="12">
+                    <TextBlock Text="隐私与诊断" FontSize="16" FontWeight="SemiBold"/>
+
+                    <Border Padding="16" CornerRadius="8"
+                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                            BorderThickness="1">
+                        <StackPanel Spacing="16">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <ToggleSwitch IsChecked="{Binding DiagnosticsEnabled}" HorizontalAlignment="Left"/>
+                                <StackPanel>
+                                    <TextBlock Text="诊断信息上报" FontSize="14" FontWeight="SemiBold"/>
+                                    <TextBlock Text="默认关闭。开启后会采集应用版本、CPU/内存/线程数与关键操作结果，发送到开发者自建的监控服务器（47.113.219.65:6600），用于发现崩溃和性能问题。关闭时不会发出任何上报请求，可随时在此关闭。"
+                                               FontSize="12" Classes="SecondaryText" TextWrapping="Wrap" MaxWidth="520"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
                 <!-- 日志设置 -->
                 <StackPanel Spacing="12">
                     <TextBlock Text="日志设置" FontSize="16" FontWeight="SemiBold"/>

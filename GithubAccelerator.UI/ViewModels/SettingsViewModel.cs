@@ -55,6 +55,8 @@ public partial class SettingsViewModel : ObservableObject
         public bool ShowTrayNotifications { get; set; } = true;
         public bool AutoFlushDns { get; set; } = true;
         public bool ShowQuickGuideOnStartup { get; set; } = true;
+        public bool DiagnosticsEnabled { get; set; }
+        public bool HasCompletedFirstRunGuide { get; set; }
         public string GitProxyUrl { get; set; } = "https://ghproxy.net";
         public string LogLevel { get; set; } = "Information";
     }
@@ -120,6 +122,21 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _showQuickGuideOnStartup = true;
 
+    /// <summary>诊断信息上报（遥测），默认关闭；切换立即生效并落盘。</summary>
+    [ObservableProperty]
+    private bool _diagnosticsEnabled = false;
+
+    partial void OnDiagnosticsEnabledChanged(bool value)
+    {
+        if (_isLoading) return;
+        DiagnosticsSettings.SetEnabled(value);
+        Save();
+    }
+
+    /// <summary>是否已完成首启引导，用于"只显示一次"。</summary>
+    [ObservableProperty]
+    private bool _hasCompletedFirstRunGuide = false;
+
     [ObservableProperty]
     private string _gitProxyUrl = "https://ghproxy.net";
 
@@ -165,6 +182,8 @@ public partial class SettingsViewModel : ObservableObject
                 ShowTrayNotifications = ShowTrayNotifications,
                 AutoFlushDns = AutoFlushDns,
                 ShowQuickGuideOnStartup = ShowQuickGuideOnStartup,
+                DiagnosticsEnabled = DiagnosticsEnabled,
+                HasCompletedFirstRunGuide = HasCompletedFirstRunGuide,
                 GitProxyUrl = GitProxyUrl,
                 LogLevel = LogLevel
             };
@@ -203,6 +222,8 @@ public partial class SettingsViewModel : ObservableObject
                     ShowTrayNotifications = settings.ShowTrayNotifications;
                     AutoFlushDns = settings.AutoFlushDns;
                     ShowQuickGuideOnStartup = settings.ShowQuickGuideOnStartup;
+                    DiagnosticsEnabled = settings.DiagnosticsEnabled;
+                    HasCompletedFirstRunGuide = settings.HasCompletedFirstRunGuide;
                     GitProxyUrl = settings.GitProxyUrl;
                     _logLevel = settings.LogLevel;
                     LogService.Instance.SetLogLevel(_logLevel);
@@ -247,6 +268,8 @@ public partial class SettingsViewModel : ObservableObject
         ShowTrayNotifications = true;
         AutoFlushDns = true;
         ShowQuickGuideOnStartup = true;
+        DiagnosticsEnabled = false;
+        HasCompletedFirstRunGuide = false;
         GitProxyUrl = "https://ghproxy.net";
         LogLevel = "Information";
 

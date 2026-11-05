@@ -28,6 +28,8 @@ public class AppSettingsData
     public bool StartMinimized { get; set; }
     public bool AutoFlushDns { get; set; } = true;
     public bool ShowQuickGuideOnStartup { get; set; } = true;
+    public bool DiagnosticsEnabled { get; set; }
+    public bool HasCompletedFirstRunGuide { get; set; }
     public string LogLevel { get; set; } = "Information";
 }
 
@@ -68,6 +70,8 @@ public class DataExportImportService
                     StartMinimized = settings.StartMinimized,
                     AutoFlushDns = settings.AutoFlushDns,
                     ShowQuickGuideOnStartup = settings.ShowQuickGuideOnStartup,
+                    DiagnosticsEnabled = settings.DiagnosticsEnabled,
+                    HasCompletedFirstRunGuide = settings.HasCompletedFirstRunGuide,
                     LogLevel = settings.LogLevel
                 } : new AppSettingsData { IsDarkMode = ThemeManager.IsDarkMode }
             };
@@ -215,6 +219,8 @@ public class DataExportImportService
                 settings.StartMinimized = data.Settings.StartMinimized;
                 settings.AutoFlushDns = data.Settings.AutoFlushDns;
                 settings.ShowQuickGuideOnStartup = data.Settings.ShowQuickGuideOnStartup;
+                settings.DiagnosticsEnabled = data.Settings.DiagnosticsEnabled;
+                settings.HasCompletedFirstRunGuide = data.Settings.HasCompletedFirstRunGuide;
                 settings.LogLevel = data.Settings.LogLevel;
                 
                 settings.Save();
