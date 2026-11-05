@@ -148,6 +148,17 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private string _gitRewriteStatus = "检测中...";
 
+    /// <summary>Git 改写项冲突时的人话提示（不覆盖用户已有配置）。</summary>
+    [ObservableProperty]
+    private string _gitRewriteAdvice = string.Empty;
+
+    public bool HasGitRewriteAdvice => !string.IsNullOrWhiteSpace(GitRewriteAdvice);
+
+    partial void OnGitRewriteAdviceChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasGitRewriteAdvice));
+    }
+
     /// <summary>历史 http(s).proxy 条目，逐行展示给用户，清理前可核对。</summary>
     public ObservableCollection<string> LegacyProxyEntryLines => _legacyProxyEntryLines;
 
@@ -364,11 +375,14 @@ public partial class SettingsViewModel : ObservableObject
             var result = await _gitRewriteService.EnableAsync(GitMirrorBaseUrl);
             if (result.Success)
             {
+                GitRewriteAdvice = string.Empty;
                 Save();
                 ToastService.Instance.Success("Git 加速已开启", result.Message);
             }
             else
             {
+                var advice = FailureAdvisor.Get(FailureKind.GitConfigConflict);
+                GitRewriteAdvice = advice.Cause + " " + advice.ActionText + "。";
                 ToastService.Instance.Error("未能开启 Git 加速", result.Message);
             }
             await RefreshGitRewriteStatus();
@@ -440,6 +454,14 @@ public partial class SettingsViewModel : ObservableObject
         {
             ToastService.Instance.Error("历史配置清理失败", ex.Message);
         }
+    }
+
+    /// <summary>打开诊断包预览窗口：先生成清单，用户确认后才允许保存 zip。</summary>
+    [RelayCommand]
+    private void OpenDiagnosticsBundle()
+    {
+        var window = new Views.DiagnosticsPreviewWindow();
+        window.Show();
     }
 
     private async Task RefreshGitRewriteStatus()

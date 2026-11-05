@@ -496,6 +496,61 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _latestNotification = string.Empty;
 
+    /// <summary>失败自救提示：一句人话原因 + 一个按钮；成功或用户关闭后清空。</summary>
+    [ObservableProperty]
+    private FailureAdvice? _failureAdvice;
+
+    public bool HasFailureAdvice => FailureAdvice != null;
+    public string FailureCauseText => FailureAdvice?.Cause ?? string.Empty;
+    public string FailureActionText => FailureAdvice?.ActionText ?? string.Empty;
+
+    partial void OnFailureAdviceChanged(FailureAdvice? value)
+    {
+        OnPropertyChanged(nameof(HasFailureAdvice));
+        OnPropertyChanged(nameof(FailureCauseText));
+        OnPropertyChanged(nameof(FailureActionText));
+    }
+
+    private void ShowFailureAdvice(FailureKind kind)
+    {
+        FailureAdvice = FailureAdvisor.Get(kind);
+    }
+
+    [RelayCommand]
+    private void DismissFailureAdvice()
+    {
+        FailureAdvice = null;
+    }
+
+    /// <summary>执行失败提示里的那一个按钮，不额外弹窗、不扩大操作范围。</summary>
+    [RelayCommand]
+    private async Task RunFailureAdviceAction()
+    {
+        var advice = FailureAdvice;
+        if (advice == null) return;
+        FailureAdvice = null;
+
+        switch (advice.Kind)
+        {
+            case FailureKind.ElevationDenied:
+            case FailureKind.HostsWriteDenied:
+                await RequestElevationAsync(LaunchIntent.ApplyHosts);
+                break;
+            case FailureKind.AllMirrorsUnreachable:
+                await ApplyHostsFromAllSources();
+                break;
+            case FailureKind.NoNetwork:
+                await TestGitHubConnectionAsync(showNotification: true);
+                break;
+            case FailureKind.HostsRewrittenByThirdParty:
+                await ViewHostsContent();
+                break;
+            case FailureKind.GitConfigConflict:
+                ShowSettings();
+                break;
+        }
+    }
+
     public bool HasSelectedSources => Sources.Any(s => s.IsSelected);
 
     public int SelectedSourcesCount => Sources.Count(s => s.IsSelected);
@@ -1196,6 +1251,20 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             Log.Warning(ex, "创建首启前 Hosts 快照失败，继续应用加速");
         }
 
+        // 写入前识别"我们那段被第三方软件改过"的情况，给用户一个可执行的查看入口。
+        try
+        {
+            var current = await _hostsFileService.ReadHostsFileAsync();
+            if (_hostsFileService.IsGithubHostsApplied(current) && _hostsFileService.IsBlockModified(current))
+            {
+                ShowFailureAdvice(FailureKind.HostsRewrittenByThirdParty);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "写入前检查 Hosts 标记块失败");
+        }
+
         return await _hostsFileService.ApplyGithubHostsAsync(hostsContent);
     }
 
@@ -1271,6 +1340,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     {
                         StatusMessage = "⚠️ GitHub 无法访问！请检查网络或使用代理";
                         _notificationService.Warning("GitHub 连接", "无法访问 GitHub，TCP 端口可能被封锁");
+                        ShowFailureAdvice(FailureKind.NoNetwork);
                     }
                 }
             });
@@ -1540,6 +1610,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 Log.Information("[Elevation] 用户取消 UAC，未修改 Hosts");
                 _notificationService.Info("已取消提权",
                     "Hosts 未被修改。可以稍后重试，或右键以管理员身份运行本应用。");
+                ShowFailureAdvice(FailureKind.ElevationDenied);
                 break;
 
             default:
@@ -1549,6 +1620,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 Log.Warning("[Elevation] 提权失败：{Error}", ElevationService.LastError);
                 _notificationService.Error("提权失败",
                     $"无法以管理员身份重启：{ElevationService.LastError}");
+                ShowFailureAdvice(FailureKind.ElevationDenied);
                 break;
         }
 
@@ -1627,6 +1699,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             _applyIssue = "所有数据源均不可用";
             StatusMessage = "所有数据源均获取失败，请检查网络";
             _notificationService.Error("Hosts 应用", "所有数据源均不可用");
+            ShowFailureAdvice(FailureKind.AllMirrorsUnreachable);
             return;
         }
 
@@ -1703,6 +1776,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 _historyService.Record(OperationType.HostsApplied, "应用 Hosts 失败：权限不足", false);
                 _notificationService.Error("Hosts 应用", "应用失败，请以管理员身份运行");
                 StardustMonitorService.Instance.ReportError("HostsApplyFailed", "权限不足或写入失败");
+                ShowFailureAdvice(FailureKind.HostsWriteDenied);
             }
         }
         catch (Exception ex)
@@ -1732,6 +1806,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             else
             {
                 _applyIssue = "Hosts 写入失败（权限不足或文件被占用）";
+                ShowFailureAdvice(FailureKind.HostsWriteDenied);
             }
         }
     }
@@ -1840,6 +1915,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 _historyService.Record(OperationType.HostsApplied, "应用 Hosts 失败：权限不足", false);
                 _notificationService.Error("Hosts 应用", "应用失败，请以管理员身份运行");
                 StardustMonitorService.Instance.ReportError("HostsApplyFailed", "权限不足或写入失败");
+                ShowFailureAdvice(FailureKind.HostsWriteDenied);
             }
         }
         catch (Exception ex)
@@ -2008,6 +2084,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 _applyIssue = "Hosts 写入失败（权限不足或文件被占用）";
                 StatusMessage = "Hosts 应用失败，请以管理员身份运行";
                 _notificationService.Error("Hosts 应用", "应用失败，请以管理员身份运行");
+                ShowFailureAdvice(FailureKind.HostsWriteDenied);
             }
         }
         catch (Exception ex)

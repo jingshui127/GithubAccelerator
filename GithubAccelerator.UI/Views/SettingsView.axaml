@@ -115,6 +115,9 @@
                                 <TextBlock Text="Git 加速状态" FontSize="14" FontWeight="SemiBold"/>
                                 <TextBlock Text="{Binding GitRewriteStatus}" FontSize="12" Classes="SecondaryText"
                                            TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding GitRewriteAdvice}" FontSize="12"
+                                           Foreground="#E8A23D" TextWrapping="Wrap"
+                                           IsVisible="{Binding HasGitRewriteAdvice}"/>
                             </StackPanel>
 
                             <StackPanel>
@@ -216,6 +219,19 @@
                                                FontSize="12" Classes="SecondaryText" TextWrapping="Wrap" MaxWidth="520"/>
                                 </StackPanel>
                             </StackPanel>
+
+                            <!-- 故障排查：只生成本地诊断包，绝不自动上传 -->
+                            <Border BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                    BorderThickness="0,1,0,0" Padding="0,12,0,0">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="故障排查 · 诊断包" FontSize="14" FontWeight="SemiBold"/>
+                                    <TextBlock Text="收集日志、脱敏后的设置、本程序涉及的 Git 键、镜像健康结果、系统信息和自己的 Hosts 块。导出前先列出清单与被脱敏的字段；只保存到本地，不会自动上传或发送。"
+                                               FontSize="12" Classes="SecondaryText" TextWrapping="Wrap" MaxWidth="520"/>
+                                    <Button Content="生成诊断包（先预览）"
+                                            Command="{Binding OpenDiagnosticsBundleCommand}"
+                                            Padding="16,6" FontSize="13" HorizontalAlignment="Left"/>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </Border>
                 </StackPanel>
