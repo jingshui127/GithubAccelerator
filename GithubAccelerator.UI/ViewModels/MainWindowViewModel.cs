@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
@@ -12,14 +13,50 @@ using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GithubAccelerator.Core.Services;
 using GithubAccelerator.Services;
 using GithubAccelerator.UI.Controls;
 using GithubAccelerator.UI.Services;
 using GithubAccelerator.UI.Views;
 using Microsoft.Extensions.Logging;
+using NewLife.Log;
 using Serilog;
+using LogLevel = Microsoft.Extensions.Logging.LogLevel;
 
 namespace GithubAccelerator.UI.ViewModels;
+
+/// <summary>
+/// Hosts 视图中单行数据的展示模型，包含行号、文本与匹配高亮状态。
+/// </summary>
+public partial class HostsLineViewModel : ObservableObject
+{
+    private static readonly Avalonia.Media.SolidColorBrush _matchBrush =
+        new(Avalonia.Media.Color.Parse("#FFF59D"));
+    private static readonly Avalonia.Media.SolidColorBrush _defaultBrush =
+        new(Avalonia.Media.Color.FromArgb(0, 255, 255, 255));
+
+    [ObservableProperty]
+    private int _lineNumber;
+
+    [ObservableProperty]
+    private string _text = string.Empty;
+
+    [ObservableProperty]
+    private bool _isMatch;
+
+    /// <summary>
+    /// 行号文本（右对齐 4 位），便于在 UI 中显示统一的列宽。
+    /// </summary>
+    public string LineNumberText => LineNumber.ToString("D4");
+
+    /// <summary>
+    /// 匹配时返回高亮背景画刷，否则返回透明画刷。
+    /// </summary>
+    public Avalonia.Media.IBrush MatchBackground => IsMatch ? _matchBrush : _defaultBrush;
+
+    partial void OnLineNumberChanged(int value) => OnPropertyChanged(nameof(LineNumberText));
+    partial void OnIsMatchChanged(bool value) => OnPropertyChanged(nameof(MatchBackground));
+}
 
 public partial class SourceStatusViewModel : ObservableObject
 {
@@ -49,6 +86,11 @@ public partial class SourceStatusViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isDnsProbe;
+
+    /// <summary>
+    /// 同源镜像 URL 列表（与 Url 内容相同，应用时主 URL 失败会依次尝试）
+    /// </summary>
+    public string[] MirrorUrls { get; set; } = Array.Empty<string>();
 
     public event Action<SourceStatusViewModel>? OnApplyRequested;
 
@@ -148,18 +190,19 @@ public partial class SourceStatusViewModel : ObservableObject
     }
 }
 
-public partial class MainWindowViewModel : ObservableObject
+public partial class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly ISourcePerformanceMonitor _performanceMonitor;
     private readonly GithubHostsService _hostsService;
     private readonly GithubConnectionService _connectionService;
     private readonly IHostsFileService _hostsFileService;
     private readonly IDnsFlusher _dnsFlusher;
+    private readonly DownloadAccelerationService _downloadAccelerationService;
     private readonly SettingsViewModel _settings;
     private readonly SourceStatisticsService _statsService;
     private System.Timers.Timer? _updateTimer;
-    private System.Timers.Timer? _autoUpdateTimer;
     private System.Timers.Timer? _githubConnectivityTimer;
+    private System.Timers.Timer? _periodicHostsRefreshTimer;
 
     [ObservableProperty]
     private bool _isGitHubAccessible;
@@ -219,16 +262,10 @@ public partial class MainWindowViewModel : ObservableObject
     private bool _isHostsGroupVisible;
 
     [ObservableProperty]
-    private PerformanceChartViewModel? _performanceChart;
+    private NetworkMonitorViewModel? _networkMonitor;
 
     [ObservableProperty]
-    private bool _isPerformanceChartVisible;
-
-    [ObservableProperty]
-    private GitHubLatencyViewModel? _gitHubLatency;
-
-    [ObservableProperty]
-    private bool _isGitHubLatencyVisible;
+    private bool _isNetworkMonitorVisible;
 
     [ObservableProperty]
     private DownloadAcceleratorViewModel? _downloadAccelerator;
@@ -237,7 +274,74 @@ public partial class MainWindowViewModel : ObservableObject
     private bool _isDownloadAcceleratorVisible;
 
     [ObservableProperty]
+    private HealthCheckViewModel? _healthCheck;
+
+    [ObservableProperty]
+    private bool _isHealthCheckVisible;
+
+    [ObservableProperty]
     private string _hostsContent = string.Empty;
+
+    /// <summary>
+    /// Hosts 视图的搜索关键词（匹配行内容时高亮显示）。
+    /// </summary>
+    [ObservableProperty]
+    private string _hostsSearchText = string.Empty;
+
+    /// <summary>
+    /// Hosts 视图显示的行集合（已包含行号，按 <see cref="HostsSearchText"/> 过滤）。
+    /// </summary>
+    public ObservableCollection<HostsLineViewModel> HostsLines { get; } = new();
+
+    partial void OnHostsContentChanged(string value) => RebuildHostsLines();
+    partial void OnHostsSearchTextChanged(string value) => RebuildHostsLines();
+
+    private void RebuildHostsLines()
+    {
+        HostsLines.Clear();
+        if (string.IsNullOrEmpty(HostsContent))
+        {
+            OnPropertyChanged(nameof(HasHostsLines));
+            OnPropertyChanged(nameof(HasNoHostsLines));
+            return;
+        }
+
+        var keyword = HostsSearchText?.Trim() ?? string.Empty;
+        var lines = HostsContent.Replace("\r\n", "\n").Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            if (!string.IsNullOrEmpty(keyword) &&
+                !line.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            HostsLines.Add(new HostsLineViewModel
+            {
+                LineNumber = i + 1,
+                Text = line,
+                IsMatch = !string.IsNullOrEmpty(keyword) &&
+                          line.Contains(keyword, StringComparison.OrdinalIgnoreCase)
+            });
+        }
+        OnPropertyChanged(nameof(HasHostsLines));
+        OnPropertyChanged(nameof(HasNoHostsLines));
+    }
+
+    public bool HasHostsLines => HostsLines.Count > 0;
+    public bool HasNoHostsLines => HostsLines.Count == 0;
+
+    [ObservableProperty]
+    private string _preApplyLatency = "-- ms";
+
+    [ObservableProperty]
+    private string _postApplyLatency = "-- ms";
+
+    [ObservableProperty]
+    private string _latencyImprovement = "--";
+
+    [ObservableProperty]
+    private Avalonia.Media.Color _improvementColor = Avalonia.Media.Color.Parse("#FFFFFF");
 
     [ObservableProperty]
     private bool _isDarkMode;
@@ -252,13 +356,13 @@ public partial class MainWindowViewModel : ObservableObject
     private bool _isDashboardSelected = true;
 
     [ObservableProperty]
-    private bool _isPerformanceChartSelected;
-
-    [ObservableProperty]
-    private bool _isGitHubLatencySelected;
+    private bool _isNetworkMonitorSelected;
 
     [ObservableProperty]
     private bool _isDownloadAcceleratorSelected;
+
+    [ObservableProperty]
+    private bool _isHealthCheckSelected;
 
     [ObservableProperty]
     private bool _isHostsContentSelected;
@@ -280,6 +384,12 @@ public partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty]
     private int _sortOption = 0;
+
+    [ObservableProperty]
+    private string _appVersion = string.Empty;
+
+    [ObservableProperty]
+    private bool _isApplyingHosts;
 
     public ObservableCollection<SourceStatusViewModel> FilteredSources { get; } = new();
 
@@ -303,7 +413,6 @@ public partial class MainWindowViewModel : ObservableObject
     public int HealthySourcesCount => Sources.Count(s => s.IsHealthy);
 
     public bool HasFilteredSources => FilteredSources.Count > 0;
-
     private void CheckAdminPrivileges()
     {
         using var identity = WindowsIdentity.GetCurrent();
@@ -327,7 +436,10 @@ public partial class MainWindowViewModel : ObservableObject
     public MainWindowViewModel()
     {
         Log.Information("MainWindowViewModel 初始化开始");
-        
+
+        var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        AppVersion = $"v{version?.Major ?? 1}.{version?.Minor ?? 0}.{version?.Build ?? 0}";
+
         CheckAdminPrivileges();
         
         var startupManager = PlatformServiceFactory.CreateStartupManager();
@@ -341,12 +453,13 @@ public partial class MainWindowViewModel : ObservableObject
         _connectionService = new GithubConnectionService();
         _hostsFileService = new WindowsHostsFileService();
         _dnsFlusher = PlatformServiceFactory.CreateDnsFlusher();
+        _downloadAccelerationService = new DownloadAccelerationService();
 
         _historyService.OnOperationRecorded += OnOperationRecorded;
         _notificationService.OnNotification += OnNotificationReceived;
 
-        Log.Information("正在预初始化GitHub延迟监控");
-        GitHubLatency = new GitHubLatencyViewModel();
+        Log.Information("正在预初始化网络监控");
+        NetworkMonitor = new NetworkMonitorViewModel();
 
         Log.Information("正在加载仪表盘");
         ShowDashboard();
@@ -361,7 +474,16 @@ public partial class MainWindowViewModel : ObservableObject
         _performanceMonitor.StartMonitoring();
         IsMonitoring = true;
 
-        StartAutoUpdate();
+        // 启动定时更新（合并原 _updateTimer 和 _autoUpdateTimer：间隔取 TestInterval 与 60 秒的较小值）
+        var updateInterval = Math.Min(60, _settings.TestInterval) * 1000;
+        _updateTimer = new System.Timers.Timer(updateInterval);
+        _updateTimer.Elapsed += async (s, e) => await AutoUpdateAsync();
+        _updateTimer.Start();
+
+        // 启动 GitHub 连通性定时检查（10 分钟一次）
+        _githubConnectivityTimer = new System.Timers.Timer(600000);
+        _githubConnectivityTimer.Elapsed += async (s, e) => await TestGitHubConnectionAsync();
+        _githubConnectivityTimer.Start();
 
         // 立即测试 GitHub 连接
         Log.Information("启动时立即测试 GitHub 连接");
@@ -370,6 +492,9 @@ public partial class MainWindowViewModel : ObservableObject
         // 立即刷新数据源状态
         Log.Information("启动时立即刷新数据源状态");
         _ = RefreshSources();
+
+        // 启动后台定时 Hosts 优化（每30分钟静默刷新）
+        StartPeriodicHostsRefresh();
 
         StatusMessage = "已启动自动检测，正在测试所有数据源...";
 
@@ -383,8 +508,8 @@ public partial class MainWindowViewModel : ObservableObject
         {
             _ = Task.Run(async () =>
             {
-                // 等待2秒让性能监控收集数据
-                await Task.Delay(2000);
+                // 等待3秒让连接测试和性能监控收集数据
+                await Task.Delay(3000);
                 await AutoApplyHostsOnStartup();
             });
         }
@@ -401,8 +526,45 @@ public partial class MainWindowViewModel : ObservableObject
                 UpdateFilteredSources();
             }
         };
-        
+
+        // 监听 Sources 集合变化，自动更新数据源卡片计数
+        Sources.CollectionChanged += OnSourcesCollectionChanged;
+
         Log.Information("MainWindowViewModel 初始化完成");
+    }
+
+    private void OnSourcesCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(TotalSourcesCount));
+        OnPropertyChanged(nameof(HealthySourcesCount));
+        OnPropertyChanged(nameof(HasFilteredSources));
+
+        if (e.NewItems != null)
+        {
+            foreach (SourceStatusViewModel item in e.NewItems)
+            {
+                item.PropertyChanged -= OnSourceItemPropertyChanged;
+                item.PropertyChanged += OnSourceItemPropertyChanged;
+            }
+        }
+        if (e.OldItems != null)
+        {
+            foreach (SourceStatusViewModel item in e.OldItems)
+            {
+                item.PropertyChanged -= OnSourceItemPropertyChanged;
+            }
+        }
+    }
+
+    private void OnSourceItemPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SourceStatusViewModel.IsHealthy) ||
+            e.PropertyName == nameof(SourceStatusViewModel.IsSelected))
+        {
+            OnPropertyChanged(nameof(HealthySourcesCount));
+            OnPropertyChanged(nameof(HasSelectedSources));
+            OnPropertyChanged(nameof(SelectedSourcesCount));
+        }
     }
 
     private void UpdateFilteredSources()
@@ -561,52 +723,28 @@ public partial class MainWindowViewModel : ObservableObject
         IsSettingsVisible = false;
         IsLogViewerVisible = false;
         IsHostsGroupVisible = true;
-        IsPerformanceChartVisible = false;
+        IsNetworkMonitorVisible = false;
     }
 
     [RelayCommand]
-    private void ShowPerformanceChart()
+    private void ShowNetworkMonitor()
     {
-        if (PerformanceChart == null)
+        if (NetworkMonitor == null)
         {
-            PerformanceChart = new PerformanceChartViewModel();
-            PerformanceChart.SetMonitor(_performanceMonitor);
+            NetworkMonitor = new NetworkMonitorViewModel();
         }
 
-        var chartView = new GithubAccelerator.UI.Views.PerformanceChartView();
-        chartView.DataContext = PerformanceChart;
-        CurrentView = chartView;
-        CurrentPageTitle = "性能图表";
+        var networkMonitorView = new GithubAccelerator.UI.Views.NetworkMonitorView();
+        networkMonitorView.DataContext = NetworkMonitor;
+        CurrentView = networkMonitorView;
+        CurrentPageTitle = "网络监控";
         ResetNavigationSelection();
-        IsPerformanceChartSelected = true;
+        IsNetworkMonitorSelected = true;
         IsDashboardVisible = false;
         IsSettingsVisible = false;
         IsLogViewerVisible = false;
         IsHostsGroupVisible = false;
-        IsPerformanceChartVisible = true;
-        IsGitHubLatencyVisible = false;
-    }
-
-    [RelayCommand]
-    private void ShowGitHubLatency()
-    {
-        if (GitHubLatency == null)
-        {
-            GitHubLatency = new GitHubLatencyViewModel();
-        }
-
-        var latencyView = new GithubAccelerator.UI.Views.GitHubLatencyView();
-        latencyView.DataContext = GitHubLatency;
-        CurrentView = latencyView;
-        CurrentPageTitle = "GitHub 延迟监控";
-        ResetNavigationSelection();
-        IsGitHubLatencySelected = true;
-        IsDashboardVisible = false;
-        IsSettingsVisible = false;
-        IsLogViewerVisible = false;
-        IsHostsGroupVisible = false;
-        IsPerformanceChartVisible = false;
-        IsGitHubLatencyVisible = true;
+        IsNetworkMonitorVisible = true;
         IsDownloadAcceleratorVisible = false;
     }
 
@@ -628,22 +766,45 @@ public partial class MainWindowViewModel : ObservableObject
         IsSettingsVisible = false;
         IsLogViewerVisible = false;
         IsHostsGroupVisible = false;
-        IsPerformanceChartVisible = false;
-        IsGitHubLatencyVisible = false;
+        IsNetworkMonitorVisible = false;
         IsDownloadAcceleratorVisible = true;
+        IsHealthCheckVisible = false;
+    }
+
+    [RelayCommand]
+    private void ShowHealthCheck()
+    {
+        if (HealthCheck == null)
+        {
+            HealthCheck = new HealthCheckViewModel();
+        }
+
+        var healthCheckView = new GithubAccelerator.UI.Views.HealthCheckView();
+        healthCheckView.DataContext = HealthCheck;
+        CurrentView = healthCheckView;
+        CurrentPageTitle = "子域健康检查";
+        ResetNavigationSelection();
+        IsHealthCheckSelected = true;
+        IsDashboardVisible = false;
+        IsSettingsVisible = false;
+        IsLogViewerVisible = false;
+        IsHostsGroupVisible = false;
+        IsNetworkMonitorVisible = false;
+        IsDownloadAcceleratorVisible = false;
+        IsHealthCheckVisible = true;
     }
 
     private void ResetNavigationSelection()
     {
         IsDashboardSelected = false;
-        IsPerformanceChartSelected = false;
-        IsGitHubLatencySelected = false;
+        IsNetworkMonitorSelected = false;
         IsHostsContentSelected = false;
         IsHostsGroupSelected = false;
         IsBackupSelected = false;
         IsSettingsSelected = false;
         IsLogViewerSelected = false;
         IsDownloadAcceleratorSelected = false;
+        IsHealthCheckSelected = false;
     }
 
     [RelayCommand]
@@ -727,26 +888,11 @@ public partial class MainWindowViewModel : ObservableObject
 
     private void ApplySettings()
     {
-        UpdateAutoUpdateTimer();
-        
         // 更新 GitHub 访问速度测试间隔
-        if (GitHubLatency != null)
+        if (NetworkMonitor != null)
         {
             var monitorService = GithubAccelerator.UI.Services.GitHubLatencyMonitorService.Instance;
             monitorService.SetCheckInterval(TimeSpan.FromSeconds(10)); // 10秒一次
-        }
-    }
-
-    private void UpdateAutoUpdateTimer()
-    {
-        _autoUpdateTimer?.Stop();
-        _autoUpdateTimer?.Dispose();
-        
-        _autoUpdateTimer = new System.Timers.Timer(_settings.TestInterval * 1000);
-        _autoUpdateTimer.Elapsed += async (s, e) => await AutoUpdateAsync();
-        if (IsMonitoring)
-        {
-            _autoUpdateTimer.Start();
         }
     }
 
@@ -760,7 +906,9 @@ public partial class MainWindowViewModel : ObservableObject
                 Name = source.Name,
                 Url = source.Url,
                 IsHealthy = source.IsHealthy,
-                ResponseTime = source.LastResponseTimeMs > 0 ? (long)source.LastResponseTimeMs : 0
+                IsDnsProbe = source.IsDnsProbe,
+                ResponseTime = source.LastResponseTimeMs > 0 ? (long)source.LastResponseTimeMs : 0,
+                MirrorUrls = source.MirrorUrls ?? Array.Empty<string>()
             };
             vm.OnApplyRequested += OnSingleSourceApplyRequested;
             vm.PropertyChanged += (s, e) =>
@@ -803,57 +951,33 @@ public partial class MainWindowViewModel : ObservableObject
 
     private async void OnSingleSourceApplyRequested(SourceStatusViewModel source)
     {
-        try
-        {
-            StatusMessage = $"正在从 {source.Name} 获取 Hosts...";
-
-            string hostsContent;
-
-            // DNS 探测源走特殊路径
-            if (source.Url.StartsWith("dns:") || source.Url == "chinaz:dns")
-            {
-                StatusMessage = "正在通过多源 DNS 查询 GitHub IP...";
-                var chinazService = ChinazDnsService.Instance;
-                hostsContent = await chinazService.GenerateHostsContentAsync();
-            }
-            else
-            {
-                var httpClient = new HttpClient();
-                hostsContent = await httpClient.GetStringAsync(source.Url);
-            }
-
-            if (string.IsNullOrEmpty(hostsContent))
-            {
-                StatusMessage = $"获取 Hosts 内容为空";
-                _notificationService.Warning("Hosts 应用", $"{source.Name} 返回的内容为空");
-                return;
-            }
-            
-            var success = await _hostsFileService.ApplyGithubHostsAsync(hostsContent);
-            
-            if (success)
-            {
-                IsHostsApplied = true;
-                CurrentHostsSource = source.Name;
-                StatusMessage = $"Hosts 已成功应用，源：{source.Name}";
-                _historyService.Record(OperationType.HostsApplied, $"从 {source.Name} 应用 Hosts 成功", true, $"响应时间: {source.ResponseTime}ms");
-                _notificationService.Success("Hosts 应用", $"已从 {source.Name} 成功应用 Hosts");
-            }
-            else
-            {
-                StatusMessage = "Hosts 应用失败，请以管理员身份运行";
-                _notificationService.Error("Hosts 应用", "应用失败，请以管理员身份运行");
-            }
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"应用失败：{ex.Message}";
-            _statsService.RecordTimeout(source.Name, source.Url);
-            _notificationService.Error("Hosts 应用", $"应用失败：{ex.Message}");
-        }
+        await ApplyHostsFromSource(source.Name, source.Url, source.MirrorUrls);
     }
 
-    [RelayCommand]
+    // ===== CanExecute 约束：高代价命令在执行期间禁用，避免重复触发 =====
+
+    private bool CanApplyHosts() => !IsApplyingHosts && IsAdmin;
+    private bool CanRunSpeedTest() => !IsApplyingHosts;
+    private bool CanRefreshSources() => !IsLoading;
+    private bool CanClearHosts() => IsHostsApplied && IsAdmin;
+
+    partial void OnIsApplyingHostsChanged(bool value)
+    {
+        ApplyHostsCommand.NotifyCanExecuteChanged();
+        RunSpeedTestCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnIsAdminChanged(bool value)
+    {
+        ApplyHostsCommand.NotifyCanExecuteChanged();
+        ClearAppliedHostsCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnIsLoadingChanged(bool value) => RefreshSourcesCommand.NotifyCanExecuteChanged();
+
+    partial void OnIsHostsAppliedChanged(bool value) => ClearAppliedHostsCommand.NotifyCanExecuteChanged();
+
+    [RelayCommand(CanExecute = nameof(CanClearHosts))]
     private async Task ClearAppliedHosts()
     {
         try
@@ -903,7 +1027,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             _performanceMonitor.StopMonitoring();
             IsMonitoring = false;
-            _autoUpdateTimer?.Stop();
+            _updateTimer?.Stop();
             StatusMessage = "监控已停止";
             _historyService.Record(OperationType.MonitoringStopped, "停止监控");
         }
@@ -913,7 +1037,7 @@ public partial class MainWindowViewModel : ObservableObject
             IsMonitoring = true;
             if (_settings.TestInterval > 0)
             {
-                _autoUpdateTimer?.Start();
+                _updateTimer?.Start();
             }
             StatusMessage = "监控已启动，正在测试所有数据源...";
             _historyService.Record(OperationType.MonitoringStarted, "启动监控");
@@ -921,7 +1045,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanRefreshSources))]
     private async Task RefreshSources()
     {
         StatusMessage = "正在刷新数据源状态...";
@@ -985,46 +1109,225 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanRunSpeedTest))]
+    private async Task RunSpeedTest()
+    {
+        if (!IsAdmin)
+        {
+            StatusMessage = "测速对比需要管理员权限";
+            ToastService.Instance.Error("需要管理员权限", "临时修改 Hosts 进行对比测速需要管理员权限");
+            return;
+        }
+
+        StatusMessage = "正在进行真正的应用前后对比测速...";
+        StardustMonitorService.Instance.ReportInfo("SpeedTestStart", "用户启动测速对比");
+        using var _trace = StardustMonitorService.Instance.BeginTrace("SpeedTest");
+
+        var hostsWasApplied = IsHostsApplied;
+        string? originalHostsBlock = null;
+        string? originalHostsContent = null;
+        var hostsPath = GetHostsPath();
+
+        try
+        {
+            originalHostsContent = await _hostsFileService.ReadHostsFileAsync();
+            if (_hostsFileService.IsGithubHostsApplied(originalHostsContent))
+            {
+                originalHostsBlock = _hostsFileService.GetCurrentGithubHostsBlock(originalHostsContent);
+            }
+
+            // 1. 测量"应用前"：如果我们的 hosts 已应用，先临时移除，测真实无加速状态
+            if (hostsWasApplied && !string.IsNullOrEmpty(originalHostsBlock))
+            {
+                var cleaned = RemoveGithubHostsBlock(originalHostsContent);
+                await File.WriteAllTextAsync(hostsPath, cleaned);
+                await _dnsFlusher.FlushDnsCacheAsync();
+                await Task.Delay(600);
+                IsHostsApplied = false;
+            }
+
+            var beforeSamples = await MeasureGitHubLatencySamplesAsync(3, "应用前");
+            var beforeLatency = GetMedian(beforeSamples);
+
+            // 2. 测量"应用后"：恢复或应用 hosts
+            if (hostsWasApplied && !string.IsNullOrEmpty(originalHostsBlock))
+            {
+                var cleaned = await _hostsFileService.ReadHostsFileAsync();
+                var restored = RemoveGithubHostsBlock(cleaned);
+                restored = (restored + "\n" + originalHostsBlock).Trim() + "\n";
+                await File.WriteAllTextAsync(hostsPath, restored);
+                IsHostsApplied = true;
+            }
+            else
+            {
+                await ApplyBestHostsForSpeedTestAsync();
+            }
+
+            await _dnsFlusher.FlushDnsCacheAsync();
+            await Task.Delay(600);
+
+            var afterSamples = await MeasureGitHubLatencySamplesAsync(3, "应用后");
+            var afterLatency = GetMedian(afterSamples);
+
+            PreApplyLatency = FormatLatency(beforeLatency);
+            PostApplyLatency = FormatLatency(afterLatency);
+
+            if (beforeLatency > 0 && afterLatency > 0)
+            {
+                var improvement = ((double)(beforeLatency - afterLatency) / beforeLatency * 100);
+                var improvementAbs = Math.Abs(improvement);
+                if (improvementAbs < 5)
+                {
+                    LatencyImprovement = "持平";
+                    ImprovementColor = Avalonia.Media.Color.Parse("#FFC107");
+                }
+                else if (improvement > 0)
+                {
+                    LatencyImprovement = $"提升 {improvement:F0}%";
+                    ImprovementColor = Avalonia.Media.Color.Parse("#4CAF50");
+                }
+                else
+                {
+                    LatencyImprovement = $"降低 {improvementAbs:F0}%";
+                    ImprovementColor = Avalonia.Media.Color.Parse("#FF5722");
+                }
+            }
+            else
+            {
+                LatencyImprovement = "--";
+                ImprovementColor = Avalonia.Media.Color.Parse("#FFFFFF");
+            }
+
+            StatusMessage = hostsWasApplied
+                ? $"测速完成：应用前 {PreApplyLatency} → 应用后 {PostApplyLatency}"
+                : $"测速完成并已应用最佳 Hosts：应用前 {PreApplyLatency} → 应用后 {PostApplyLatency}";
+            _historyService.Record(OperationType.SettingsChanged, $"测速对比：{PreApplyLatency} → {PostApplyLatency}");
+
+            StardustMonitorService.Instance.ReportInfo("SpeedTestResult",
+                $"before={PreApplyLatency} after={PostApplyLatency} improvement={LatencyImprovement}");
+        }
+        catch (Exception ex)
+        {
+            StardustMonitorService.Instance.ReportError("SpeedTestException", "测速异常", ex);
+            StatusMessage = $"测速失败：{ex.Message}";
+            PreApplyLatency = "-- ms";
+            PostApplyLatency = "-- ms";
+            LatencyImprovement = "--";
+
+            // 出现异常时尝试恢复原始 hosts
+            if (!string.IsNullOrEmpty(originalHostsContent))
+            {
+                try
+                {
+                    await File.WriteAllTextAsync(hostsPath, originalHostsContent);
+                    IsHostsApplied = _hostsFileService.IsGithubHostsApplied(originalHostsContent);
+                }
+                catch (Exception restoreEx)
+                {
+                    StatusMessage = $"测速失败，且恢复 Hosts 失败：{restoreEx.Message}";
+                }
+            }
+        }
+    }
+
+    private async Task<List<long>> MeasureGitHubLatencySamplesAsync(int count, string phase)
+    {
+        var samples = new List<long>();
+        for (int i = 0; i < count; i++)
+        {
+            var latency = await MeasureGitHubLatencyAsync();
+            if (latency > 0)
+            {
+                samples.Add(latency);
+            }
+            if (i < count - 1)
+            {
+                await Task.Delay(200); // 间隔 200ms，避免请求过于密集
+            }
+        }
+        return samples;
+    }
+
+    private static long GetMedian(List<long> values)
+    {
+        if (values.Count == 0) return -1;
+        var sorted = values.OrderBy(v => v).ToList();
+        if (sorted.Count % 2 == 1)
+        {
+            return sorted[sorted.Count / 2];
+        }
+        return (sorted[sorted.Count / 2 - 1] + sorted[sorted.Count / 2]) / 2;
+    }
+
+    private async Task<long> MeasureGitHubLatencyAsync()
+    {
+        try
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+            await client.GetAsync("https://github.com", HttpCompletionOption.ResponseHeadersRead);
+            sw.Stop();
+            return sw.ElapsedMilliseconds;
+        }
+        catch (TaskCanceledException)
+        {
+            return -1; // 超时
+        }
+        catch
+        {
+            return -1; // 无法连接
+        }
+    }
+
+    private static string FormatLatency(long ms) => ms switch
+    {
+        < 0 => "⛔ 超时",
+        < 300 => $"{ms} ms",
+        < 1000 => $"{ms} ms",
+        _ => $"{ms / 1000.0:F1}s"
+    };
+
+    private static string GetHostsPath()
+    {
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "drivers", "etc", "hosts");
+    }
+
+    private static string RemoveGithubHostsBlock(string content)
+    {
+        const string startMarker = "# === GitHub Accelerator Start ===";
+        const string endMarker = "# === GitHub Accelerator End ===";
+
+        var startIndex = content.IndexOf(startMarker, StringComparison.Ordinal);
+        while (startIndex >= 0)
+        {
+            var endIndex = content.IndexOf(endMarker, startIndex, StringComparison.Ordinal);
+            if (endIndex < 0)
+            {
+                content = content.Substring(0, startIndex);
+                break;
+            }
+
+            content = content.Substring(0, startIndex) + content.Substring(endIndex + endMarker.Length);
+            startIndex = content.IndexOf(startMarker, StringComparison.Ordinal);
+        }
+
+        content = System.Text.RegularExpressions.Regex.Replace(content, @"^\s*[\r\n]+", "", System.Text.RegularExpressions.RegexOptions.Multiline);
+        content = content.TrimStart('\r', '\n');
+        return content.Trim();
+    }
+
+    private async Task ApplyBestHostsForSpeedTestAsync()
+    {
+        // 测速时也使用多源智能合并 + IP优选
+        await ApplyHostsFromAllSources();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanApplyHosts))]
     private async Task ApplyHosts()
     {
         try
         {
-            // 确定要使用的数据源
-            SourcePerformanceMetrics? best = null;
-            
-            // 首先尝试获取推荐的源
-            best = _performanceMonitor.GetBestSource();
-            
-            // 如果没有推荐的源，使用响应时间最好的源
-            if (best == null || best.AverageResponseTimeMs <= 0)
-            {
-                var allSources = _performanceMonitor.GetAllMetrics()
-                    .Where(m => m.AverageResponseTimeMs > 0)
-                    .OrderBy(m => m.AverageResponseTimeMs);
-                
-                best = allSources.FirstOrDefault();
-                
-                if (best == null)
-                {
-                    if (Sources.Count > 0)
-                    {
-                        var firstSource = Sources.FirstOrDefault();
-                        if (firstSource != null)
-                        {
-                            await ApplyHostsFromSource(firstSource.Name, firstSource.Url);
-                        }
-                        return;
-                    }
-                    
-                    StatusMessage = "错误：没有可用的数据源";
-                    _historyService.Record(OperationType.HostsApplied, "应用 Hosts 失败：没有可用数据源", false);
-                    _notificationService.Error("Hosts 应用", "没有可用的数据源");
-                    return;
-                }
-            }
-
-            await ApplyHostsFromSource(best.Name, best.Url);
+            await ApplyHostsFromAllSources();
         }
         catch (Exception ex)
         {
@@ -1033,43 +1336,211 @@ public partial class MainWindowViewModel : ObservableObject
             _notificationService.Error("Hosts 应用", $"应用失败：{ex.Message}");
         }
     }
-    
-    private async Task ApplyHostsFromSource(string sourceName, string sourceUrl)
-    {
-        StatusMessage = $"正在从 {sourceName} 获取 Hosts...";
 
+    /// <summary>
+    /// 一键智能优化：自动拉取全部 3 个数据源，合并所有 IP 候选，
+    /// DNS 实时解析 + HTTPS 探测，为每个域名选择最优 IP。
+    /// </summary>
+    private async Task ApplyHostsFromAllSources()
+    {
+        if (IsApplyingHosts) return;
+        IsApplyingHosts = true;
+
+        using var _trace = StardustMonitorService.Instance.BeginTrace("ApplyHosts", "AllSources");
+
+        StatusMessage = "正在从全部数据源拉取 Hosts（并行）...";
+        XTrace.WriteLine("[ApplyHosts/All] 开始从全部源拉取 Hosts");
+
+        // 1. 并行拉取所有源
+        var sources = GithubHostsService.HostsSources;
+        var fetchTasks = sources.Select(async source =>
+        {
+            try
+            {
+                var (content, usedUrl, error) = await FetchHostsContentAsync(source.Name, source.Url, source.MirrorUrls);
+                XTrace.WriteLine($"[ApplyHosts/All] {source.Name}: content={content?.Length ?? 0} err={error}");
+                return (source.Name, Content: content, Error: error);
+            }
+            catch (Exception ex)
+            {
+                XTrace.WriteLine($"[ApplyHosts/All] {source.Name} 拉取异常：{ex.Message}");
+                return (source.Name, Content: (string?)null, Error: ex.Message);
+            }
+        });
+
+        var fetchResults = await Task.WhenAll(fetchTasks);
+        var validContents = fetchResults
+            .Where(r => !string.IsNullOrEmpty(r.Content))
+            .Select(r => r.Content!)
+            .ToList();
+
+        if (validContents.Count == 0)
+        {
+            StatusMessage = "所有数据源均获取失败，请检查网络";
+            _notificationService.Error("Hosts 应用", "所有数据源均不可用");
+            return;
+        }
+
+        XTrace.WriteLine($"[ApplyHosts/All] 成功拉取 {validContents.Count}/{sources.Length} 个源");
+        StatusMessage = $"已拉取 {validContents.Count} 个源，正在合并并优化 IP（实时探测中，请稍候）...";
+
+        // 2. 合并所有 hosts 内容
+        var mergedHosts = string.Join("\n", validContents);
+        XTrace.WriteLine($"[ApplyHosts/All] 合并后内容长度={mergedHosts.Length}");
+
+        // 3. IP 优化（DNS解析 + HTTPS探测 + 择优）
         try
         {
-            string hostsContent;
-
-            // DNS 探测源走特殊路径：通过多源 DNS 查询生成 hosts
-            if (sourceUrl.StartsWith("dns:") || sourceUrl == "chinaz:dns")
+            var optimizer = new HostsOptimizerService
             {
-                StatusMessage = $"正在通过多源 DNS 查询 GitHub IP...";
-                var chinazService = ChinazDnsService.Instance;
-                hostsContent = await chinazService.GenerateHostsContentAsync();
+                IncludeDnsResolvedIps = true, // DNS 实时解析获取新鲜 IP，避免源内 IP 被封锁
+                ProbeTimeoutSeconds = 5       // 放宽超时，减少间歇性 IP 假阴性
+            };
+            optimizer.OnLog += msg =>
+            {
+                StatusMessage = msg;
+                XTrace.WriteLine($"[ApplyHosts/Optimizer] {msg}");
+            };
+            var optimizedContent = await optimizer.OptimizeAsync(mergedHosts);
+            XTrace.WriteLine($"[ApplyHosts/All] 优化完成，内容长度={optimizedContent.Length}");
+
+            // 4. 写入 hosts 文件
+            var success = await _hostsFileService.ApplyGithubHostsAsync(optimizedContent);
+
+            if (success)
+            {
+                IsHostsApplied = true;
+                CurrentHostsSource = "多源智能合并";
+
+                StardustMonitorService.Instance.ReportInfo("HostsApplied",
+                    $"source=AllSources merged={validContents.Count}/{sources.Length}");
+
+                try
+                {
+                    if (_settings.AutoFlushDns)
+                    {
+                        await _dnsFlusher.FlushDnsCacheAsync();
+                        StatusMessage = "Hosts 已成功应用（多源智能合并 + IP优选，DNS缓存已刷新）";
+                    }
+                    else
+                    {
+                        StatusMessage = "Hosts 已成功应用（多源智能合并 + IP优选）";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "刷新DNS缓存失败");
+                    StatusMessage = "Hosts 已成功应用（多源智能合并 + IP优选，建议手动刷新DNS缓存）";
+                }
+
+                _historyService.Record(OperationType.HostsApplied,
+                    $"多源智能合并：{validContents.Count}源 → IP优选 → 应用成功", true);
+                _statsService.RecordSourceUsed("AllSources", "merged", 0, true);
+                _notificationService.Success("Hosts 应用",
+                    $"已从 {validContents.Count} 个源智能合并并优化 Hosts");
+
+                // 自动触发子域健康检查
+                _ = TriggerAutoHealthCheckAsync();
             }
             else
             {
-                // 普通 HTTP 数据源
-                var httpClient = new HttpClient();
-                hostsContent = await httpClient.GetStringAsync(sourceUrl);
+                StatusMessage = "Hosts 应用失败，请以管理员身份运行";
+                _historyService.Record(OperationType.HostsApplied, "应用 Hosts 失败：权限不足", false);
+                _notificationService.Error("Hosts 应用", "应用失败，请以管理员身份运行");
+                StardustMonitorService.Instance.ReportError("HostsApplyFailed", "权限不足或写入失败");
             }
+        }
+        catch (Exception ex)
+        {
+            XTrace.WriteLine($"[ApplyHosts/All] 优化异常：{ex.GetType().Name}: {ex.Message}");
+            XTrace.WriteLine(ex.ToString());
+            Log.Warning(ex, "Hosts IP 优化失败");
+            StardustMonitorService.Instance.ReportError("HostsOptimizeFailed", ex.Message, ex);
+
+            // 优化失败，退化为直接应用合并后的原始内容
+            StatusMessage = "IP 优化失败，使用原始合并内容...";
+            var success = await _hostsFileService.ApplyGithubHostsAsync(mergedHosts);
+            if (success)
+            {
+                IsHostsApplied = true;
+                CurrentHostsSource = "多源合并（未优化）";
+                StatusMessage = "Hosts 已应用（多源合并，未优化）";
+                _notificationService.Warning("Hosts 应用", "IP 优选跳过，已应用原始合并内容");
+
+                // 自动触发子域健康检查
+                _ = TriggerAutoHealthCheckAsync();
+            }
+        }
+        finally
+        {
+            IsApplyingHosts = false;
+        }
+    }
+    
+    private async Task ApplyHostsFromSource(string sourceName, string sourceUrl, string[]? mirrorUrls = null)
+    {
+        StatusMessage = $"正在从 {sourceName} 获取 Hosts...";
+
+        using var _trace = StardustMonitorService.Instance.BeginTrace("ApplyHosts", sourceName);
+
+        try
+        {
+            var (hostsContent, usedUrl, fetchError) = await FetchHostsContentAsync(sourceName, sourceUrl, mirrorUrls);
 
             if (string.IsNullOrEmpty(hostsContent))
             {
-                StatusMessage = $"获取 Hosts 内容为空";
-                _notificationService.Warning("Hosts 应用", $"{sourceName} 返回的内容为空");
+                StatusMessage = string.IsNullOrEmpty(fetchError)
+                    ? $"获取 Hosts 内容为空"
+                    : $"获取 Hosts 失败：{fetchError}";
+                _notificationService.Warning("Hosts 应用", $"{sourceName} 获取内容失败");
                 return;
             }
-            
+
+            // 对非 DNS 探测源进行 IP 优化（实时探测选择最佳 IP）
+            if (!sourceUrl.StartsWith("dns:"))
+            {
+                try
+                {
+                    StatusMessage = "正在优化 IP 映射（实时探测中，请稍候）...";
+                    XTrace.WriteLine($"[ApplyHosts] 开始 IP 优化，source={sourceName} url={sourceUrl}");
+                    var optimizer = new HostsOptimizerService
+                {
+                    IncludeDnsResolvedIps = true,
+                    ProbeTimeoutSeconds = 5
+                };
+                    optimizer.OnLog += msg =>
+                    {
+                        StatusMessage = msg;
+                        XTrace.WriteLine($"[ApplyHosts/Optimizer] {msg}");
+                    };
+                    hostsContent = await optimizer.OptimizeAsync(hostsContent);
+                    XTrace.WriteLine($"[ApplyHosts] IP 优化完成，新内容长度={hostsContent.Length}");
+                    StardustMonitorService.Instance.ReportInfo("HostsOptimized", $"source={sourceName}");
+                }
+                catch (Exception ex)
+                {
+                    XTrace.WriteLine($"[ApplyHosts] IP 优化异常：{ex.GetType().Name}: {ex.Message}");
+                    XTrace.WriteLine(ex.ToString());
+                    Log.Warning(ex, "Hosts IP 优化失败，将使用原始内容");
+                    StardustMonitorService.Instance.ReportError("HostsOptimizeFailed", ex.Message, ex);
+                    // 优化失败不阻断，继续使用原始内容
+                }
+            }
+            else
+            {
+                XTrace.WriteLine($"[ApplyHosts] 跳过 IP 优化（DNS 探测源），source={sourceName}");
+            }
+
             var success = await _hostsFileService.ApplyGithubHostsAsync(hostsContent);
-            
+
             if (success)
             {
                 IsHostsApplied = true;
                 CurrentHostsSource = sourceName;
-                
+
+                StardustMonitorService.Instance.ReportInfo("HostsApplied",
+                    $"source={sourceName} url={usedUrl ?? sourceUrl} mirrors={(mirrorUrls?.Length ?? 0)}");
+
                 try
                 {
                     if (_settings.AutoFlushDns)
@@ -1087,9 +1558,10 @@ public partial class MainWindowViewModel : ObservableObject
                     Log.Warning(ex, "刷新DNS缓存失败");
                     StatusMessage = $"Hosts 已成功应用，源：{sourceName}（建议手动刷新DNS缓存）";
                 }
-                
-                _historyService.Record(OperationType.HostsApplied, $"从 {sourceName} 应用 Hosts 成功", true);
-                _statsService.RecordSourceUsed(sourceName, sourceUrl, 0, true);
+
+                var usedMirrorHint = usedUrl != null && usedUrl != sourceUrl ? $" (镜像: {usedUrl})" : "";
+                _historyService.Record(OperationType.HostsApplied, $"从 {sourceName} 应用 Hosts 成功{usedMirrorHint}", true);
+                _statsService.RecordSourceUsed(sourceName, usedUrl ?? sourceUrl, 0, true);
                 _notificationService.Success("Hosts 应用", $"已从 {sourceName} 成功应用 Hosts");
             }
             else
@@ -1097,15 +1569,68 @@ public partial class MainWindowViewModel : ObservableObject
                 StatusMessage = "Hosts 应用失败，请以管理员身份运行";
                 _historyService.Record(OperationType.HostsApplied, "应用 Hosts 失败：权限不足", false);
                 _notificationService.Error("Hosts 应用", "应用失败，请以管理员身份运行");
+                StardustMonitorService.Instance.ReportError("HostsApplyFailed", "权限不足或写入失败");
             }
         }
         catch (Exception ex)
         {
+            StardustMonitorService.Instance.ReportError("HostsApplyException", sourceName, ex);
             StatusMessage = $"Hosts 应用失败：{ex.Message}";
             _historyService.Record(OperationType.HostsApplied, $"应用 Hosts 异常：{ex.Message}", false, ex.StackTrace);
             _statsService.RecordTimeout(sourceName, sourceUrl);
             _notificationService.Error("Hosts 应用", $"应用失败：{ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// 统一的 Hosts 内容获取方法：处理 DNS 探测源和普通 HTTP 源（含镜像故障转移）。
+    /// 返回 (content, usedUrl, error)。usedUrl 用于日志记录实际使用的镜像 URL。
+    /// </summary>
+    private async Task<(string content, string? usedUrl, string? error)> FetchHostsContentAsync(
+        string sourceName, string sourceUrl, string[]? mirrorUrls)
+    {
+        // DNS 探测源走特殊路径
+        if (sourceUrl.StartsWith("dns:") || sourceUrl == "chinaz:dns")
+        {
+            StatusMessage = $"正在通过多源 DNS 查询 GitHub IP...";
+            var chinazService = ChinazDnsService.Instance;
+            var content = await chinazService.GenerateHostsContentAsync();
+            return (content, sourceUrl, null);
+        }
+
+        // 普通 HTTP 源：主 URL + 镜像 URL 依次尝试
+        var candidates = new List<string> { sourceUrl };
+        if (mirrorUrls != null && mirrorUrls.Length > 0)
+        {
+            candidates.AddRange(mirrorUrls.Where(u => !string.IsNullOrEmpty(u) && u != sourceUrl));
+        }
+
+        using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        Exception? lastException = null;
+
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            var url = candidates[i];
+            try
+            {
+                if (i > 0)
+                {
+                    StatusMessage = $"主 URL 失败，正在尝试镜像 ({i}/{candidates.Count - 1})...";
+                }
+                var content = await httpClient.GetStringAsync(url);
+                if (!string.IsNullOrEmpty(content))
+                {
+                    return (content, url, null);
+                }
+            }
+            catch (Exception ex)
+            {
+                lastException = ex;
+                Log.Warning(ex, "从 {SourceName} 获取 Hosts 失败 (URL: {Url})", sourceName, url);
+            }
+        }
+
+        return (string.Empty, null, lastException?.Message ?? "所有 URL 均失败");
     }
 
     [RelayCommand]
@@ -1121,7 +1646,6 @@ public partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var httpClient = new HttpClient();
             var allHostsContent = new System.Text.StringBuilder();
             allHostsContent.AppendLine("# GitHub Accelerator - Applied Sources");
             allHostsContent.AppendLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
@@ -1132,18 +1656,7 @@ public partial class MainWindowViewModel : ObservableObject
                 StatusMessage = $"正在从 {source.Name} 获取 Hosts...";
                 try
                 {
-                    string content;
-
-                    // DNS 探测源走特殊路径
-                    if (source.Url.StartsWith("dns:") || source.Url == "chinaz:dns")
-                    {
-                        var chinazService = ChinazDnsService.Instance;
-                        content = await chinazService.GenerateHostsContentAsync();
-                    }
-                    else
-                    {
-                        content = await httpClient.GetStringAsync(source.Url);
-                    }
+                    var (content, _, _) = await FetchHostsContentAsync(source.Name, source.Url, source.MirrorUrls);
 
                     if (!string.IsNullOrEmpty(content))
                     {
@@ -1158,7 +1671,30 @@ public partial class MainWindowViewModel : ObservableObject
                 }
             }
 
-            var success = await _hostsFileService.ApplyGithubHostsAsync(allHostsContent.ToString());
+            var mergedContent = allHostsContent.ToString();
+
+            // IP 优化（DNS解析 + HTTPS探测 + 择优）
+            StatusMessage = "正在优化 IP 映射（实时探测中，请稍候）...";
+            try
+            {
+                var optimizer = new HostsOptimizerService
+                {
+                    IncludeDnsResolvedIps = true,
+                    ProbeTimeoutSeconds = 5
+                };
+                optimizer.OnLog += msg =>
+                {
+                    StatusMessage = msg;
+                    XTrace.WriteLine($"[ApplySel/Optimizer] {msg}");
+                };
+                mergedContent = await optimizer.OptimizeAsync(mergedContent);
+            }
+            catch (Exception ex)
+            {
+                XTrace.WriteLine($"[ApplySel] 优化失败，使用原始内容：{ex.Message}");
+            }
+
+            var success = await _hostsFileService.ApplyGithubHostsAsync(mergedContent);
             
             if (success)
             {
@@ -1232,15 +1768,31 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    private void StartAutoUpdate()
+    /// <summary>
+    /// 后台定时 Hosts 优化刷新（每30分钟），静默执行不弹通知。
+    /// 仅在已应用 Hosts 且管理员权限下生效。
+    /// </summary>
+    private void StartPeriodicHostsRefresh()
     {
-        _updateTimer = new System.Timers.Timer(60000);
-        _updateTimer.Elapsed += async (s, e) => await AutoUpdateAsync();
-        _updateTimer.Start();
-        
-        _githubConnectivityTimer = new System.Timers.Timer(600000);
-        _githubConnectivityTimer.Elapsed += async (s, e) => await TestGitHubConnectionAsync();
-        _githubConnectivityTimer.Start();
+        _periodicHostsRefreshTimer?.Stop();
+        _periodicHostsRefreshTimer?.Dispose();
+        _periodicHostsRefreshTimer = new System.Timers.Timer(30 * 60 * 1000); // 30分钟
+        _periodicHostsRefreshTimer.Elapsed += async (s, e) =>
+        {
+            if (!IsHostsApplied || !IsAdmin || IsApplyingHosts) return;
+            try
+            {
+                XTrace.WriteLine("[PeriodicRefresh] 定时刷新 Hosts 优化...");
+                await ApplyHostsFromAllSources();
+                XTrace.WriteLine("[PeriodicRefresh] 定时刷新完成");
+            }
+            catch (Exception ex)
+            {
+                XTrace.WriteLine($"[PeriodicRefresh] 异常：{ex.Message}");
+            }
+        };
+        _periodicHostsRefreshTimer.Start();
+        XTrace.WriteLine("[PeriodicRefresh] 定时刷新已启动，间隔30分钟");
     }
 
     private async Task AutoUpdateAsync()
@@ -1325,9 +1877,8 @@ public partial class MainWindowViewModel : ObservableObject
             IsSettingsVisible = false;
             IsLogViewerVisible = false;
             IsHostsGroupVisible = false;
-            IsPerformanceChartVisible = false;
-            IsGitHubLatencyVisible = false;
-            
+            IsNetworkMonitorVisible = false;
+
             StatusMessage = "已加载 Hosts 文件内容";
             _historyService.Record(OperationType.HostsViewed, "查看 Hosts 文件内容");
         }
@@ -1356,6 +1907,40 @@ public partial class MainWindowViewModel : ObservableObject
         {
             StatusMessage = $"打开 Hosts 失败：{ex.Message}";
             _historyService.Record(OperationType.HostsOpenedInNotepad, $"打开 Hosts 失败：{ex.Message}", false);
+        }
+    }
+
+    /// <summary>
+    /// 由 View 层注入的剪贴板写入委托（Hosts 视图复制用）
+    /// </summary>
+    public Func<string, Task>? SetClipboardTextAsync { get; set; }
+
+    /// <summary>
+    /// 复制当前 Hosts 内容到剪贴板（含 GitHub 加速块及注释，便于反馈）
+    /// </summary>
+    [RelayCommand]
+    private async Task CopyHostsContentAsync()
+    {
+        if (string.IsNullOrEmpty(HostsContent))
+        {
+            StatusMessage = "Hosts 内容为空";
+            return;
+        }
+
+        try
+        {
+            if (SetClipboardTextAsync == null)
+            {
+                StatusMessage = "剪贴板未初始化";
+                return;
+            }
+            await SetClipboardTextAsync(HostsContent);
+            StatusMessage = "✓ Hosts 内容已复制到剪贴板";
+            _historyService.Record(OperationType.HostsViewed, "复制 Hosts 内容到剪贴板");
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"复制失败：{ex.Message}";
         }
     }
 
@@ -1507,13 +2092,75 @@ public partial class MainWindowViewModel : ObservableObject
                 return;
             }
 
-            Log.Information("启动自动应用Hosts");
+            // 先测试 GitHub 当前是否可访问
+            Log.Information("启动时测试 GitHub 连通性...");
+            await TestGitHubConnectionAsync();
+            await Task.Delay(1000); // 等待测试完成
+
+            if (IsGitHubAccessible)
+            {
+                Log.Information("GitHub 当前可访问，跳过自动应用 Hosts");
+                StatusMessage = "GitHub 当前可访问，无需应用 Hosts 加速";
+                return;
+            }
+
+            Log.Information("GitHub 不可访问，启动自动应用Hosts");
             await ApplyHosts();
         }
         catch (Exception ex)
         {
             Log.Error("启动自动应用Hosts失败: {0}", ex.Message);
         }
+    }
+
+    /// <summary>
+    /// 自动触发子域健康检查（Hosts 应用后延迟 2 秒执行，等待 DNS 生效）。
+    /// </summary>
+    private async Task TriggerAutoHealthCheckAsync()
+    {
+        try
+        {
+            await Task.Delay(2000); // 等待 DNS 缓存刷新生效
+
+            if (HealthCheck == null)
+            {
+                HealthCheck = new HealthCheckViewModel();
+            }
+
+            XTrace.WriteLine("[AutoHealthCheck] 自动触发子域健康检查...");
+            await HealthCheck.RunCheckCommand.ExecuteAsync(null);
+            XTrace.WriteLine("[AutoHealthCheck] 健康检查完成");
+        }
+        catch (Exception ex)
+        {
+            XTrace.WriteLine($"[AutoHealthCheck] 异常：{ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 释放所有非托管资源：取消事件订阅、停止并 Dispose 所有 Timer、Dispose 子 ViewModel。
+    /// </summary>
+    public void Dispose()
+    {
+        // 1. 取消事件订阅
+        _historyService.OnOperationRecorded -= OnOperationRecorded;
+        _notificationService.OnNotification -= OnNotificationReceived;
+
+        // 2. 停止并 Dispose 所有 Timer
+        _updateTimer?.Stop();
+        _updateTimer?.Dispose();
+        _githubConnectivityTimer?.Stop();
+        _githubConnectivityTimer?.Dispose();
+        _periodicHostsRefreshTimer?.Stop();
+        _periodicHostsRefreshTimer?.Dispose();
+
+        // 3. Dispose 持有的子 ViewModel（如果实现了 IDisposable）
+        //    NetworkMonitorViewModel 持有 GitHubLatencyViewModel，后者已实现 IDisposable
+        //    使用 as 模式安全处理：当前 LogViewerViewModel/NetworkMonitorViewModel/HealthCheckViewModel 未直接实现 IDisposable，
+        //    未来若实现将自动生效，无需修改此处
+        (LogViewer as IDisposable)?.Dispose();
+        (NetworkMonitor as IDisposable)?.Dispose();
+        (HealthCheck as IDisposable)?.Dispose();
     }
 }
 

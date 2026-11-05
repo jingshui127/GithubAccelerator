@@ -17,7 +17,7 @@ public class ConnectionTestResult
 
 public class GithubConnectionService
 {
-    private readonly HttpClient _httpClient = new()
+    private static readonly HttpClient _httpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(30)
     };
@@ -28,6 +28,9 @@ public class GithubConnectionService
         "https://github.com",
         "https://raw.githubusercontent.com"
     };
+
+    private const string DnsServer = "8.8.8.8";
+    private const int NslookupTimeoutMs = 10000;
 
     public event Action<string, bool>? OnStatusUpdate;
     public event Action<ConnectionTestResult>? OnTestComplete;
@@ -188,7 +191,7 @@ public class GithubConnectionService
             var psi = new ProcessStartInfo
             {
                 FileName = "nslookup",
-                Arguments = "github.com",
+                Arguments = $"github.com {DnsServer}",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true
@@ -197,11 +200,47 @@ public class GithubConnectionService
             using var process = Process.Start(psi);
             if (process == null) return "未知";
 
-            var output = process.StandardOutput.ReadToEnd();
+            // 使用异步读取避免同步读取导致的死锁：
+            // 若先 WaitForExit 再 ReadToEnd，当标准输出缓冲区满时子进程会阻塞写入，WaitForExit 永不返回。
+            var outputBuilder = new System.Text.StringBuilder();
+            process.OutputDataReceived += (_, e) =>
+            {
+                if (e.Data != null)
+                    outputBuilder.AppendLine(e.Data);
+            };
+            process.BeginOutputReadLine();
+
+            // 设置超时，防止 nslookup 卡死永久阻塞调用线程
+            if (!process.WaitForExit(NslookupTimeoutMs))
+            {
+                try { process.Kill(); } catch { /* 忽略杀死进程异常 */ }
+            }
+            // 等待异步输出读取完成
             process.WaitForExit();
 
-            var match = Regex.Match(output, @"Address:\s*(\d+\.\d+\.\d+\.\d+)$", RegexOptions.Multiline);
-            return match.Success ? match.Groups[1].Value : "未知";
+            var output = outputBuilder.ToString();
+
+            // nslookup 输出中第一处 Address 是 DNS 服务器地址（紧跟在 "Default Server" / "默认服务器" 之后），
+            // 不是 github.com 的 IP。只取 "Name:" / "名称:" 行之后出现的 Address。
+            var lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            var foundName = false;
+            foreach (var line in lines)
+            {
+                var trimmed = line.Trim();
+                if (trimmed.StartsWith("Name:") || trimmed.StartsWith("名称:"))
+                {
+                    foundName = true;
+                    continue;
+                }
+
+                if (!foundName) continue;
+
+                var match = Regex.Match(trimmed, @"Address:\s*(\d+\.\d+\.\d+\.\d+)");
+                if (match.Success)
+                    return match.Groups[1].Value;
+            }
+
+            return "未知";
         }
         catch
         {

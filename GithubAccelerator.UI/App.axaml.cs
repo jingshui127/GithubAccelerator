@@ -16,8 +16,11 @@ public partial class App : Application
     {
         AvaloniaXamlLoader.Load(this);
         ThemeManager.Initialize();
-        
+
         LogService.Instance.Initialize();
+
+        // 启动星尘监控，用于改进 APP（连接 http://47.113.219.65:6600）
+        StardustMonitorService.Instance.Initialize();
     }
 
     public override void OnFrameworkInitializationCompleted()

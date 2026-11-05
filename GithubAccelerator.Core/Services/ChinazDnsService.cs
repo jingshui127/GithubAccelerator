@@ -66,13 +66,37 @@ public class ChinazDnsService : IDisposable
     private readonly ILogger<ChinazDnsService> _logger;
     private bool _disposed;
 
-    // GitHub 相关的关键域名
+    // GitHub 相关的关键域名（已扩展覆盖所有常用子域）
     private static readonly string[] GitHubDomains = new[]
     {
         "github.com",
+        "api.github.com",
         "raw.githubusercontent.com",
         "objects.githubusercontent.com",
-        "api.github.com"
+        "avatars.githubusercontent.com",
+        "avatars0.githubusercontent.com",
+        "avatars1.githubusercontent.com",
+        "avatars2.githubusercontent.com",
+        "avatars3.githubusercontent.com",
+        "avatars4.githubusercontent.com",
+        "avatars5.githubusercontent.com",
+        "camo.githubusercontent.com",
+        "cloud.githubusercontent.com",
+        "codeload.github.com",
+        "desktop.githubusercontent.com",
+        "favicons.githubusercontent.com",
+        "github.githubassets.com",
+        "github.io",
+        "githubstatus.com",
+        "live.github.com",
+        "media.githubusercontent.com",
+        "user-images.githubusercontent.com",
+        "private-user-images.githubusercontent.com",
+        "central.github.com",
+        "education.github.com",
+        "github.community",
+        "alive.github.com",
+        "collector.github.com",
     };
 
     // 多个公共 DNS 查询源（国内优先，超时短）
@@ -131,22 +155,28 @@ public class ChinazDnsService : IDisposable
                     allIps.Add((ip, "LocalDNS", 1));
             }
 
-            // 2. 遍历所有 DoH 提供商（按配置顺序，国内优先）
-            foreach (var provider in DnsProviders)
+            // 2. 所有 DoH 提供商并行查询（各自独立超时，不互相阻塞）
+            var dohTasks = DnsProviders.Select(async provider =>
             {
                 try
                 {
                     var ips = await ResolveFromDoHAsync(domain, provider.Url, provider.TimeoutSeconds);
-                    foreach (var ip in ips)
-                    {
-                        if (!allIps.Any(x => x.Ip == ip))
-                            allIps.Add((ip, $"{provider.Name}-DoH", allIps.Count + 1));
-                    }
+                    return (provider.Name, Ips: ips);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogDebug(ex, "{Provider} 查询 {Domain} 跳过（超时/不可达）", provider.Name, domain);
-                    // 被墙的源快速跳过，不影响其他源
+                    return (provider.Name, Ips: new List<string>());
+                }
+            });
+
+            var dohResults = await Task.WhenAll(dohTasks);
+            foreach (var (source, ips) in dohResults)
+            {
+                foreach (var ip in ips)
+                {
+                    if (!allIps.Any(x => x.Ip == ip))
+                        allIps.Add((ip, $"{source}-DoH", allIps.Count + 1));
                 }
             }
 

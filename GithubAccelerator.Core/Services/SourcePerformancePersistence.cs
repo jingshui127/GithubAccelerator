@@ -28,10 +28,11 @@ public class SourcePerformancePersistence
     }
 
     /// <summary>
-    /// 保存性能历史记录到文件
+    /// 保存性能历史记录到文件（原子写入：临时文件 + File.Replace）
     /// </summary>
     public async Task SaveAsync(Dictionary<string, SourcePerformanceHistory> historyStore)
     {
+        var tempPath = HistoryFilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
             var data = new PersistenceData
@@ -50,10 +51,22 @@ public class SourcePerformancePersistence
             };
 
             var json = JsonSerializer.Serialize(data, JsonOptions);
-            await File.WriteAllTextAsync(HistoryFilePath, json);
+            await File.WriteAllTextAsync(tempPath, json);
+
+            // 原子替换，避免崩溃导致 JSON 截断丢失历史数据
+            if (File.Exists(HistoryFilePath))
+            {
+                File.Replace(tempPath, HistoryFilePath, null);
+            }
+            else
+            {
+                File.Move(tempPath, HistoryFilePath);
+            }
         }
         catch (Exception ex)
         {
+            // 清理临时文件
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
             System.Diagnostics.Debug.WriteLine($"保存性能历史失败: {ex.Message}");
         }
     }
@@ -107,8 +120,7 @@ public class SourcePerformancePersistence
 
             foreach (var kvp in history)
             {
-                kvp.Value.TestRecords.RemoveAll(r => r.TestTime < cutoffTime);
-                kvp.Value.MetricsHistory.RemoveAll(m => m.LastTestTime < cutoffTime);
+                kvp.Value.CleanupBefore(cutoffTime);
             }
 
             await SaveAsync(history);

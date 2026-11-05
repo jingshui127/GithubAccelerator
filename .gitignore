@@ -1,10 +1,38 @@
+# .NET build outputs
 bin/
 obj/
+
+# Visual Studio
 .vs/
 *.user
 *.suo
 *.slnx
 *.vsidx
+
+# Database files
 *.db
 *.db-shm
 *.db-wal
+
+# Temporary and backup files
+*.tmp
+*.Backup.tmp
+*.bak
+
+# Publish output
+publish/
+**/publish/
+
+# Release packages
+*.zip
+GithubAccelerator-v*.zip
+GithubAccelerator_v*.zip
+
+# IDE specific
+.idea/
+*.swp
+*~
+
+# OS files
+Thumbs.db
+.DS_Store

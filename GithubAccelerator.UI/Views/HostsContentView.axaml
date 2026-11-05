@@ -8,40 +8,82 @@
              x:DataType="vm:MainWindowViewModel">
 
     <Border Padding="24" Background="{DynamicResource BackgroundColor}">
-        <Grid RowDefinitions="Auto,*,Auto" HorizontalAlignment="Stretch">
+        <Grid RowDefinitions="Auto,Auto,*,Auto" HorizontalAlignment="Stretch">
             <!-- 标题和操作按钮 -->
             <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
                 <StackPanel Grid.Column="0" Spacing="4">
                     <TextBlock Text="📄 Hosts 文件内容" FontSize="20" FontWeight="SemiBold"/>
-                    <TextBlock Text="查看和管理系统 Hosts 文件" FontSize="12" 
+                    <TextBlock Text="查看和管理系统 Hosts 文件" FontSize="12"
                                Foreground="{DynamicResource SecondaryTextBrush}"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
                     <Button Content="🔄 刷新" Command="{Binding ViewHostsContentCommand}"
                             Padding="12,8" FontSize="12"/>
+                    <Button Content="📋 复制 Hosts" Command="{Binding CopyHostsContentCommand}"
+                            Padding="12,8" FontSize="12"
+                            ToolTip.Tip="复制完整 Hosts 内容到剪贴板，便于反馈"/>
                     <Button Content="📝 用记事本打开" Command="{Binding OpenHostsInNotepadCommand}"
-                            Padding="12,8" FontSize="12"/>
+                            Padding="12,8" FontSize="12"
+                            IsEnabled="{Binding IsAdmin}"
+                            ToolTip.Tip="需要管理员权限"/>
                 </StackPanel>
             </Grid>
 
-            <!-- Hosts 内容显示 -->
-            <Border Grid.Row="1" CornerRadius="8" 
+            <!-- 搜索框 -->
+            <TextBox Grid.Row="1"
+                     Text="{Binding HostsSearchText}"
+                     Watermark="搜索 Hosts 行内容..."
+                     Margin="0,0,0,12"/>
+
+            <!-- Hosts 内容显示（带行号） -->
+            <Border Grid.Row="2" CornerRadius="8"
                     Background="{DynamicResource ControlFillColorSecondaryBrush}"
                     BorderThickness="1"
                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
-                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                    <TextBlock Text="{Binding HostsContent}"
-                               FontFamily="Consolas, Courier New, monospace"
-                               FontSize="12"
-                               Padding="16"
-                               TextWrapping="NoWrap"
-                               Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
-                </ScrollViewer>
+                <Panel>
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding HostsLines}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:HostsLineViewModel">
+                                    <Grid ColumnDefinitions="60,*">
+                                        <Border Grid.Column="0"
+                                                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                                BorderThickness="0,0,1,0"
+                                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                                            <TextBlock Text="{Binding LineNumberText}"
+                                                       FontFamily="Consolas, Courier New, monospace"
+                                                       FontSize="11"
+                                                       Foreground="Gray"
+                                                       Padding="8,2"
+                                                       HorizontalAlignment="Right"/>
+                                        </Border>
+                                        <Border Grid.Column="1"
+                                                Background="{Binding MatchBackground}"
+                                                Padding="8,2">
+                                            <TextBlock Text="{Binding Text}"
+                                                       FontFamily="Consolas, Courier New, monospace"
+                                                       FontSize="12"
+                                                       TextWrapping="NoWrap"
+                                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <StackPanel IsVisible="{Binding HasNoHostsLines}"
+                                VerticalAlignment="Center" HorizontalAlignment="Center"
+                                Spacing="8">
+                        <TextBlock Text="📋" FontSize="48" HorizontalAlignment="Center"/>
+                        <TextBlock Text="无匹配行" FontSize="16" HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"/>
+                    </StackPanel>
+                </Panel>
             </Border>
 
             <!-- 底部状态 -->
-            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="16" Margin="0,16,0,0">
-                <TextBlock Text="{Binding StatusMessage}" FontSize="12" 
+            <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="16" Margin="0,16,0,0">
+                <TextBlock Text="{Binding StatusMessage}" FontSize="12"
                            Foreground="{DynamicResource SecondaryTextBrush}"/>
             </StackPanel>
         </Grid>

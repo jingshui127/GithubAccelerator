@@ -3,15 +3,19 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6.svg)](https://www.microsoft.com/windows)
+[![Version](https://img.shields.io/badge/version-1.5.5-brightgreen.svg)](CHANGELOG.md)
 
 🚀 一款智能的 GitHub 访问加速工具，通过优化 Hosts 文件实现快速稳定的 GitHub 访问。
 
 ## ✨ 功能特性
 
 - 🔥 **一键加速** - 自动获取并应用最优 Hosts 记录
+- 🌐 **多源 DNS 探测** - DoH 并行查询 AliDNS/TencentDNS/Google/Cloudflare
 - 📊 **性能监控** - 实时监控多个数据源的性能指标
 - 🔄 **智能切换** - 根据健康评分自动选择最优数据源
-- 📈 **可视化图表** - 直观展示性能数据和趋势
+- 🩺 **子域健康检查** - 并行探测 GitHub 关键子域可达性
+- ⚡ **下载加速** - GitHub URL 镜像转换（ghproxy、jsDelivr 等）
+- 📈 **可视化图表** - 直观展示延迟数据和趋势
 - 🌙 **主题切换** - 支持深色/浅色主题
 - 💾 **数据备份** - 配置和数据安全备份
 - 🔔 **系统托盘** - 最小化到托盘，后台运行
@@ -33,48 +37,46 @@
 ### 安装
 
 1. 从 [Releases](https://github.com/jingshui127/GithubAccelerator/releases) 下载最新版本
-2. 运行安装程序
-3. 首次运行需要**管理员权限**
+2. 解压到任意目录
+3. 首次运行需要**管理员权限**（右键 → 以管理员身份运行）
 
 ### 使用
 
-1. 启动应用程序
-2. 点击"刷新"获取最新数据源
-3. 选择响应时间最短的数据源
-4. 点击"应用"完成加速
+1. 启动应用程序（建议以管理员身份运行）
+2. 应用会自动测试所有数据源并选择最优源
+3. 点击"智能优选"按钮自动应用最佳 Hosts
+4. 在"子域健康检查"页面验证加速效果
+5. 如需下载加速，使用"下载加速器"页面生成镜像链接
 
 ## 📖 文档
 
 | 文档 | 说明 |
 |------|------|
+| [变更日志](CHANGELOG.md) | 版本更新历史 |
+| [用户手册](docs/用户手册.html) | HTML 格式安装和使用指南 |
 | [项目计划](docs/PROJECT_PLAN.md) | 项目背景、目标、进度安排 |
 | [需求规格说明书](docs/SRS.md) | 功能需求和非功能需求 |
 | [设计文档](docs/SDD.md) | 架构设计和模块设计 |
-| [测试报告](docs/TEST_REPORT.md) | 测试用例和测试结果 |
-| [用户手册](docs/USER_MANUAL.md) | 安装和使用指南 |
-| [维护手册](docs/MAINTENANCE_MANUAL.md) | 运维和故障排除 |
-| [竞品分析](docs/COMPETITIVE_ANALYSIS.md) | 同类产品对比分析 |
-| [改进计划](docs/IMPROVEMENT_PLAN.md) | 功能改进和优化计划 |
-| [运维指南](docs/OPERATIONS.md) | 部署和运维操作指南 |
 
 ## 🏗️ 项目结构
 
 ```
 GithubAccelerator/
-├── GithubAccelerator.Core/       # 核心业务层
-├── GithubAccelerator.UI/         # Avalonia UI 界面
-├── GithubAccelerator/            # Windows Forms 界面
-├── GithubAccelerator.Tests/      # 测试项目
-└── docs/                         # 项目文档
+├── GithubAccelerator.Core/       # 核心业务层（服务、模型）
+├── GithubAccelerator.UI/         # Avalonia UI 界面（主项目）
+├── GithubAccelerator.Cli/        # CLI 命令行工具
+├── GithubAccelerator.Tests/      # 单元测试项目
+├── docs/                         # 项目文档
+└── CHANGELOG.md                  # 变更日志
 ```
 
 ## 🛠️ 技术栈
 
-- **语言**: C# 10+
+- **语言**: C# 13
 - **框架**: .NET 10
-- **UI 框架**: Avalonia 12
-- **架构模式**: MVVM
-- **日志**: Serilog
+- **UI 框架**: Avalonia 12.1 + Semi.Avalonia
+- **MVVM**: CommunityToolkit.Mvvm 8.4
+- **日志**: Serilog + NewLife.Core
 - **测试**: xUnit
 
 ## 🔧 开发
@@ -102,16 +104,16 @@ dotnet test
 ### 运行
 
 ```bash
-# 运行 UI 版本
+# 运行 UI 版本（推荐）
 dotnet run --project GithubAccelerator.UI
 
 # 运行 CLI 版本
-dotnet run --project GithubAccelerator
+dotnet run --project GithubAccelerator.Cli
 ```
 
 ## 📝 变更日志
 
-查看 [CHANGELOG.md](CHANGELOG.md) 了解版本更新历史。
+查看 [CHANGELOG.md](CHANGELOG.md) 了解版本更新历史（当前版本 v1.5.5）。
 
 ## 🤝 贡献
 
@@ -123,6 +125,11 @@ dotnet run --project GithubAccelerator
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 创建 Pull Request
 
+## 📧 联系方式
+
+- QQ: 2492123056
+- 微信公众号：科控物联
+
 ## 📄 许可证
 
 本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件。
@@ -132,6 +139,7 @@ dotnet run --project GithubAccelerator
 - [FastGit](https://fastgit.org/) - 数据源支持
 - [GitHub520](https://github.com/521xueweihan/GitHub520) - 数据源支持
 - [Avalonia](https://avaloniaui.net/) - UI 框架
+- [Semi.Avalonia](https://github.com/irihitech/Semi.Avalonia) - 主题组件
 
 ---
 

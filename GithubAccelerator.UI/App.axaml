@@ -12,23 +12,34 @@
         <converters:BoolToColorConverter x:Key="BoolToColorConverter"/>
         <converters:BoolToFontWeightConverter x:Key="BoolToFontWeightConverter"/>
 
-        <!-- Theme Colors -->
+        <!-- Theme Colors (共享) -->
         <Color x:Key="PrimaryColorValue">#0078D4</Color>
         <Color x:Key="SuccessColorValue">#107C10</Color>
         <Color x:Key="WarningColorValue">#FF8C00</Color>
         <Color x:Key="ErrorColorValue">#D13438</Color>
-        <Color x:Key="PrimaryTextColor">#000000</Color>
-        <Color x:Key="SecondaryTextColor">#666666</Color>
-        <Color x:Key="PrimaryTextColorDark">#E0E0E0</Color>
-        <Color x:Key="SecondaryTextColorDark">#9E9E9E</Color>
+        <Color x:Key="AccentColorValue">#0078D4</Color>
 
         <!-- Theme Brushes -->
         <SolidColorBrush x:Key="PrimaryColor" Color="{StaticResource PrimaryColorValue}"/>
         <SolidColorBrush x:Key="SuccessColor" Color="{StaticResource SuccessColorValue}"/>
         <SolidColorBrush x:Key="WarningColor" Color="{StaticResource WarningColorValue}"/>
         <SolidColorBrush x:Key="ErrorColor" Color="{StaticResource ErrorColorValue}"/>
-        <SolidColorBrush x:Key="PrimaryTextBrush" Color="{StaticResource PrimaryTextColor}"/>
-        <SolidColorBrush x:Key="SecondaryTextBrush" Color="{StaticResource SecondaryTextColor}"/>
+        <SolidColorBrush x:Key="AccentColor" Color="{StaticResource AccentColorValue}"/>
+        <SolidColorBrush x:Key="AccentColorLight" Color="#4FC3F7"/>
+
+        <!-- Status colors (统一全项目使用) -->
+        <SolidColorBrush x:Key="StatusHealthyBrush" Color="#107C10"/>
+        <SolidColorBrush x:Key="StatusWarningBrush" Color="#FF8C00"/>
+        <SolidColorBrush x:Key="StatusErrorBrush" Color="#D13438"/>
+        <SolidColorBrush x:Key="StatusUnknownBrush" Color="#9E9E9E"/>
+
+        <!-- 默认浅色主题 Brush（深色主题通过 NavButton/SecondaryText 的 DynamicResource 自动切换） -->
+        <SolidColorBrush x:Key="BackgroundColor" Color="#FAFAFA"/>
+        <SolidColorBrush x:Key="CardBackground" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="InfoBackground" Color="#E3F2FD"/>
+        <SolidColorBrush x:Key="CardBorderBrush" Color="#E0E0E0"/>
+        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#1A1A1A"/>
+        <SolidColorBrush x:Key="SecondaryTextBrush" Color="#666666"/>
     </Application.Resources>
 
     <Application.DataTemplates>
@@ -37,12 +48,28 @@
 
     <Application.Styles>
         <semi:SemiTheme Locale="zh-CN" />
-        <StyleInclude Source="avares://GithubAccelerator.UI/Styles/CardStyles.axaml"/>
-        
+
+        <!-- 统一页面标题样式 -->
+        <Style Selector="TextBlock.PageTitle">
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+
+        <!-- 统一卡片容器样式 -->
+        <Style Selector="Border.CardBorder">
+            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}"/>
+            <Setter Property="Padding" Value="16"/>
+        </Style>
+
         <!-- Navigation Button Style -->
         <Style Selector="Button.NavButton">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
             <Setter Property="CornerRadius" Value="8"/>
             <Setter Property="Padding" Value="12,10"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -52,23 +79,45 @@
                 </Transitions>
             </Setter>
         </Style>
-        
-        <!-- Navigation button hover/pressed (light) -->
         <Style Selector="Button.NavButton:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#E5E5E5"/>
         </Style>
         <Style Selector="Button.NavButton:pressed /template/ ContentPresenter">
             <Setter Property="Background" Value="#D0D0D0"/>
         </Style>
-        
-        <!-- Navigation button text -->
         <Style Selector="Button.NavButton TextBlock">
-            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
         </Style>
-        
+
         <!-- Secondary text style -->
         <Style Selector="TextBlock.SecondaryText">
-            <Setter Property="Foreground" Value="#666666"/>
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+        </Style>
+
+        <!-- 统一按钮主题样式（兼容 Theme="{DynamicResource XxxButton}" 引用） -->
+        <Style Selector="Button.PrimaryButton">
+            <Setter Property="Background" Value="{DynamicResource PrimaryColor}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="16,8"/>
+        </Style>
+        <Style Selector="Button.SuccessButton">
+            <Setter Property="Background" Value="{DynamicResource SuccessColor}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="16,8"/>
+        </Style>
+        <Style Selector="Button.DangerButton">
+            <Setter Property="Background" Value="{DynamicResource ErrorColor}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="16,8"/>
+        </Style>
+        <Style Selector="Button.SecondaryButton">
+            <Setter Property="Background" Value="#E5E5E5"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="16,8"/>
         </Style>
     </Application.Styles>
 </Application>

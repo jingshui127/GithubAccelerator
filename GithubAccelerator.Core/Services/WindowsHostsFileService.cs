@@ -8,8 +8,38 @@ public class WindowsHostsFileService : IHostsFileService
 {
     private const string HostsFilePath = @"C:\Windows\System32\drivers\etc\hosts";
     private const string BackupFilePath = @"C:\Windows\System32\drivers\etc\hosts.backup";
+    private const string TempFilePath = @"C:\Windows\System32\drivers\etc\hosts.tmp";
     private const string GithubHostsStartMarker = "# === GitHub Accelerator Start ===";
     private const string GithubHostsEndMarker = "# === GitHub Accelerator End ===";
+
+    /// <summary>
+    /// 原子性地写入 Hosts 文件：先写入临时文件，再用 File.Replace 替换。
+    /// 避免断电/崩溃导致系统 Hosts 损坏。
+    /// </summary>
+    private static async Task<bool> AtomicWriteAsync(string content)
+    {
+        var tempPath = TempFilePath + "." + Environment.CurrentManagedThreadId + "." + Guid.NewGuid().ToString("N");
+        try
+        {
+            await File.WriteAllTextAsync(tempPath, content);
+            if (File.Exists(HostsFilePath))
+            {
+                // File.Replace 原子替换，要求目标文件已存在
+                File.Replace(tempPath, HostsFilePath, null);
+            }
+            else
+            {
+                File.Move(tempPath, HostsFilePath);
+            }
+            return true;
+        }
+        catch
+        {
+            // 清理临时文件
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+            return false;
+        }
+    }
 
     public async Task<bool> BackupHostsFileAsync()
     {
@@ -46,14 +76,13 @@ public class WindowsHostsFileService : IHostsFileService
             await BackupHostsFileAsync();
             var currentContent = await ReadHostsFileAsync();
             var newContent = RemoveGithubHostsBlock(currentContent);
-            
+
             // 添加标记区域，确保只管理我们自己的内容
             newContent += $"\n{GithubHostsStartMarker}\n";
             newContent += hostsContent.Trim();
             newContent += $"\n{GithubHostsEndMarker}\n";
-            
-            await File.WriteAllTextAsync(HostsFilePath, newContent);
-            return true;
+
+            return await AtomicWriteAsync(newContent);
         }
         catch
         {
@@ -72,8 +101,7 @@ public class WindowsHostsFileService : IHostsFileService
             var currentContent = await ReadHostsFileAsync();
             var restoredContent = RemoveGithubHostsBlock(currentContent);
             restoredContent += "\n" + RemoveGithubHostsBlock(backupContent);
-            await File.WriteAllTextAsync(HostsFilePath, restoredContent);
-            return true;
+            return await AtomicWriteAsync(restoredContent);
         }
         catch
         {

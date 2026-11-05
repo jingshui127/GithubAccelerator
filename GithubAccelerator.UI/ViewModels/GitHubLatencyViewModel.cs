@@ -8,11 +8,24 @@ using GithubAccelerator.UI.Services;
 
 namespace GithubAccelerator.UI.ViewModels
 {
-    public partial class GitHubLatencyViewModel : ObservableObject
+    public partial class GitHubLatencyViewModel : ObservableObject, IDisposable
     {
         private readonly GitHubLatencyMonitorService _monitorService = GitHubLatencyMonitorService.Instance;
         private readonly OperationHistoryService _historyService = OperationHistoryService.Instance;
         private bool _isInitialized = false;
+
+        // Chart Y axis 相关常量
+        private const double ChartYAxisStep = 100;
+        private const double MinChartMaxY = 200;
+        private const double DefaultChartMaxY = 1000;
+
+        // 延迟状态判定字符串常量
+        private const string StatusNotMonitoring = "未监控";
+        private const string StatusDetecting = "检测中";
+        private const string StatusExcellent = "优秀";
+        private const string StatusGood = "良好";
+        private const string StatusAverage = "一般";
+        private const string StatusPoor = "较差";
 
         [ObservableProperty]
         private ObservableCollection<GitHubLatencyRecord> _latencyRecords = new();
@@ -51,14 +64,13 @@ namespace GithubAccelerator.UI.ViewModels
         {
             try
             {
-                _monitorService = GitHubLatencyMonitorService.Instance;
-                _historyService = OperationHistoryService.Instance;
-                
                 _monitorService.OnLatencyUpdated += OnLatencyUpdated;
-                
-                UpdateFromService();
+
+                // 注意：必须先置位 _isInitialized，再调用 UpdateFromService，
+                // 否则 UpdateFromService 内部的早返回判断会让此次刷新失效。
                 _isInitialized = true;
-                
+                UpdateFromService();
+
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
                     try
@@ -112,7 +124,10 @@ namespace GithubAccelerator.UI.ViewModels
             IsMonitoring = _monitorService.IsMonitoring;
             
             var recentRecords = _monitorService.GetRecentRecords(30);
-            
+
+            // 注意：这里采用 Clear + Add 的整体重建模式，会带来轻微的 UI 闪烁。
+            // 增量更新（diff/patch）逻辑较复杂，且本场景下记录数量有限（最多 30 条），
+            // 暂时保留该简单实现，后续若有性能或视觉问题再考虑增量更新。
             LatencyRecords.Clear();
             var latencyValues = new List<double>();
             foreach (var record in recentRecords)
@@ -123,49 +138,49 @@ namespace GithubAccelerator.UI.ViewModels
                     latencyValues.Add(Math.Min(record.LatencyMs, 5000));
                 }
             }
-            
+
             ChartValues = latencyValues;
-            
+
             if (latencyValues.Count > 0)
             {
                 var maxVal = latencyValues.Max();
-                ChartMaxY = Math.Ceiling(maxVal / 100) * 100 + 100;
-                if (ChartMaxY < 200) ChartMaxY = 200;
+                ChartMaxY = Math.Ceiling(maxVal / ChartYAxisStep) * ChartYAxisStep + ChartYAxisStep;
+                if (ChartMaxY < MinChartMaxY) ChartMaxY = MinChartMaxY;
             }
             else
             {
-                ChartMaxY = 1000;
+                ChartMaxY = DefaultChartMaxY;
             }
 
             if (!IsMonitoring)
             {
                 StatusMessage = "监控已停止";
-                LatencyStatus = "未监控";
+                LatencyStatus = StatusNotMonitoring;
             }
             else if (CurrentLatency == 0)
             {
                 StatusMessage = "等待数据...";
-                LatencyStatus = "检测中";
+                LatencyStatus = StatusDetecting;
             }
             else if (CurrentLatency < 100)
             {
                 StatusMessage = $"最后更新：{DateTime.Now:HH:mm:ss}";
-                LatencyStatus = "优秀";
+                LatencyStatus = StatusExcellent;
             }
             else if (CurrentLatency < 300)
             {
                 StatusMessage = $"最后更新：{DateTime.Now:HH:mm:ss}";
-                LatencyStatus = "良好";
+                LatencyStatus = StatusGood;
             }
             else if (CurrentLatency < 500)
             {
                 StatusMessage = $"最后更新：{DateTime.Now:HH:mm:ss}";
-                LatencyStatus = "一般";
+                LatencyStatus = StatusAverage;
             }
             else
             {
                 StatusMessage = $"最后更新：{DateTime.Now:HH:mm:ss}";
-                LatencyStatus = "较差";
+                LatencyStatus = StatusPoor;
             }
         }
 

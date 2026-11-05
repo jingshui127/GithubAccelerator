@@ -9,6 +9,8 @@ public partial class QuickGuideWindow : Window
     public QuickGuideWindow()
     {
         InitializeComponent();
+        var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        VersionText.Text = $"GitHub 加速器 Pro v{version?.Major ?? 1}.{version?.Minor ?? 0}.{version?.Build ?? 0}";
     }
 
     private void CloseButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

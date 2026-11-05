@@ -1,10 +1,8 @@
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Input;
+using System.Threading.Tasks;
 using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -33,6 +31,11 @@ public partial class LogEntryViewModel : ObservableObject
     [ObservableProperty]
     private IBrush _levelBackground = Brushes.Gray;
 
+    /// <summary>
+    /// 由 View 层设置的剪贴板设置委托，避免 ViewModel 直接依赖 UI 框架。
+    /// </summary>
+    public Func<string, Task>? SetClipboardTextAsync { get; set; }
+
     public LogEntryViewModel(LogEntry logEntry)
     {
         _logEntry = logEntry;
@@ -53,11 +56,14 @@ public partial class LogEntryViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void CopyMessage()
+    private async Task CopyMessage()
     {
         try
         {
-            System.Windows.Forms.Clipboard.SetText(Message);
+            if (SetClipboardTextAsync != null)
+            {
+                await SetClipboardTextAsync(Message);
+            }
         }
         catch (Exception ex)
         {
@@ -77,8 +83,47 @@ public partial class LogViewerViewModel : ObservableObject
     [ObservableProperty]
     private ObservableCollection<LogEntryViewModel> _filteredLogs = new();
 
+    /// <summary>
+    /// 关键词搜索文本（不区分大小写）。空字符串表示不搜索。
+    /// </summary>
     [ObservableProperty]
-    private string _selectedLogLevelProperty = "全部";
+    private string _searchText = string.Empty;
+
+    /// <summary>
+    /// 当筛选后的日志列表为空时返回 true，用于驱动空状态 UI。
+    /// </summary>
+    public bool HasNoLogs => FilteredLogs == null || FilteredLogs.Count == 0;
+
+    /// <summary>
+    /// ComboBox 数据源：日志级别筛选选项。
+    /// </summary>
+    public ObservableCollection<string> LogLevels { get; } = new()
+    {
+        "全部", "Debug", "Information", "Warning", "Error"
+    };
+
+    /// <summary>
+    /// 由 View 层设置的剪贴板委托，传递给子条目。
+    /// 设置时会同步更新已存在的所有日志条目，确保历史日志也能复制。
+    /// </summary>
+    public Func<string, Task>? SetClipboardTextAsync
+    {
+        get => _setClipboardTextAsync;
+        set
+        {
+            _setClipboardTextAsync = value;
+            foreach (var log in Logs)
+            {
+                log.SetClipboardTextAsync = value;
+            }
+        }
+    }
+    private Func<string, Task>? _setClipboardTextAsync;
+
+    /// <summary>
+    /// 由 View 层设置的导出对话框委托：参数为 (默认文件名, 文件内容)，返回用户选择的文件路径或 null。
+    /// </summary>
+    public Func<string, string, Task<string?>>? SaveFileAsync { get; set; }
 
     public string SelectedLogLevel
     {
@@ -97,39 +142,59 @@ public partial class LogViewerViewModel : ObservableObject
 
         foreach (var entry in _logService.LogEntries)
         {
-            Logs.Add(new LogEntryViewModel(entry));
+            Logs.Add(CreateLogEntry(entry));
         }
 
         FilteredLogs = new ObservableCollection<LogEntryViewModel>(Logs);
+    }
+
+    partial void OnSearchTextChanged(string value)
+    {
+        FilterLogs();
+    }
+
+    private LogEntryViewModel CreateLogEntry(LogEntry entry)
+    {
+        return new LogEntryViewModel(entry)
+        {
+            SetClipboardTextAsync = SetClipboardTextAsync
+        };
     }
 
     private void OnLogEntryAdded(LogEntry entry)
     {
         Dispatcher.UIThread.Post(() =>
         {
-            var viewModel = new LogEntryViewModel(entry);
+            var viewModel = CreateLogEntry(entry);
             Logs.Add(viewModel);
             FilterLogs();
         });
-    }
-
-    private void OnSelectedLogLevelChanged(string value)
-    {
-        FilterLogs();
     }
 
     private void FilterLogs()
     {
         FilteredLogs.Clear();
 
-        var logsToAdd = string.IsNullOrEmpty(SelectedLogLevel) || SelectedLogLevel == "全部"
+        // 1. 按级别筛选
+        var byLevel = string.IsNullOrEmpty(SelectedLogLevel) || SelectedLogLevel == "全部"
             ? Logs
             : Logs.Where(l => l.Level == SelectedLogLevel);
 
-        foreach (var log in logsToAdd)
+        // 2. 按关键词筛选（不区分大小写，匹配时间/级别/消息）
+        var keyword = SearchText?.Trim() ?? string.Empty;
+        var finalLogs = string.IsNullOrEmpty(keyword)
+            ? byLevel
+            : byLevel.Where(l =>
+                (l.Message?.Contains(keyword, StringComparison.OrdinalIgnoreCase) ?? false)
+                || (l.Level?.Contains(keyword, StringComparison.OrdinalIgnoreCase) ?? false)
+                || (l.FormattedTime?.Contains(keyword, StringComparison.OrdinalIgnoreCase) ?? false));
+
+        foreach (var log in finalLogs)
         {
             FilteredLogs.Add(log);
         }
+
+        OnPropertyChanged(nameof(HasNoLogs));
     }
 
     [RelayCommand]
@@ -139,5 +204,41 @@ public partial class LogViewerViewModel : ObservableObject
         Logs.Clear();
         FilteredLogs.Clear();
         Log.Information("日志已清空");
+    }
+
+    /// <summary>
+    /// 导出当前筛选后的日志到 txt 文件。
+    /// </summary>
+    [RelayCommand]
+    private async Task ExportLogs()
+    {
+        if (FilteredLogs.Count == 0)
+        {
+            return;
+        }
+
+        if (SaveFileAsync == null)
+        {
+            return;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"# GitHub 加速器日志导出");
+        sb.AppendLine($"# 导出时间: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        sb.AppendLine($"# 日志条数: {FilteredLogs.Count}");
+        sb.AppendLine($"# 筛选条件: 级别={SelectedLogLevel}, 关键词=\"{SearchText}\"");
+        sb.AppendLine();
+
+        foreach (var log in FilteredLogs)
+        {
+            sb.AppendLine($"[{log.FormattedTime}] [{log.Level}] {log.Message}");
+        }
+
+        var defaultName = $"github_accelerator_logs_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+        var path = await SaveFileAsync(defaultName, sb.ToString());
+        if (!string.IsNullOrEmpty(path))
+        {
+            Log.Information("日志已导出到：{Path}", path);
+        }
     }
 }

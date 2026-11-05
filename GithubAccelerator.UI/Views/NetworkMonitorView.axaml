@@ -1,0 +1,13 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:GithubAccelerator.UI.ViewModels"
+             xmlns:views="using:GithubAccelerator.UI.Views"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="600"
+             x:Class="GithubAccelerator.UI.Views.NetworkMonitorView"
+             x:DataType="vm:NetworkMonitorViewModel">
+
+    <views:GitHubLatencyView DataContext="{Binding GitHubLatency}"/>
+
+</UserControl>

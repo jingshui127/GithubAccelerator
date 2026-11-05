@@ -14,6 +14,11 @@ public class HostsSource
     public long LastResponseTimeMs { get; set; }
     public DateTime? LastCheckTime { get; set; }
     public bool IsDnsProbe { get; set; } = false; // 是否为DNS探测数据源
+    /// <summary>
+    /// 同源镜像 URL 列表（与主 Url 内容相同，仅用于故障转移）。
+    /// 应用时按响应时间排序依次尝试，第一个成功即返回。
+    /// </summary>
+    public string[] MirrorUrls { get; set; } = Array.Empty<string>();
 }
 
 public class GithubHostsService
@@ -28,44 +33,24 @@ public class GithubHostsService
         new HostsSource
         {
             Url = "https://raw.hellogithub.com/hosts",
-            Name = "GitHub520",
-            Description = "HelloGitHub提供的GitHub Hosts，每日更新，推荐首选",
-            Priority = 1
-        },
-        new HostsSource
-        {
-            Url = "https://gitlab.com/ineo6/hosts/-/raw/master/hosts",
-            Name = "ineo6",
-            Description = "ineo6提供的GitHub Hosts，稳定性高",
-            Priority = 2
-        },
-        new HostsSource
-        {
-            Url = "https://raw.githubusercontent.com/521xueweihan/GitHub520/main/hosts",
-            Name = "GitHub520 Raw",
-            Description = "GitHub520原始源",
-            Priority = 3
-        },
-        new HostsSource
-        {
-            Url = "https://ghproxy.net/https://raw.githubusercontent.com/521xueweihan/GitHub520/main/hosts",
-            Name = "GHProxy",
-            Description = "GHProxy镜像源，国内访问稳定",
-            Priority = 4
-        },
-        new HostsSource
-        {
-            Url = "https://hosts.gitcdn.top/hosts.txt",
-            Name = "GitCDN",
-            Description = "GitCDN.top提供的GitHub Hosts镜像",
-            Priority = 5
+            Name = "GitHub520 (智能镜像)",
+            Description = "GitHub520 项目 hosts，5 个镜像自动故障转移，每日更新",
+            Priority = 1,
+            // 同源镜像：失败时按响应时间依次尝试
+            MirrorUrls = new[]
+            {
+                "https://gitlab.com/ineo6/hosts/-/raw/master/hosts",
+                "https://raw.githubusercontent.com/521xueweihan/GitHub520/main/hosts",
+                "https://ghproxy.net/https://raw.githubusercontent.com/521xueweihan/GitHub520/main/hosts",
+                "https://hosts.gitcdn.top/hosts.txt"
+            }
         },
         new HostsSource
         {
             Url = "https://raw.githubusercontent.com/ittuann/GitHub-IP-hosts/main/hosts",
             Name = "ittuann",
             Description = "ittuann提供的GitHub IP Hosts，自动更新",
-            Priority = 6
+            Priority = 2
         },
         new HostsSource
         {
@@ -227,31 +212,58 @@ public class GithubHostsService
             return await TryFetchFromDnsProbeAsync(source);
         }
 
-        try
+        // 主 URL + 镜像 URL 一起作为候选，按顺序尝试，第一个成功即返回
+        var candidates = new List<string> { source.Url };
+        if (source.MirrorUrls != null && source.MirrorUrls.Length > 0)
         {
-            var sw = Stopwatch.StartNew();
-            var response = await HttpClient.GetAsync(source.Url);
-            sw.Stop();
+            candidates.AddRange(source.MirrorUrls);
+        }
 
-            source.LastResponseTimeMs = sw.ElapsedMilliseconds;
-            source.LastCheckTime = DateTime.Now;
+        Exception? lastException = null;
+        long bestResponseTime = -1;
 
-            if (response.IsSuccessStatusCode)
+        foreach (var url in candidates)
+        {
+            try
             {
-                var content = await response.Content.ReadAsStringAsync();
-                if (ContainsGithubHosts(content))
+                var sw = Stopwatch.StartNew();
+                var response = await HttpClient.GetAsync(url);
+                sw.Stop();
+
+                if (response.IsSuccessStatusCode)
                 {
-                    source.IsHealthy = true;
-                    return content;
+                    var content = await response.Content.ReadAsStringAsync();
+                    if (ContainsGithubHosts(content))
+                    {
+                        // 记录本次成功响应时间（取最快的一次）
+                        if (bestResponseTime < 0 || sw.ElapsedMilliseconds < bestResponseTime)
+                        {
+                            bestResponseTime = sw.ElapsedMilliseconds;
+                        }
+                        source.IsHealthy = true;
+                        source.LastResponseTimeMs = bestResponseTime;
+                        source.LastCheckTime = DateTime.Now;
+                        if (url != source.Url)
+                        {
+                            OnLog?.Invoke($"✓ 使用镜像: {url}");
+                        }
+                        return content;
+                    }
                 }
             }
-            source.IsHealthy = false;
+            catch (Exception ex)
+            {
+                lastException = ex;
+                OnLog?.Invoke($"⚠ 镜像失败，尝试下一个: {url} ({ex.Message})");
+            }
         }
-        catch
+
+        source.IsHealthy = false;
+        source.LastResponseTimeMs = -1;
+        source.LastCheckTime = DateTime.Now;
+        if (lastException != null)
         {
-            source.IsHealthy = false;
-            source.LastResponseTimeMs = -1;
-            source.LastCheckTime = DateTime.Now;
+            OnLog?.Invoke($"✗ 所有镜像均失败: {source.Name}");
         }
         return null;
     }

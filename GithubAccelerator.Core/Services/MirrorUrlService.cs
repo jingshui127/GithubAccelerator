@@ -12,8 +12,11 @@ public class MirrorUrlService
     /// </summary>
     public static readonly MirrorSite[] AvailableMirrors = new[]
     {
-        new MirrorSite("ghfast.top", "https://ghfast.top", "https://ghfast.top/{url}", "全功能加速（推荐）"),
+        new MirrorSite("GHProxy", "https://ghproxy.net", "https://ghproxy.net/{url}", "全功能加速（推荐）"),
+        new MirrorSite("gh.api.99988866.xyz", "https://gh.api.99988866.xyz", "https://gh.api.99988866.xyz/{url}", "国内高可用"),
+        new MirrorSite("ghfast.top", "https://ghfast.top", "https://ghfast.top/{url}", "全功能加速"),
         new MirrorSite("jsDelivr CDN", "https://cdn.jsdelivr.net", null, "静态资源专用"),
+        new MirrorSite("GitMirror", "https://gitmirror.com", "https://gitmirror.com/accelerate/{url}", "镜像浏览"),
     };
 
     /// <summary>
@@ -23,6 +26,7 @@ public class MirrorUrlService
     {
         new GitCloneMirror("gitclone.com", "git clone https://gitclone.com/github.com/{path}.git", "推荐"),
         new GitCloneMirror("github.com.cnpmjs.org", "git clone https://github.com.cnpmjs.org/{path}.git", "cnpm 镜像"),
+        new GitCloneMirror("ghproxy.net", "git clone https://ghproxy.net/https://github.com/{path}.git", "通过代理克隆"),
     };
 
     /// <summary>

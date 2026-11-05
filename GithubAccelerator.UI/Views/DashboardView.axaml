@@ -108,6 +108,35 @@
                     </Border>
                 </Grid>
 
+                <!-- 测速对比 -->
+                <Border Padding="20" Margin="4,0,0,8" CornerRadius="12"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <StackPanel Orientation="Horizontal" Spacing="24">
+                        <StackPanel>
+                            <TextBlock Text="⏱️ 应用前延迟" FontSize="12" Classes="SecondaryText"/>
+                            <TextBlock Text="{Binding PreApplyLatency}" FontSize="20" FontWeight="Bold"/>
+                        </StackPanel>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="→" FontSize="24" FontWeight="Bold" Foreground="Green"/>
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="⚡ 应用后延迟" FontSize="12" Classes="SecondaryText"/>
+                            <TextBlock Text="{Binding PostApplyLatency}" FontSize="20" FontWeight="Bold" Foreground="{Binding ImprovementColor}"/>
+                        </StackPanel>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="=" FontSize="24" FontWeight="Bold"/>
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="📈 提升" FontSize="12" Classes="SecondaryText"/>
+                            <TextBlock Text="{Binding LatencyImprovement}" FontSize="20" FontWeight="Bold" Foreground="{Binding ImprovementColor}"/>
+                        </StackPanel>
+                        <Button Content="🔄 重新测速" Command="{Binding RunSpeedTestCommand}" 
+                                Margin="0,0,0,8" Padding="12,6" VerticalAlignment="Bottom"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- 快速操作栏 -->
                 <Border Padding="16,12" CornerRadius="12"
                         Background="{DynamicResource ControlFillColorDefaultBrush}"
@@ -175,7 +204,9 @@
                                        FontSize="16" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                         </StackPanel>
                         
-                        <Button Grid.Column="4" Content="应用" Command="{Binding ApplyHostsCommand}"
+                        <Button Grid.Column="4" Content="🚀 智能优选" Command="{Binding ApplyHostsCommand}"
+                                ToolTip.Tip="自动拉取全部数据源，DNS解析+HTTPS探测，为每个域名选择最优IP"
+                                IsEnabled="{Binding !IsApplyingHosts}"
                                 Padding="16,8" FontSize="13" 
                                 Background="#20FFFFFF" 
                                 Foreground="White"
@@ -269,12 +300,15 @@
                                         <!-- 应用按钮 -->
                                         <Button Grid.Column="6" Content="预览"
                                                 Command="{Binding PreviewHostsCommand}"
+                                                IsEnabled="{Binding IsHealthy}"
                                                 Padding="8,6" FontSize="11"
                                                 VerticalAlignment="Center"
                                                 Margin="8,0,0,0"
                                                 ToolTip.Tip="预览数据源内容"/>
                                         <Button Grid.Column="7" Content="应用"
                                                 Command="{Binding ApplySingleSourceCommand}"
+                                                IsEnabled="{Binding IsHealthy}"
+                                                ToolTip.Tip="仅应用此数据源（不合并其他源）"
                                                 Padding="12,6" FontSize="11"
                                                 VerticalAlignment="Center"
                                                 Margin="4,0,0,0"/>

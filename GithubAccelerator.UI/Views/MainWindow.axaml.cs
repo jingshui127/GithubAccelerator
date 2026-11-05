@@ -78,15 +78,10 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object? sender, WindowClosingEventArgs e)
     {
+        // 关闭按钮直接退出程序（最小化到托盘的行为在 WindowState 变化时处理）
         if (_isExiting) return;
-
-        if (_minimizeToTray)
-        {
-            e.Cancel = true;
-            this.Hide();
-            this.ShowInTaskbar = false;
-            _trayIconManager?.ShowBalloonTip("GitHub 加速器 Pro", "程序已在后台运行");
-        }
+        _isExiting = true;
+        _trayIconManager?.Dispose();
     }
 
     private void ShowWindow()

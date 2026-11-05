@@ -17,47 +17,76 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            
-            <TextBlock Grid.Column="0" Text="Hosts 备份管理" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
-            
-            <Button Grid.Column="1" Content="创建备份" Command="{Binding CreateBackupCommand}" 
+
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="Hosts 备份管理" FontSize="16" FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding StatusMessage}" FontSize="11" Classes="SecondaryText"
+                           Margin="0,4,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <Button Grid.Column="1" Content="创建备份" Command="{Binding CreateBackupCommand}"
                     Theme="{DynamicResource SuccessButton}"
-                    Padding="12,4"/>
+                    Padding="12,4" VerticalAlignment="Center"/>
         </Grid>
 
-        <Border Grid.Row="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" 
-                BorderThickness="1" CornerRadius="8" 
+        <Border Grid.Row="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                BorderThickness="1" CornerRadius="8"
                 Background="{DynamicResource ControlFillColorDefaultBrush}">
-            <ListBox ItemsSource="{Binding Backups}" 
-                     Background="Transparent"
-                     BorderThickness="0">
-                <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:BackupItemViewModel">
-                        <Border Padding="12" Margin="0,0,0,1" BorderThickness="0,0,0,1" 
-                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
-                            <Grid ColumnDefinitions="*,Auto,Auto,Auto">
-                                <StackPanel Grid.Column="0">
-                                    <TextBlock Text="{Binding BackupTimeText}" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="{Binding Note}" FontSize="11" Classes="SecondaryText" 
-                                               IsVisible="{Binding HasNote}"/>
-                                </StackPanel>
-                                
-                                <Button Grid.Column="1" Content="恢复" Command="{Binding RestoreCommand}" 
-                                        Theme="{DynamicResource PrimaryButton}"
-                                        Padding="8,4" Margin="4,0"/>
-                                
-                                <Button Grid.Column="2" Content="查看" Command="{Binding ViewContentCommand}" 
-                                        Theme="{DynamicResource SecondaryButton}"
-                                        Padding="8,4" Margin="4,0"/>
-                                
-                                <Button Grid.Column="3" Content="删除" Command="{Binding DeleteCommand}" 
-                                        Theme="{DynamicResource DangerButton}"
-                                        Padding="8,4" Margin="4,0"/>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+            <Panel>
+                <ListBox ItemsSource="{Binding Backups}"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         IsVisible="{Binding HasBackups}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BackupItemViewModel">
+                            <Border Padding="12" Margin="0,0,0,1" BorderThickness="0,0,0,1"
+                                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="{Binding BackupTimeText}" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding Note}" FontSize="11" Classes="SecondaryText"
+                                                   IsVisible="{Binding HasNote}"/>
+                                    </StackPanel>
+
+                                    <Button Grid.Column="1" Content="恢复" Command="{Binding RestoreCommand}"
+                                            Theme="{DynamicResource PrimaryButton}"
+                                            Padding="8,4" Margin="4,0"/>
+
+                                    <Button Grid.Column="2" Content="查看" Command="{Binding ViewContentCommand}"
+                                            Theme="{DynamicResource SecondaryButton}"
+                                            Padding="8,4" Margin="4,0"/>
+
+                                    <Button Grid.Column="3" Content="删除" Command="{Binding DeleteCommand}"
+                                            Theme="{DynamicResource DangerButton}"
+                                            Padding="8,4" Margin="4,0"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <!-- 加载中状态 -->
+                <StackPanel IsVisible="{Binding IsLoading}"
+                            VerticalAlignment="Center" HorizontalAlignment="Center"
+                            Spacing="8">
+                    <TextBlock Text="⏳" FontSize="48" HorizontalAlignment="Center"/>
+                    <TextBlock Text="正在加载备份列表..." FontSize="14" HorizontalAlignment="Center"
+                               Foreground="{DynamicResource SecondaryTextBrush}"/>
+                </StackPanel>
+
+                <!-- 空状态 -->
+                <StackPanel IsVisible="{Binding HasNoBackups}"
+                            VerticalAlignment="Center" HorizontalAlignment="Center"
+                            Spacing="12">
+                    <TextBlock Text="💾" FontSize="56" HorizontalAlignment="Center"/>
+                    <TextBlock Text="暂无备份" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="点击右上角「创建备份」按钮，将当前 Hosts 文件保存为可恢复的快照。"
+                               FontSize="12" HorizontalAlignment="Center"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center"
+                               MaxWidth="400"/>
+                </StackPanel>
+            </Panel>
         </Border>
     </Grid>
 </UserControl>

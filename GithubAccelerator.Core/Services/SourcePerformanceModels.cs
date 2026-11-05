@@ -149,47 +149,84 @@ public class SourceTestRecord
 /// </summary>
 public class SourcePerformanceHistory
 {
+    private readonly object _lock = new();
+
     /// <summary>
     /// 数据源 URL
     /// </summary>
     public string Url { get; set; } = string.Empty;
-    
+
     /// <summary>
     /// 测试记录列表
     /// </summary>
     public List<SourceTestRecord> TestRecords { get; set; } = new();
-    
+
     /// <summary>
     /// 性能指标历史记录
     /// </summary>
     public List<SourcePerformanceMetrics> MetricsHistory { get; set; } = new();
-    
+
     /// <summary>
     /// 最后更新时间
     /// </summary>
     public DateTime LastUpdateTime { get; set; }
-    
+
     /// <summary>
-    /// 添加测试记录
+    /// 添加测试记录（线程安全）
     /// </summary>
     public void AddTestRecord(SourceTestRecord record)
     {
-        TestRecords.Add(record);
-        
-        // 保留最近 1000 条记录
-        if (TestRecords.Count > 1000)
+        lock (_lock)
         {
-            TestRecords.RemoveAt(0);
+            TestRecords.Add(record);
+
+            // 保留最近 1000 条记录
+            if (TestRecords.Count > 1000)
+            {
+                TestRecords.RemoveAt(0);
+            }
+
+            LastUpdateTime = DateTime.Now;
         }
-        
-        LastUpdateTime = DateTime.Now;
     }
-    
+
     /// <summary>
-    /// 获取最近 N 条记录
+    /// 添加性能指标（线程安全）
+    /// </summary>
+    public void AddMetrics(SourcePerformanceMetrics metrics)
+    {
+        lock (_lock)
+        {
+            MetricsHistory.Add(metrics);
+
+            // 保留最近 100 个性能指标
+            if (MetricsHistory.Count > 100)
+            {
+                MetricsHistory.RemoveAt(0);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 获取最近 N 条记录（线程安全，返回副本）
     /// </summary>
     public List<SourceTestRecord> GetRecentRecords(int count = 100)
     {
-        return TestRecords.OrderByDescending(r => r.TestTime).Take(count).ToList();
+        lock (_lock)
+        {
+            return TestRecords.OrderByDescending(r => r.TestTime).Take(count).ToList();
+        }
+    }
+
+    /// <summary>
+    /// 清理早于指定时间的记录（线程安全）
+    /// </summary>
+    public void CleanupBefore(DateTime cutoffTime)
+    {
+        lock (_lock)
+        {
+            TestRecords.RemoveAll(r => r.TestTime < cutoffTime);
+            MetricsHistory.RemoveAll(m => m.LastTestTime < cutoffTime);
+        }
     }
 }

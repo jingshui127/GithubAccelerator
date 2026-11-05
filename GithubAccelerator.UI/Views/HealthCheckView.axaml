@@ -1,0 +1,150 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:GithubAccelerator.UI.ViewModels"
+             xmlns:m="using:GithubAccelerator.UI.Models"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
+             x:Class="GithubAccelerator.UI.Views.HealthCheckView"
+             x:DataType="vm:HealthCheckViewModel">
+
+    <UserControl.DataContext>
+        <vm:HealthCheckViewModel/>
+    </UserControl.DataContext>
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="20">
+        <!-- 顶部标题和操作区 -->
+        <Border Grid.Row="0" Padding="20" CornerRadius="12"
+                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                BorderThickness="1"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
+                <StackPanel Grid.Column="0" Grid.Row="0" Spacing="4">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock Text="🩺" FontSize="22"/>
+                        <TextBlock Text="GitHub 子域健康检查" FontSize="18" FontWeight="SemiBold"/>
+                    </StackPanel>
+                    <TextBlock Text="并行探测 GitHub 关键子域，定位为何浏览器有时打不开"
+                               FontSize="12" Classes="SecondaryText" Margin="32,0,0,0"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Grid.Row="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Button Content="开始检测" Command="{Binding RunCheckCommand}"
+                            Padding="20,8" FontSize="13" FontWeight="SemiBold"
+                            IsEnabled="{Binding IsNotRunning}"/>
+                    <Button Content="取消" Command="{Binding CancelCommand}"
+                            Padding="16,8" FontSize="13"
+                            IsVisible="{Binding IsRunning}"/>
+                    <Button Content="📋 复制结果" Command="{Binding CopyResultsCommand}"
+                            Padding="16,8" FontSize="13"
+                            IsVisible="{Binding CanCopy}"/>
+                </StackPanel>
+
+                <Grid Grid.Column="0" Grid.ColumnSpan="2" Grid.Row="1" Margin="0,16,0,0"
+                      ColumnDefinitions="*,*,*,*">
+                    <Border Grid.Column="0" Padding="12,8" CornerRadius="8" Margin="0,0,4,0"
+                            Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                        <StackPanel>
+                            <TextBlock Text="✅ 正常" FontSize="11" Classes="SecondaryText"/>
+                            <TextBlock Text="{Binding OkCount}" FontSize="20" FontWeight="Bold" Foreground="#4CAF50"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="1" Padding="12,8" CornerRadius="8" Margin="4,0"
+                            Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                        <StackPanel>
+                            <TextBlock Text="⚠️ 较慢" FontSize="11" Classes="SecondaryText"/>
+                            <TextBlock Text="{Binding SlowCount}" FontSize="20" FontWeight="Bold" Foreground="#FFC107"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="2" Padding="12,8" CornerRadius="8" Margin="4,0"
+                            Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                        <StackPanel>
+                            <TextBlock Text="❌ 失败" FontSize="11" Classes="SecondaryText"/>
+                            <TextBlock Text="{Binding FailCount}" FontSize="20" FontWeight="Bold" Foreground="#FF5722"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="3" Padding="12,8" CornerRadius="8" Margin="4,0,0,0"
+                            Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                        <StackPanel>
+                            <TextBlock Text="总评" FontSize="11" Classes="SecondaryText"/>
+                            <TextBlock Text="{Binding OverallStatus}" FontSize="14" FontWeight="Bold"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <TextBlock Grid.Column="0" Grid.ColumnSpan="2" Grid.Row="2" Margin="0,12,0,0"
+                           Text="{Binding StatusMessage}" FontSize="12"
+                           TextWrapping="Wrap" Classes="SecondaryText"/>
+            </Grid>
+        </Border>
+
+        <!-- 检测项列表 -->
+        <Border Grid.Row="1" Margin="0,16,0,16" CornerRadius="12"
+                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                BorderThickness="1"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+            <ScrollViewer Padding="0" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Items}" Margin="8">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="m:HealthCheckItem">
+                            <Border Padding="14,12" Margin="6,4" CornerRadius="8"
+                                    Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                                <StackPanel>
+                                <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="12">
+                                    <!-- 状态图标 -->
+                                    <Panel Grid.Column="0" Grid.RowSpan="2" Width="36" Height="36" VerticalAlignment="Center">
+                                        <Border CornerRadius="18" Background="#4CAF50"
+                                                IsVisible="{Binding IsOk}"/>
+                                        <Border CornerRadius="18" Background="#FFC107"
+                                                IsVisible="{Binding IsSlow}"/>
+                                        <Border CornerRadius="18" Background="#FF5722"
+                                                IsVisible="{Binding IsFail}"/>
+                                        <Border CornerRadius="18" Background="#9E9E9E"
+                                                IsVisible="{Binding IsPending}"/>
+                                        <TextBlock Text="✓" FontSize="18" FontWeight="Bold" Foreground="White"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   IsVisible="{Binding IsOk}"/>
+                                        <TextBlock Text="!" FontSize="20" FontWeight="Bold" Foreground="White"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   IsVisible="{Binding IsSlow}"/>
+                                        <TextBlock Text="✕" FontSize="18" FontWeight="Bold" Foreground="White"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   IsVisible="{Binding IsFail}"/>
+                                    </Panel>
+
+                                    <!-- 标题与说明 -->
+                                    <StackPanel Grid.Column="1" Grid.Row="0" Spacing="2">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Host}" FontSize="12" Classes="SecondaryText"/>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding Description}" FontSize="11" Classes="SecondaryText"/>
+                                    </StackPanel>
+
+                                    <!-- 延迟数字 -->
+                                    <TextBlock Grid.Column="2" Grid.Row="0" Grid.RowSpan="2"
+                                               Text="{Binding LatencyText}" FontSize="16" FontWeight="Bold"
+                                               VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                                </Grid>
+
+                                <!-- 错误信息（仅失败时显示） -->
+                                <Border IsVisible="{Binding IsFail}" Margin="0,8,0,0" Padding="10,6" CornerRadius="6"
+                                        Background="#FFFFEBEE" BorderBrush="#FF5722" BorderThickness="1">
+                                    <TextBlock Text="{Binding ErrorMessage}" FontSize="11" Foreground="#C62828"
+                                               TextWrapping="Wrap"/>
+                                </Border>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <!-- 底部时间 -->
+        <TextBlock Grid.Row="2" FontSize="11" Classes="SecondaryText" HorizontalAlignment="Right">
+            <Run Text="最近检测：" />
+            <Run Text="{Binding LastCheckTime, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}" />
+        </TextBlock>
+    </Grid>
+</UserControl>

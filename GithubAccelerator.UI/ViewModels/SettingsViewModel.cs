@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Security.Principal;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Avalonia;
@@ -8,6 +9,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GithubAccelerator.Core.Services;
 using GithubAccelerator.Services;
 using GithubAccelerator.UI.Controls;
 using GithubAccelerator.UI.Services;
@@ -22,11 +24,39 @@ public partial class SettingsViewModel : ObservableObject
         "settings.json");
 
     private readonly IStartupManager? _startupManager;
+    private readonly GitProxyService _gitProxyService = new();
     private bool _isLoading = false;
 
     public SettingsViewModel(IStartupManager? startupManager = null)
     {
         _startupManager = startupManager;
+        CheckAdminPrivileges();
+    }
+
+    private void CheckAdminPrivileges()
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        var principal = new WindowsPrincipal(identity);
+        IsAdmin = principal.IsInRole(WindowsBuiltInRole.Administrator);
+    }
+
+    /// <summary>
+    /// 仅用于持久化的设置数据，避免序列化命令和运行时状态。
+    /// </summary>
+    private class SettingsData
+    {
+        public int TestInterval { get; set; } = 600;
+        public bool AutoStart { get; set; }
+        public bool AutoApplyHosts { get; set; }
+        public bool AutoSwitchBestSource { get; set; }
+        public bool MinimizeToTray { get; set; } = true;
+        public bool CloseToTray { get; set; } = true;
+        public bool StartMinimized { get; set; }
+        public bool ShowTrayNotifications { get; set; } = true;
+        public bool AutoFlushDns { get; set; } = true;
+        public bool ShowQuickGuideOnStartup { get; set; } = true;
+        public string GitProxyUrl { get; set; } = "https://ghproxy.net";
+        public string LogLevel { get; set; } = "Information";
     }
 
     [ObservableProperty]
@@ -76,13 +106,28 @@ public partial class SettingsViewModel : ObservableObject
     private bool _minimizeToTray = true;
 
     [ObservableProperty]
+    private bool _closeToTray = true;
+
+    [ObservableProperty]
     private bool _startMinimized = false;
+
+    [ObservableProperty]
+    private bool _showTrayNotifications = true;
 
     [ObservableProperty]
     private bool _autoFlushDns = true;
 
     [ObservableProperty]
     private bool _showQuickGuideOnStartup = true;
+
+    [ObservableProperty]
+    private string _gitProxyUrl = "https://ghproxy.net";
+
+    [ObservableProperty]
+    private string _gitProxyStatus = "检测中...";
+
+    [ObservableProperty]
+    private bool _isAdmin;
 
     private string _logLevel = "Information";
     
@@ -108,11 +153,27 @@ public partial class SettingsViewModel : ObservableObject
                 Directory.CreateDirectory(directory);
             }
 
+            var data = new SettingsData
+            {
+                TestInterval = TestInterval,
+                AutoStart = AutoStart,
+                AutoApplyHosts = AutoApplyHosts,
+                AutoSwitchBestSource = AutoSwitchBestSource,
+                MinimizeToTray = MinimizeToTray,
+                CloseToTray = CloseToTray,
+                StartMinimized = StartMinimized,
+                ShowTrayNotifications = ShowTrayNotifications,
+                AutoFlushDns = AutoFlushDns,
+                ShowQuickGuideOnStartup = ShowQuickGuideOnStartup,
+                GitProxyUrl = GitProxyUrl,
+                LogLevel = LogLevel
+            };
+
             var options = new JsonSerializerOptions
             {
                 WriteIndented = true
             };
-            var json = JsonSerializer.Serialize(this, options);
+            var json = JsonSerializer.Serialize(data, options);
             File.WriteAllText(SettingsPath, json);
         }
         catch (Exception ex)
@@ -129,7 +190,7 @@ public partial class SettingsViewModel : ObservableObject
             if (File.Exists(SettingsPath))
             {
                 var json = File.ReadAllText(SettingsPath);
-                var settings = JsonSerializer.Deserialize<SettingsViewModel>(json);
+                var settings = JsonSerializer.Deserialize<SettingsData>(json);
                 if (settings != null)
                 {
                     TestInterval = settings.TestInterval;
@@ -137,9 +198,12 @@ public partial class SettingsViewModel : ObservableObject
                     AutoApplyHosts = settings.AutoApplyHosts;
                     AutoSwitchBestSource = settings.AutoSwitchBestSource;
                     MinimizeToTray = settings.MinimizeToTray;
+                    CloseToTray = settings.CloseToTray;
                     StartMinimized = settings.StartMinimized;
+                    ShowTrayNotifications = settings.ShowTrayNotifications;
                     AutoFlushDns = settings.AutoFlushDns;
                     ShowQuickGuideOnStartup = settings.ShowQuickGuideOnStartup;
+                    GitProxyUrl = settings.GitProxyUrl;
                     _logLevel = settings.LogLevel;
                     LogService.Instance.SetLogLevel(_logLevel);
                 }
@@ -153,6 +217,7 @@ public partial class SettingsViewModel : ObservableObject
         {
             _isLoading = false;
         }
+        _ = RefreshGitProxyStatus();
     }
 
     public static SettingsViewModel Create(IStartupManager? startupManager = null)
@@ -167,6 +232,26 @@ public partial class SettingsViewModel : ObservableObject
     {
         Save();
         ToastService.Instance.Success("设置已保存", "所有设置已成功保存并生效");
+    }
+
+    [RelayCommand]
+    private void ResetToDefaults()
+    {
+        TestInterval = 600;
+        AutoStart = false;
+        AutoApplyHosts = false;
+        AutoSwitchBestSource = false;
+        MinimizeToTray = true;
+        CloseToTray = true;
+        StartMinimized = false;
+        ShowTrayNotifications = true;
+        AutoFlushDns = true;
+        ShowQuickGuideOnStartup = true;
+        GitProxyUrl = "https://ghproxy.net";
+        LogLevel = "Information";
+
+        Save();
+        ToastService.Instance.Success("已重置", "所有设置已恢复为默认值");
     }
 
     [RelayCommand]
@@ -228,6 +313,116 @@ public partial class SettingsViewModel : ObservableObject
         catch (Exception ex)
         {
             ToastService.Instance.Error("导入失败", ex.Message);
+        }
+    }
+
+    [RelayCommand]
+    private async Task SetGitProxy()
+    {
+        try
+        {
+            if (!IsAdmin)
+            {
+                ToastService.Instance.Error("需要管理员权限", "修改 Git 全局配置需要管理员权限，请右键以管理员身份运行本应用后再试");
+                return;
+            }
+
+            // 先检查 Git 可用性
+            var check = await _gitProxyService.CheckGitAvailabilityAsync();
+            if (!check.IsAvailable)
+            {
+                ToastService.Instance.Error("设置失败", check.ErrorMessage ?? "未找到 Git 安装，请先安装 Git");
+                GitProxyStatus = $"未检测到 Git: {check.ErrorMessage}";
+                return;
+            }
+
+            var success = await _gitProxyService.SetProxyAsync(GitProxyUrl);
+            if (success)
+            {
+                Save();
+                ToastService.Instance.Success("设置成功", $"Git Proxy 已设置为 {GitProxyUrl}");
+                await RefreshGitProxyStatus();
+            }
+            else
+            {
+                var error = _gitProxyService.LastError ?? "未知错误";
+                ToastService.Instance.Error("设置失败", error);
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.Instance.Error("设置失败", ex.Message);
+        }
+    }
+
+    [RelayCommand]
+    private async Task UnsetGitProxy()
+    {
+        try
+        {
+            if (!IsAdmin)
+            {
+                ToastService.Instance.Error("需要管理员权限", "修改 Git 全局配置需要管理员权限，请右键以管理员身份运行本应用后再试");
+                return;
+            }
+
+            var check = await _gitProxyService.CheckGitAvailabilityAsync();
+            if (!check.IsAvailable)
+            {
+                ToastService.Instance.Error("清除失败", check.ErrorMessage ?? "未找到 Git 安装");
+                return;
+            }
+
+            var success = await _gitProxyService.UnsetProxyAsync();
+            if (success)
+            {
+                Save();
+                ToastService.Instance.Success("清除成功", "Git Proxy 已清除");
+                await RefreshGitProxyStatus();
+            }
+            else
+            {
+                var error = _gitProxyService.LastError ?? "未知错误";
+                ToastService.Instance.Error("清除失败", error);
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.Instance.Error("清除失败", ex.Message);
+        }
+    }
+
+    [RelayCommand]
+    private async Task UseRecommendedGitProxy()
+    {
+        GitProxyUrl = "https://ghproxy.net";
+        await SetGitProxy();
+    }
+
+    private async Task RefreshGitProxyStatus()
+    {
+        try
+        {
+            var check = await _gitProxyService.CheckGitAvailabilityAsync();
+            if (!check.IsAvailable)
+            {
+                GitProxyStatus = $"未检测到 Git: {check.ErrorMessage}";
+                return;
+            }
+
+            var proxy = await _gitProxyService.GetCurrentProxyAsync();
+            if (string.IsNullOrWhiteSpace(proxy))
+            {
+                GitProxyStatus = "未设置";
+            }
+            else
+            {
+                GitProxyStatus = proxy;
+            }
+        }
+        catch
+        {
+            GitProxyStatus = "检测失败";
         }
     }
 

@@ -19,7 +19,7 @@
                 <StackPanel Grid.Column="0" Spacing="2">
                     <TextBlock Text="🚀 快速上手指南" FontSize="18" FontWeight="SemiBold"
                                Foreground="White"/>
-                    <TextBlock Text="GitHub 加速器 Pro v1.3.0" FontSize="12"
+                    <TextBlock x:Name="VersionText" Text="GitHub 加速器 Pro" FontSize="12"
                                Foreground="#CCFFFFFF"/>
                 </StackPanel>
                 <Button Grid.Column="1" Content="✕" Click="CloseButton_Click"

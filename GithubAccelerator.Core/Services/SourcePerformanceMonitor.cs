@@ -284,10 +284,6 @@ public class SourcePerformanceMonitor : ISourcePerformanceMonitor, IDisposable
                 var metrics = CalculateMetrics(url, name, record, qualityAnalysis);
                 metrics.IsDnsProbe = true;
 
-                // DNS 探测源给予基础高分（因为 IP 是实时查询的）
-                if (metrics.OverallScore < 60) metrics.OverallScore = 65;
-                if (metrics.SpeedScore < 50) metrics.SpeedScore = 55;
-
                 UpdateHistory(url, record, metrics);
                 _logger.LogInformation("DNS探测源测试成功：{Count} 个IP，耗时 {Ms}ms", ips.Count, stopwatch.ElapsedMilliseconds);
                 return metrics;
@@ -477,13 +473,7 @@ public class SourcePerformanceMonitor : ISourcePerformanceMonitor, IDisposable
     {
         var history = _historyStore.GetOrAdd(url, _ => new SourcePerformanceHistory { Url = url });
         history.AddTestRecord(record);
-        history.MetricsHistory.Add(metrics);
-        
-        // 保留最近 100 个性能指标
-        if (history.MetricsHistory.Count > 100)
-        {
-            history.MetricsHistory.RemoveAt(0);
-        }
+        history.AddMetrics(metrics);
     }
     
     /// <summary>

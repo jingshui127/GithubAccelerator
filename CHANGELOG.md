@@ -5,26 +5,133 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.5.5] - 2026-07-21
 
 ### Added
-- 待添加新功能
-- DNS缓存自动刷新功能：应用Hosts后自动刷新系统DNS缓存
-- 手动刷新DNS缓存按钮
-- 自动刷新DNS缓存设置开关
-- 开机自动应用Hosts功能：启动时自动检测并应用最佳数据源
+- 全项目完整审查与优化：UI 一致性、ViewModel 健壮性、Core 服务层稳定性
+- App.axaml 补全主题资源定义（BackgroundColor、CardBackground、InfoBackground、CardBorderBrush 等）
+- 统一按钮样式：PrimaryButton、SuccessButton、DangerButton、SecondaryButton
+- 统一页面标题样式（PageTitle）和卡片容器样式（CardBorder）
+- LogViewer 空状态显示（"暂无日志"）
+- BackupManager 空状态显示（"暂无备份，点击创建"）
+- BackupManager 删除二次点击确认机制（3 秒超时自动取消）
+- HostsGroupView 删除分组二次点击确认机制
+- BackupItemViewModel.ViewContent 真实功能实现（弹窗显示备份内容）
+- MainWindowViewModel 实现 IDisposable，统一释放 Timer 与事件订阅
+- 高代价命令添加 CanExecute 约束（ApplyHosts、RunSpeedTest、RefreshSources、ClearAppliedHosts）
 
 ### Changed
-- 待变更内容
+- GitHubLatencyViewModel 实现 IDisposable，提取魔法数字为常量
+- 合并 MainWindowViewModel 中重复的 _updateTimer 和 _autoUpdateTimer
+- 修复 StartPeriodicHostsRefresh 中 Timer 局部变量泄漏问题
+- 联系方式统一为 "QQ: 2492123056 | 微信公众号：科控物联"
+- HostsOptimizerService 探针日志精简（仅输出警告和错误）
+- GitProxyService 异步化改造（WaitForExitAsync 替代 Task.Run + WaitForExit）
 
 ### Fixed
-- 深度修复推荐算法：IsRecommended过滤条件增加SpeedScore通道，确保低延迟源不被过滤
-- 修复SpeedScore和OverallScore计算中successRate权重未归一化到0-100范围的问题
-- 修复SmartSourceSelector排序逻辑：改为优先按SpeedScore降序排序，再按响应时间升序排序
-- 修复DataExportImportServiceTests测试失败问题
+- **[严重]** App.axaml 引用不存在的 CardStyles.axaml 导致启动样式加载失败
+- **[严重]** HostsGroupView 重命名框与新建框共用 NewGroupName 导致输入互相干扰
+- **[严重]** DownloadAcceleratorView DockPanel 双 Right 布局导致 TextBox 不填充
+- **[严重]** HostsContentView "用记事本打开"按钮未按管理员权限禁用
+- **[严重]** DownloadAcceleratorViewModel 使用 WinForms Clipboard 依赖（改用 Avalonia 委托注入）
+- **[严重]** WindowsHostsFileService Hosts 写入非原子性（改用临时文件 + File.Replace 原子替换）
+- **[严重]** GithubProxyService 完全禁用 SSL 证书验证（改为仅允许 SNI 不匹配）
+- **[严重]** SourcePerformancePersistence 非原子写入导致历史数据丢失风险
+- **[严重]** SourcePerformanceMonitor 并发 List 访问崩溃（加锁 + 新增 AddMetrics/CleanupBefore 线程安全方法）
+- HostsOptimizerService 核心域名 requiredSuccesses Bug（注释说 2/3，代码两个分支都是 1）
+- GithubConnectionService nslookup 解析 Bug（误匹配 DNS 服务器地址）+ 进程同步读取死锁风险
+- GitProxyService 进程超时未 kill 导致僵尸进程 + 同步 ReadToEnd 死锁风险
+- GitHubLatencyViewModel 构造函数 UpdateFromService 无效调用
+- QuickGuideWindow 版本号硬编码 v1.3.0（改为动态读取程序集版本）
+- IpSpeedTestService 排序 Bug（不可达 IP 的 -1 排到最前面）
 
 ### Security
-- 待安全更新
+- GithubProxyService SSL 证书验证改为按域名校验，拒绝证书链错误（防中间人攻击）
+- GitProxyService 参数拼接改用 ProcessStartInfo.ArgumentList 自动转义（防 shell 注入）
+
+### Removed
+- 删除废弃的 PerformanceChartView 整套文件（View、ViewModel、Service）
+- 删除废弃的 GithubAcceleratorService.cs（功能已拆分到其他服务）
+- 删除废弃的 IntelligentSourceManager.cs（功能已被 SmartSourceSelector 取代）
+- 删除临时文件：55、temp_screenshot_settings.py、test_git_proxy.ps1、深色主题.png、GithubAccelerator.UI.csproj.Backup.tmp、Assets/avalonia-logo.ico
+
+---
+
+## [1.5.4] - 2026-07-20
+
+### Added
+- 启动时若 GitHub 已可访问则跳过自动应用 Hosts（连通性前置检测）
+- 智能优选后自动触发子域健康检查
+- Hosts IP 实时优化功能（自动探测候选 IP 并生成优化 Hosts）
+
+### Changed
+- 移除冗余的"网络性能概览"页面（PerformanceChartView）
+- 网络监控页简化为仅保留 GitHub 延迟监控
+- 主页版本信息动态绑定到程序集版本
+
+### Fixed
+- DoH 查询串行导致 20 秒延迟（改为 Task.WhenAll 并行，压缩到 5 秒）
+- 核心域名 3 次探针验证 + 兜底 IP 写入策略
+- 多源DNS 总被选为最优源的评分偏差问题（移除硬编码保底分）
+- GitHub 子域健康检查持续失败问题
+
+---
+
+## [1.5.3] - 2026-07-20
+
+### Added
+- LOGO 应用到应用图标、侧边栏、关于窗口
+- 托盘设置扩充三个开关（最小化到托盘、关闭到托盘、显示托盘通知）
+- 设置页"恢复默认"按钮
+- 下载加速服务（DownloadAccelerationService）
+- Git Proxy 配置功能
+- 速度测试对比卡片
+
+### Changed
+- 5 个 GitHub520 镜像合并为单个"GitHub520 (智能镜像)"源，自动故障转移
+- 关于窗口更新为动态版本号 + 科控物联公司信息
+
+### Fixed
+- 修复 LogViewer 剪贴板 bug（改用 Avalonia 原生 Clipboard API）
+- 修复 ComboBox 绑定失效问题
+- 修复 EXE 文件图标缺失（添加 ApplicationIcon 属性）
+
+---
+
+## [1.5.0] - 2026-07-19
+
+### Added
+- 多源 DNS 探测源（DoH 并行查询 AliDNS、TencentDNS、Google、Cloudflare）
+- HTTPS 直连 IP 探针（绕过 DNS）
+- SSL 证书验证（拒绝中间人，允许 CDN SNI 不匹配）
+
+---
+
+## [1.4.0] - 2026-05-15
+
+### Added
+- GitHub 子域健康检查功能
+- Hosts 分组管理功能
+- Hosts 备份管理功能
+- 数据导入导出功能
+
+### Changed
+- UI 全面现代化改造
+- 性能监控系统完善
+
+---
+
+## [1.3.0] - 2026-05-01
+
+### Added
+- 智能数据源选择器（SmartSourceSelector）
+- 数据源性能持久化（SourcePerformancePersistence）
+- 操作历史记录功能
+- Toast 通知系统
+
+### Changed
+- 数据源推荐算法优化
+- 日志系统改用 Serilog
 
 ---
 
@@ -135,9 +242,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 修复跨线程 UI 更新异常
 - 修复 XAML 绑定表达式错误
 
-### Security
-- 移除敏感信息，确保代码安全
-
 ---
 
 ## [1.0.0] - 2026-04-15
@@ -158,32 +262,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 一键应用/清除 Hosts
 - 自动备份 Hosts 文件
 - 支持自定义数据源
-
----
-
-## Version History
-
-| Version | Release Date | Type | Description |
-|---------|--------------|------|-------------|
-| 1.1.0 | 2026-04-22 | Minor | 现代化 UI，性能监控 |
-| 1.0.0 | 2026-04-15 | Major | 初始版本发布 |
-
----
-
-## Release Types
-
-- **Major**: 不兼容的 API 变更
-- **Minor**: 向后兼容的功能新增
-- **Patch**: 向后兼容的问题修复
-
----
-
-## Contributing
-
-请参阅 [CONTRIBUTING.md](CONTRIBUTING.md) 了解如何为此项目做出贡献。
-
----
-
-## License
-
-本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件。

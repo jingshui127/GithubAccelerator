@@ -21,7 +21,14 @@ public class IpSpeedTestService
 
         var allResults = await Task.WhenAll(tasks);
         results.AddRange(allResults.Where(r => r != null)!);
-        results.Sort((a, b) => a.LatencyMs.CompareTo(b.LatencyMs));
+        // 不可达 IP（LatencyMs = -1）排到末尾
+        results.Sort((a, b) =>
+        {
+            if (a.LatencyMs < 0 && b.LatencyMs < 0) return 0;
+            if (a.LatencyMs < 0) return 1;
+            if (b.LatencyMs < 0) return -1;
+            return a.LatencyMs.CompareTo(b.LatencyMs);
+        });
         return results;
     }
 

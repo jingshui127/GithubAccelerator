@@ -5,14 +5,14 @@
         mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="300"
         x:Class="GithubAccelerator.UI.Views.AboutWindow"
         Title="关于 GitHub 加速器 Pro"
-        Width="450" Height="350"
+        Width="450" Height="400"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         CanResize="False">
 
     <StackPanel Margin="24" Spacing="16" HorizontalAlignment="Center">
         <!-- Logo -->
-        <TextBlock Text="🚀" FontSize="48" HorizontalAlignment="Center"/>
+        <Image Source="/Assets/logo.png" Width="80" Height="80" HorizontalAlignment="Center" Margin="0,8,0,0 "/>
         
         <!-- Title -->
         <TextBlock Text="GitHub 加速器 Pro" FontSize="20" FontWeight="SemiBold" 
@@ -27,11 +27,30 @@
             <StackPanel Spacing="8">
                 <Grid ColumnDefinitions="Auto,*">
                     <TextBlock Grid.Column="0" Text="版本：" FontSize="13"/>
-                    <TextBlock Grid.Column="1" Text="v1.0.0" FontSize="13" FontWeight="SemiBold"/>
+                    <TextBlock Grid.Column="1" x:Name="VersionText" FontSize="13" FontWeight="SemiBold"/>
                 </Grid>
                 <Grid ColumnDefinitions="Auto,*">
                     <TextBlock Grid.Column="0" Text="构建日期：" FontSize="13"/>
-                    <TextBlock Grid.Column="1" Text="2026.04" FontSize="13"/>
+                    <TextBlock Grid.Column="1" x:Name="BuildDateText" FontSize="13"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- Company Info -->
+        <Border Padding="16,8" CornerRadius="8"
+                Background="{DynamicResource ControlFillColorDefaultBrush}">
+            <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="Auto,*">
+                    <TextBlock Grid.Column="0" Text="开发：" FontSize="13"/>
+                    <TextBlock Grid.Column="1" Text="科控物联科技有限公司" FontSize="13" FontWeight="SemiBold"/>
+                </Grid>
+                <Grid ColumnDefinitions="Auto,*">
+                    <TextBlock Grid.Column="0" Text="QQ：" FontSize="13"/>
+                    <TextBlock Grid.Column="1" Text="2492123056" FontSize="13"/>
+                </Grid>
+                <Grid ColumnDefinitions="Auto,*">
+                    <TextBlock Grid.Column="0" Text="微信公众号：" FontSize="13"/>
+                    <TextBlock Grid.Column="1" Text="科控物联" FontSize="13"/>
                 </Grid>
             </StackPanel>
         </Border>
@@ -42,7 +61,7 @@
                    HorizontalAlignment="Center"/>
 
         <!-- Copyright -->
-        <TextBlock Text="© 2026 GitHub 加速器 Pro. All rights reserved." 
+        <TextBlock Text="© 2026 科控物联科技有限公司. All rights reserved." 
                    FontSize="11" Classes="SecondaryText"
                    HorizontalAlignment="Center"/>
 

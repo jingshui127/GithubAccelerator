@@ -30,8 +30,8 @@
                                                Minimum="30" Maximum="3600"
                                                Margin="0,8,0,0"
                                                HorizontalAlignment="Left" Width="200"/>
-                                <TextBlock Text="{Binding TestIntervalError}" 
-                                           FontSize="12" Foreground="Red" 
+                                <TextBlock Text="{Binding TestIntervalError}"
+                                           FontSize="12" Foreground="Red"
                                            Margin="0,4,0,0" />
                             </StackPanel>
                         </StackPanel>
@@ -102,6 +102,54 @@
                     </Border>
                 </StackPanel>
 
+                <!-- Git 设置 -->
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Git 设置" FontSize="16" FontWeight="SemiBold"/>
+
+                    <Border Padding="16" CornerRadius="8"
+                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                            BorderThickness="1">
+                        <StackPanel Spacing="16">
+                            <Border IsVisible="{Binding !IsAdmin}"
+                                    Padding="12,8"
+                                    CornerRadius="6"
+                                    Background="#FFF3E0"
+                                    BorderBrush="#FF9800"
+                                    BorderThickness="1">
+                                <TextBlock Text="当前未以管理员身份运行，Git Proxy 设置/清除功能不可用。请右键以管理员身份运行本应用。"
+                                           FontSize="12"
+                                           Foreground="#E65100"
+                                           TextWrapping="Wrap"/>
+                            </Border>
+                            <StackPanel>
+                                <TextBlock Text="当前 Git Proxy" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding GitProxyStatus}" FontSize="12" Classes="SecondaryText"/>
+                            </StackPanel>
+
+                            <StackPanel>
+                                <TextBlock Text="代理地址" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock Text="设置 git 的 http/https 代理，加速 clone/push/pull" FontSize="12" Classes="SecondaryText"/>
+                                <TextBox Text="{Binding GitProxyUrl}"
+                                         Margin="0,8,0,0"
+                                         HorizontalAlignment="Stretch"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Content="设置代理" Command="{Binding SetGitProxyCommand}"
+                                        IsEnabled="{Binding IsAdmin}"
+                                        Padding="16,6" FontSize="13"/>
+                                <Button Content="清除代理" Command="{Binding UnsetGitProxyCommand}"
+                                        IsEnabled="{Binding IsAdmin}"
+                                        Padding="16,6" FontSize="13"/>
+                                <Button Content="使用推荐代理" Command="{Binding UseRecommendedGitProxyCommand}"
+                                        IsEnabled="{Binding IsAdmin}"
+                                        Padding="16,6" FontSize="13"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
                 <!-- 托盘设置 -->
                 <StackPanel Spacing="12">
                     <TextBlock Text="托盘设置" FontSize="16" FontWeight="SemiBold"/>
@@ -115,7 +163,23 @@
                                 <ToggleSwitch IsChecked="{Binding MinimizeToTray}" HorizontalAlignment="Left"/>
                                 <StackPanel>
                                     <TextBlock Text="最小化到托盘" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="关闭窗口时最小化到系统托盘" FontSize="12" Classes="SecondaryText"/>
+                                    <TextBlock Text="最小化窗口时隐藏到系统托盘" FontSize="12" Classes="SecondaryText"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <ToggleSwitch IsChecked="{Binding CloseToTray}" HorizontalAlignment="Left"/>
+                                <StackPanel>
+                                    <TextBlock Text="关闭到托盘" FontSize="14" FontWeight="SemiBold"/>
+                                    <TextBlock Text="点击关闭按钮时隐藏到托盘而非退出程序" FontSize="12" Classes="SecondaryText"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <ToggleSwitch IsChecked="{Binding ShowTrayNotifications}" HorizontalAlignment="Left"/>
+                                <StackPanel>
+                                    <TextBlock Text="显示托盘通知" FontSize="14" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Hosts 自动刷新或状态变化时显示托盘气泡提示" FontSize="12" Classes="SecondaryText"/>
                                 </StackPanel>
                             </StackPanel>
                         </StackPanel>
@@ -159,7 +223,7 @@
                             <Border Padding="10,8" CornerRadius="6" Background="{DynamicResource ControlFillColorDisabledBrush}">
                                 <StackPanel Spacing="4">
                                     <TextBlock Text="科控物联" FontSize="13" FontWeight="SemiBold"/>
-                                    <TextBlock Text="QQ: 2492123056" FontSize="12" Classes="SecondaryText"/>
+                                    <TextBlock Text="QQ: 2492123056 | 微信公众号：科控物联" FontSize="12" Classes="SecondaryText"/>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -176,6 +240,8 @@
                 <Button Content="📤 导出设置" Command="{Binding ExportSettingsCommand}"
                         Padding="16,10" FontSize="14"/>
                 <Button Content="📥 导入设置" Command="{Binding ImportSettingsCommand}"
+                        Padding="16,10" FontSize="14"/>
+                <Button Content="🔄 恢复默认" Command="{Binding ResetToDefaultsCommand}"
                         Padding="16,10" FontSize="14"/>
                 <Button Content="💾 保存设置" Command="{Binding SaveSettingsCommand}"
                         Padding="24,10" FontSize="14"/>

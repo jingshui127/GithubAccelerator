@@ -11,7 +11,10 @@ public class GithubProxyService
     private readonly Dictionary<string, string> _domainIpMap = new();
     private readonly HttpClient _httpClient = new(new HttpClientHandler
     {
-        ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
+        // 仅允许 SNI 名称不匹配（CDN IP 共享场景），拒绝证书链错误和自签名证书
+        ServerCertificateCustomValidationCallback = (message, cert, chain, errors) =>
+            errors == System.Net.Security.SslPolicyErrors.None
+            || errors == System.Net.Security.SslPolicyErrors.RemoteCertificateNameMismatch
     })
     {
         Timeout = TimeSpan.FromSeconds(30)

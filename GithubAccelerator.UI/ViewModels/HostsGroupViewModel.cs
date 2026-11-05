@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GithubAccelerator.UI.Services;
@@ -13,6 +14,7 @@ public partial class HostsGroupViewModel : ObservableObject
     private readonly HostsGroupService _groupService;
     private readonly OperationHistoryService _historyService;
     private readonly NotificationService _notificationService;
+    private static readonly IBrush _confirmingBrush = new SolidColorBrush(Color.Parse("#D13438"));
 
     [ObservableProperty]
     private ObservableCollection<HostsGroup> _groups = new();
@@ -27,6 +29,9 @@ public partial class HostsGroupViewModel : ObservableObject
     private string _newGroupDescription = string.Empty;
 
     [ObservableProperty]
+    private string _renameGroupName = string.Empty;
+
+    [ObservableProperty]
     private string _newEntryIp = string.Empty;
 
     [ObservableProperty]
@@ -37,6 +42,19 @@ public partial class HostsGroupViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isLoading;
+
+    [ObservableProperty]
+    private bool _isConfirmingDeleteGroup;
+
+    public string DeleteGroupButtonText => IsConfirmingDeleteGroup ? "确认删除？" : "🗑️ 删除";
+
+    public IBrush? DeleteGroupButtonBackground => IsConfirmingDeleteGroup ? _confirmingBrush : null;
+
+    partial void OnIsConfirmingDeleteGroupChanged(bool value)
+    {
+        OnPropertyChanged(nameof(DeleteGroupButtonText));
+        OnPropertyChanged(nameof(DeleteGroupButtonBackground));
+    }
 
     public HostsGroupViewModel()
     {
@@ -90,7 +108,7 @@ public partial class HostsGroupViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void DeleteGroup()
+    private async Task DeleteGroupAsync()
     {
         if (SelectedGroup == null)
         {
@@ -98,10 +116,21 @@ public partial class HostsGroupViewModel : ObservableObject
             return;
         }
 
+        if (!IsConfirmingDeleteGroup)
+        {
+            IsConfirmingDeleteGroup = true;
+            // 3 秒后自动取消确认状态
+            await Task.Delay(3000);
+            IsConfirmingDeleteGroup = false;
+            return;
+        }
+
+        IsConfirmingDeleteGroup = false;
+
         var name = SelectedGroup.Name;
         var groupId = SelectedGroup.Id;
         _groupService.DeleteGroup(groupId);
-        
+
         // 从列表中移除并选择第一个分组
         var groupToRemove = Groups.FirstOrDefault(g => g.Id == groupId);
         if (groupToRemove != null)
@@ -109,7 +138,7 @@ public partial class HostsGroupViewModel : ObservableObject
             Groups.Remove(groupToRemove);
         }
         SelectedGroup = Groups.FirstOrDefault();
-        
+
         StatusMessage = $"已删除分组：{name}";
 
         _historyService.Record(OperationType.SettingsChanged, $"删除 Hosts 分组：{name}");
@@ -125,15 +154,16 @@ public partial class HostsGroupViewModel : ObservableObject
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(NewGroupName))
+        if (string.IsNullOrWhiteSpace(RenameGroupName))
         {
             StatusMessage = "请输入新的分组名称";
             return;
         }
 
         var oldName = SelectedGroup.Name;
-        _groupService.UpdateGroup(SelectedGroup.Id, name: NewGroupName);
-        
+        var newName = RenameGroupName;
+        _groupService.UpdateGroup(SelectedGroup.Id, name: newName);
+
         // 刷新选中的分组
         var updatedGroup = _groupService.GetGroup(SelectedGroup.Id);
         if (updatedGroup != null)
@@ -145,11 +175,11 @@ public partial class HostsGroupViewModel : ObservableObject
                 SelectedGroup = updatedGroup;
             }
         }
-        
-        StatusMessage = $"已重命名分组：{oldName} → {NewGroupName}";
-        NewGroupName = string.Empty;
 
-        _historyService.Record(OperationType.SettingsChanged, $"重命名 Hosts 分组：{oldName} → {NewGroupName}");
+        StatusMessage = $"已重命名分组：{oldName} → {newName}";
+        RenameGroupName = string.Empty;
+
+        _historyService.Record(OperationType.SettingsChanged, $"重命名 Hosts 分组：{oldName} → {newName}");
         _notificationService.Success("分组管理", StatusMessage);
     }
 

@@ -40,19 +40,18 @@
                     <TextBlock Text="输入 GitHub 链接" FontSize="15" FontWeight="SemiBold"/>
 
                     <!-- URL 输入 -->
-                    <DockPanel>
-                        <TextBox DockPanel.Dock="Right" IsReadOnly="True"
-                                 Text="{Binding InputUrl}"
-                                 PlaceholderText="粘贴 GitHub 链接到这里..."
-                                 Padding="14,12" FontSize="13"
-                                 AcceptsReturn="False"/>
-
+                    <DockPanel LastChildFill="True">
                         <Button DockPanel.Dock="Right"
                                 Content="📋 粘贴"
                                 Command="{Binding PasteFromClipboardCommand}"
                                 Padding="14,10" FontSize="12"
                                 Margin="8,0,0,0"
                                 VerticalAlignment="Stretch"/>
+                        <TextBox IsReadOnly="True"
+                                 Text="{Binding InputUrl}"
+                                 PlaceholderText="粘贴 GitHub 链接到这里..."
+                                 Padding="14,12" FontSize="13"
+                                 AcceptsReturn="False"/>
                     </DockPanel>
 
                     <!-- 支持的格式提示 -->
@@ -146,27 +145,50 @@
                                             Background="{DynamicResource CardBackground}"
                                             BorderBrush="{DynamicResource AccentColor}"
                                             BorderThickness="1,1,1,3">
-                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
                                             <!-- 镜像站图标和名称 -->
                                             <StackPanel Grid.Column="0" Margin="0,0,16,0" MinWidth="120">
                                                 <TextBlock Text="{Binding SiteName}" FontSize="14"
                                                            FontWeight="Medium"/>
                                                 <TextBlock Text="{Binding Description}" FontSize="11"
                                                            Classes="SecondaryText"/>
+                                                <!-- 速度徽章 -->
+                                                <Border IsVisible="{Binding SpeedText, Converter={StaticResource StringNotEmptyConverter}}"
+                                                        Padding="6,2" CornerRadius="4"
+                                                        Margin="0,4,0,0" HorizontalAlignment="Left"
+                                                        Background="{DynamicResource ControlStrongFillDefaultBrush}">
+                                                    <TextBlock Text="{Binding SpeedText}" FontSize="11" FontWeight="Medium"/>
+                                                </Border>
+                                                <TextBlock IsVisible="{Binding IsTesting}"
+                                                           Text="⏳ 测速中..." FontSize="11"
+                                                           Margin="0,4,0,0"
+                                                           Classes="SecondaryText"/>
                                             </StackPanel>
 
-                                            <!-- 加速链接 -->
+                                            <!-- 加速链接（可点击超链接） -->
                                             <Border Grid.Column="1" Padding="10,8" CornerRadius="6"
                                                     Background="{DynamicResource ControlStrongFillDefaultBrush}"
                                                     VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding Url}" FontSize="12"
-                                                           TextWrapping="NoWrap"
-                                                           TextTrimming="CharacterEllipsis"/>
+                                                <Button Background="Transparent" BorderThickness="0" Padding="0" Margin="0"
+                                                        Command="{Binding OpenBrowserCommand}"
+                                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                                        ToolTip.Tip="点击在浏览器中打开">
+                                                    <TextBlock Text="{Binding Url}" FontSize="12"
+                                                               Foreground="#0066CC" TextDecorations="Underline"
+                                                               TextWrapping="NoWrap"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                </Button>
                                             </Border>
 
                                             <!-- 操作按钮 -->
                                             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
                                                         Margin="12,0,0,0" VerticalAlignment="Center">
+                                                <Button Content="📊"
+                                                        Command="{Binding TestSpeedCommand}"
+                                                        Width="36" Height="36"
+                                                        IsEnabled="{Binding !IsTesting}"
+                                                        ToolTip.Tip="单独测速"
+                                                        CornerRadius="18"/>
                                                 <Button Content="📋"
                                                         Command="{Binding CopyCommand}"
                                                         Width="36" Height="36"
@@ -204,9 +226,15 @@
                             <Border Grid.Column="1" Padding="10,8" CornerRadius="6"
                                     Background="White"
                                     VerticalAlignment="Center">
-                                <TextBlock Text="{Binding Result.JsDelivrUrl}" FontSize="12"
-                                           TextWrapping="NoWrap"
-                                           TextTrimming="CharacterEllipsis"/>
+                                <Button Background="Transparent" BorderThickness="0" Padding="0" Margin="0"
+                                        Command="{Binding OpenJsDelivrBrowserCommand}"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                        ToolTip.Tip="点击在浏览器中打开">
+                                    <TextBlock Text="{Binding Result.JsDelivrUrl}" FontSize="12"
+                                               Foreground="#0066CC" TextDecorations="Underline"
+                                               TextWrapping="NoWrap"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </Button>
                             </Border>
 
                             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
@@ -273,19 +301,23 @@
                         </ItemsControl>
                     </StackPanel>
 
-                    <!-- 一键复制所有 -->
+                    <!-- 一键复制所有 + 测速打开 -->
                     <Border Padding="16" CornerRadius="10"
                             Background="{DynamicResource AccentColorLight}"
                             HorizontalAlignment="Stretch">
-                        <Grid ColumnDefinitions="*,Auto">
+                        <Grid ColumnDefinitions="*,Auto,Auto">
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                <TextBlock Text="💡 提示：点击下方按钮可一键复制所有加速链接" FontSize="12"
-                                           Foreground="#666666"/>
+                                <TextBlock Text="💡 提示：点击 URL 可直接在浏览器打开，或测速后自动打开最快镜像" FontSize="12"
+                                           Foreground="#666666" TextWrapping="Wrap"/>
                             </StackPanel>
-                            <Button Grid.Column="1" Content="📋 复制全部链接"
-                                    Command="{Binding CopyAllCommand}"
-                                    Padding="16,8" FontSize="12"
+                            <Button Grid.Column="1" Content="🏆 测速并打开最快"
+                                    Command="{Binding TestSpeedAndOpenFastestCommand}"
+                                    IsEnabled="{Binding !IsBusy}"
+                                    Padding="16,8" FontSize="12" Margin="8,0,0,0"
                                     Classes="Primary"/>
+                            <Button Grid.Column="2" Content="📋 复制全部链接"
+                                    Command="{Binding CopyAllCommand}"
+                                    Padding="16,8" FontSize="12" Margin="8,0,0,0"/>
                         </Grid>
                     </Border>
                 </StackPanel>
