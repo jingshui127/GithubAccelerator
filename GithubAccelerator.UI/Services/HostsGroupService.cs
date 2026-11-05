@@ -87,6 +87,7 @@ public class HostsGroupService
     public static HostsGroupService Instance => _instance.Value;
 
     private readonly List<HostsGroup> _groups = new();
+    private readonly object _gate = new();
     private readonly string _configPath;
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -96,6 +97,40 @@ public class HostsGroupService
 
     public IReadOnlyList<HostsGroup> Groups => _groups.AsReadOnly();
     public event Action? OnGroupsChanged;
+
+    /// <summary>
+    /// 线程安全的深拷贝快照。导出/序列化必须用它，避免与其它线程的增删并发时抛出
+    /// "Collection was modified"（ExportImport_Roundtrip 偶发失败的根因）。
+    /// </summary>
+    public List<HostsGroup> Snapshot()
+    {
+        lock (_gate)
+        {
+            return _groups.Select(CloneGroup).ToList();
+        }
+    }
+
+    private static HostsGroup CloneGroup(HostsGroup source)
+    {
+        return new HostsGroup
+        {
+            Id = source.Id,
+            Name = source.Name,
+            Description = source.Description,
+            Color = source.Color,
+            IsEnabled = source.IsEnabled,
+            CreatedAt = source.CreatedAt,
+            UpdatedAt = source.UpdatedAt,
+            SourceUrl = source.SourceUrl,
+            Entries = source.Entries.Select(e => new HostsEntry
+            {
+                Ip = e.Ip,
+                Domain = e.Domain,
+                Comment = e.Comment,
+                IsEnabled = e.IsEnabled
+            }).ToList()
+        };
+    }
 
     public HostsGroupService()
     {
@@ -118,77 +153,100 @@ public class HostsGroupService
             UpdatedAt = DateTime.Now
         };
 
-        _groups.Add(group);
-        SaveToFile();
+        lock (_gate)
+        {
+            _groups.Add(group);
+            SaveToFile();
+        }
         OnGroupsChanged?.Invoke();
         return group;
     }
 
     public bool UpdateGroup(string groupId, string? name = null, string? description = null, string? color = null, bool? isEnabled = null)
     {
-        var group = _groups.FirstOrDefault(g => g.Id == groupId);
-        if (group == null) return false;
+        bool changed;
+        lock (_gate)
+        {
+            var group = _groups.FirstOrDefault(g => g.Id == groupId);
+            if (group == null) return false;
 
-        if (name != null) group.Name = name;
-        if (description != null) group.Description = description;
-        if (color != null) group.Color = color;
-        if (isEnabled.HasValue) group.IsEnabled = isEnabled.Value;
-        group.UpdatedAt = DateTime.Now;
+            if (name != null) group.Name = name;
+            if (description != null) group.Description = description;
+            if (color != null) group.Color = color;
+            if (isEnabled.HasValue) group.IsEnabled = isEnabled.Value;
+            group.UpdatedAt = DateTime.Now;
 
-        SaveToFile();
+            SaveToFile();
+            changed = true;
+        }
+
         OnGroupsChanged?.Invoke();
-        return true;
+        return changed;
     }
 
     public bool DeleteGroup(string groupId)
     {
-        var group = _groups.FirstOrDefault(g => g.Id == groupId);
-        if (group == null) return false;
+        lock (_gate)
+        {
+            var group = _groups.FirstOrDefault(g => g.Id == groupId);
+            if (group == null) return false;
 
-        _groups.Remove(group);
-        SaveToFile();
+            _groups.Remove(group);
+            SaveToFile();
+        }
         OnGroupsChanged?.Invoke();
         return true;
     }
 
     public bool AddEntry(string groupId, HostsEntry entry)
     {
-        var group = _groups.FirstOrDefault(g => g.Id == groupId);
-        if (group == null) return false;
+        lock (_gate)
+        {
+            var group = _groups.FirstOrDefault(g => g.Id == groupId);
+            if (group == null) return false;
 
-        group.Entries.Add(entry);
-        group.UpdatedAt = DateTime.Now;
-        SaveToFile();
+            group.Entries.Add(entry);
+            group.UpdatedAt = DateTime.Now;
+            SaveToFile();
+        }
         OnGroupsChanged?.Invoke();
         return true;
     }
 
     public bool RemoveEntry(string groupId, string domain)
     {
-        var group = _groups.FirstOrDefault(g => g.Id == groupId);
-        if (group == null) return false;
-
-        var removed = group.Entries.RemoveAll(e => e.Domain == domain);
-        if (removed > 0)
+        bool removedAny;
+        lock (_gate)
         {
-            group.UpdatedAt = DateTime.Now;
-            SaveToFile();
-            OnGroupsChanged?.Invoke();
+            var group = _groups.FirstOrDefault(g => g.Id == groupId);
+            if (group == null) return false;
+
+            var removed = group.Entries.RemoveAll(e => e.Domain == domain);
+            removedAny = removed > 0;
+            if (removedAny)
+            {
+                group.UpdatedAt = DateTime.Now;
+                SaveToFile();
+            }
         }
-        return removed > 0;
+        if (removedAny) OnGroupsChanged?.Invoke();
+        return removedAny;
     }
 
     public bool ToggleEntry(string groupId, string domain, bool enabled)
     {
-        var group = _groups.FirstOrDefault(g => g.Id == groupId);
-        if (group == null) return false;
+        lock (_gate)
+        {
+            var group = _groups.FirstOrDefault(g => g.Id == groupId);
+            if (group == null) return false;
 
-        var entry = group.Entries.FirstOrDefault(e => e.Domain == domain);
-        if (entry == null) return false;
+            var entry = group.Entries.FirstOrDefault(e => e.Domain == domain);
+            if (entry == null) return false;
 
-        entry.IsEnabled = enabled;
-        group.UpdatedAt = DateTime.Now;
-        SaveToFile();
+            entry.IsEnabled = enabled;
+            group.UpdatedAt = DateTime.Now;
+            SaveToFile();
+        }
         OnGroupsChanged?.Invoke();
         return true;
     }
@@ -196,7 +254,7 @@ public class HostsGroupService
     public string GenerateHostsContent()
     {
         var lines = new List<string>();
-        foreach (var group in _groups.Where(g => g.IsEnabled && g.Entries.Count > 0))
+        foreach (var group in Snapshot().Where(g => g.IsEnabled && g.Entries.Count > 0))
         {
             lines.Add(group.ToHostsBlock());
             lines.Add(string.Empty);
@@ -233,13 +291,19 @@ public class HostsGroupService
 
     public HostsGroup? GetGroup(string groupId)
     {
-        return _groups.FirstOrDefault(g => g.Id == groupId);
+        lock (_gate)
+        {
+            return _groups.FirstOrDefault(g => g.Id == groupId);
+        }
     }
 
     public void Clear()
     {
-        _groups.Clear();
-        SaveToFile();
+        lock (_gate)
+        {
+            _groups.Clear();
+            SaveToFile();
+        }
         OnGroupsChanged?.Invoke();
     }
 

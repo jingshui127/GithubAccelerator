@@ -57,7 +57,7 @@ public class DataExportImportService
             {
                 Version = "1.0",
                 ExportTime = DateTime.Now,
-                Groups = new List<HostsGroup>(HostsGroupService.Instance.Groups),
+                Groups = HostsGroupService.Instance.Snapshot(),
                 OperationHistory = new List<OperationRecord>(OperationHistoryService.Instance.Records),
                 Settings = settings != null ? new AppSettingsData
                 {
@@ -189,8 +189,7 @@ public class DataExportImportService
                     group.Id = Guid.NewGuid().ToString("N")[..8];
                     group.CreatedAt = DateTime.Now;
                     group.UpdatedAt = DateTime.Now;
-                    groupService.CreateGroup(group.Name, group.Description, group.Color);
-                    var newGroup = groupService.Groups[^1];
+                    var newGroup = groupService.CreateGroup(group.Name, group.Description, group.Color);
                     foreach (var entry in group.Entries)
                     {
                         groupService.AddEntry(newGroup.Id, new HostsEntry
