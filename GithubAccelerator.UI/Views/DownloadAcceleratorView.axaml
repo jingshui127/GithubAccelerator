@@ -35,7 +35,7 @@
             <Border Padding="14,12" CornerRadius="8" Background="{DynamicResource InfoBackground}"
                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="1">
                 <TextBlock TextWrapping="Wrap" FontSize="12" Classes="SecondaryText"
-                           Text="{Binding MirrorNotice} 镜像只能打开公开的下载/页面；需要登录、api.github.com 接口、容器镜像等场景不在覆盖范围。本工具不会安装证书，也不会修改系统代理或 Hosts。"/>
+                           Text="{Binding MirrorNotice} 镜像只能打开公开的下载/页面；api.github.com 与需要登录的操作请直接访问（直连可用，无需镜像），容器镜像（ghcr.io）不在覆盖范围。本工具不会安装证书，也不会修改系统代理或 Hosts。"/>
             </Border>
 
             <!-- 输入区域 -->
