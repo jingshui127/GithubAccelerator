@@ -22,6 +22,8 @@ obj/
 # Publish output
 publish/
 **/publish/
+out/
+artifacts/
 
 # Release packages
 *.zip
