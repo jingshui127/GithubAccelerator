@@ -45,7 +45,8 @@
     <PackageReference Include="Microsoft.Extensions.Logging" Version="11.0.0-preview.6.26359.118" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="11.0.0-preview.6.26359.118" />
     <PackageReference Include="NewLife.Stardust" Version="3.9.2026.716-beta1411" />
-    <PackageReference Include="NewLife.Stardust.Extensions" Version="3.9.2026.716-beta1411" />
+    <!-- 未使用 Stardust.Extensions（ASP.NET Core 扩展）；它会把整个 Microsoft.AspNetCore.App
+         框架拖进自包含发布（约 21.6MB）。本项目只用到 Stardust 客户端埋点，故不引用。 -->
     <PackageReference Include="Semi.Avalonia" Version="12.1.0" />
     <PackageReference Include="Serilog" Version="4.4.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
