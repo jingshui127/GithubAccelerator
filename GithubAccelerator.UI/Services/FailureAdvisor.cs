@@ -1,4 +1,5 @@
 using System;
+using GithubAccelerator.Models;
 
 namespace GithubAccelerator.UI.Services;
 
@@ -30,8 +31,8 @@ public static class FailureAdvisor
                 "以管理员身份重试"),
 
             FailureKind.AllMirrorsUnreachable => new FailureAdvice(kind,
-                "所有加速节点这次都没连上，多半是网络波动或当前网络限制了外部访问。",
-                "重试一次"),
+                "所有加速节点这次都没连上（检测时间与每个源的原因见失败详情）。",
+                AllSourcesFailureReport.DirectActionText),
 
             FailureKind.HostsWriteDenied => new FailureAdvice(kind,
                 "Hosts 文件没写成：通常是权限不够，或被安全软件占用/锁定。",

@@ -544,6 +544,34 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         FailureAdvice = null;
     }
 
+    /// <summary>
+    /// 一键改用原始链接：已应用加速时移除本程序的 Hosts 块；未应用时说明当前已是直连。
+    /// 不猜测、不假装"仍在加速"。
+    /// </summary>
+    [RelayCommand]
+    private async Task UseDirectConnection()
+    {
+        if (!IsHostsApplied)
+        {
+            StatusMessage = "当前未应用加速，已经是原始链接直连，无需改动";
+            HasAllSourcesFailure = false;
+            AllSourcesFailureText = string.Empty;
+            return;
+        }
+
+        await ClearAppliedHosts();
+        HasAllSourcesFailure = false;
+        AllSourcesFailureText = string.Empty;
+        StatusMessage = "已改用原始链接（已移除本程序的 Hosts 加速块）";
+    }
+
+    [RelayCommand]
+    private void DismissAllSourcesFailure()
+    {
+        HasAllSourcesFailure = false;
+        AllSourcesFailureText = string.Empty;
+    }
+
     /// <summary>执行失败提示里的那一个按钮，不额外弹窗、不扩大操作范围。</summary>
     [RelayCommand]
     private async Task RunFailureAdviceAction()
@@ -559,7 +587,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 await RequestElevationAsync(LaunchIntent.ApplyHosts);
                 break;
             case FailureKind.AllMirrorsUnreachable:
-                await ApplyHostsFromAllSources();
+                await UseDirectConnection();
                 break;
             case FailureKind.NoNetwork:
                 await TestGitHubConnectionAsync(showNotification: true);
@@ -1731,17 +1759,31 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         if (validContents.Count == 0)
         {
             _applyIssue = "所有数据源均不可用";
-            StatusMessage = "所有数据源均获取失败，请检查网络";
+            StatusMessage = "所有数据源均获取失败，请检查网络或改用原始链接";
+            AllSourcesFailureText = AllSourcesFailureReport.Build(
+                DateTime.Now,
+                fetchResults.Select(r => (r.Name, r.Error)));
+            HasAllSourcesFailure = true;
             _notificationService.Error("Hosts 应用", "所有数据源均不可用");
+
+            // 已应用加速但全部源挂掉：不能继续显示"已加速"，改为"已加速但源不可用"。
+            if (IsHostsApplied)
+            {
+                _accelState.MarkSourceUnavailable("全部数据源不可达");
+                RaiseAccelerationStateChanged();
+            }
+
             ShowFailureAdvice(FailureKind.AllMirrorsUnreachable);
             return;
         }
 
         XTrace.WriteLine($"[ApplyHosts/All] 成功拉取 {validContents.Count}/{sources.Length} 个源");
+        SetAccelerationProgress(1, totalSteps, $"拉取完成（{validContents.Count}/{sources.Length} 个源）");
         StatusMessage = $"已拉取 {validContents.Count} 个源，正在合并并优化 IP（实时探测中，请稍候）...";
 
         // 2. 合并所有 hosts 内容
         var mergedHosts = string.Join("\n", validContents);
+        SetAccelerationProgress(2, totalSteps, "合并完成");
         XTrace.WriteLine($"[ApplyHosts/All] 合并后内容长度={mergedHosts.Length}");
 
         // 3. IP 优化（DNS解析 + HTTPS探测 + 择优）

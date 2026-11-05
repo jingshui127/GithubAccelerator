@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace GithubAccelerator.Models;
 
@@ -18,6 +20,9 @@ public enum AccelerationState
 
     /// <summary>部分失败：主体已完成，但有步骤未成功（原因可读）。</summary>
     PartiallyFailed,
+
+    /// <summary>已写入加速，但当前全部数据源不可用：不再是"加速中"的假象。</summary>
+    AcceleratedUnavailable,
 
     /// <summary>等待用户确认（需要提权的动作在等 UAC）。</summary>
     WaitingForElevation
@@ -49,6 +54,7 @@ public sealed class AccelerationStateMachine
         AccelerationState.NotAccelerated => "未加速",
         AccelerationState.Starting => "进行中（可取消）",
         AccelerationState.Accelerated => "已加速",
+        AccelerationState.AcceleratedUnavailable => $"已加速，但当前数据源不可用：{_reason ?? "全部数据源不可达"}（可改用原始链接）",
         AccelerationState.PartiallyFailed => $"部分失败：{_reason ?? "有步骤未完成"}",
         AccelerationState.WaitingForElevation => "等待用户确认（提权）",
         _ => "未知"
@@ -94,6 +100,17 @@ public sealed class AccelerationStateMachine
         _reason = reason;
     }
 
+    /// <summary>
+    /// 已写入加速、但全部数据源都不可达：进入"已加速但源不可用"稳定状态。
+    /// 调用方必须确认 Hosts 仍处于已应用状态。
+    /// </summary>
+    public void MarkSourceUnavailable(string? reason = null)
+    {
+        if (_state == AccelerationState.WaitingForElevation) return;
+        EnterStable(AccelerationState.AcceleratedUnavailable,
+            string.IsNullOrWhiteSpace(reason) ? "全部数据源不可达" : reason);
+    }
+
     /// <summary>稳定状态 → 等待提权确认。</summary>
     public void BeginElevation()
     {
@@ -124,7 +141,10 @@ public sealed class AccelerationStateMachine
 
         if (applied)
         {
-            if (_state != AccelerationState.PartiallyFailed && _state != AccelerationState.Accelerated)
+            // 已加速但源不可用是一个有意义的状态，不能因为文件还在就改写成"已加速"。
+            if (_state != AccelerationState.PartiallyFailed
+                && _state != AccelerationState.Accelerated
+                && _state != AccelerationState.AcceleratedUnavailable)
                 EnterStable(AccelerationState.Accelerated, null);
         }
         else
@@ -142,4 +162,30 @@ public sealed class AccelerationStateMachine
 
     private static AccelerationState StableOf(AccelerationState state) =>
         state == AccelerationState.WaitingForElevation ? AccelerationState.NotAccelerated : state;
+}
+
+/// <summary>
+/// 全部数据源失败时的说明文本：检测时间 + 每个源的失败原因 + 可执行的直连动作。
+/// 纯函数，便于测试；不编造"即将恢复"之类的推测。
+/// </summary>
+public static class AllSourcesFailureReport
+{
+    public const string DirectActionText = "改用原始链接（关闭加速）";
+
+    public static string Build(
+        DateTime checkedAt,
+        IEnumerable<(string Name, string? Error)> sources)
+    {
+        var lines = sources
+            .Select(s => $"- {s.Name}：{(string.IsNullOrWhiteSpace(s.Error) ? "无响应（未返回内容）" : s.Error!.Trim())}")
+            .ToList();
+
+        return string.Join(Environment.NewLine, new[]
+        {
+            $"检测时间：{checkedAt:yyyy-MM-dd HH:mm:ss}",
+            $"结果：共 {lines.Count} 个数据源全部不可用。",
+            string.Join(Environment.NewLine, lines),
+            $"建议动作：点击“{DirectActionText}”。若当前已应用加速，会移除本程序的 Hosts 块，让 GitHub 回到原始链接直连。"
+        });
+    }
 }

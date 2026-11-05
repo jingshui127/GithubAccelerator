@@ -191,6 +191,32 @@
                     </Grid>
                 </Border>
 
+                <!-- 全部数据源失败详情：检测时间 + 每个源的原因 + 一键改用原始链接 -->
+                <Border Padding="16,12" Margin="0,8,0,0" CornerRadius="12"
+                        IsVisible="{Binding HasAllSourcesFailure}"
+                        Background="#1AF44336"
+                        BorderBrush="#F44336" BorderThickness="1">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0" Spacing="4">
+                            <TextBlock Text="所有数据源都不可用" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="#F44336"/>
+                            <TextBlock Text="{Binding AllSourcesFailureText}" FontSize="11"
+                                       TextWrapping="Wrap" Classes="SecondaryText"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Center" Margin="12,0,0,0">
+                            <Button Content="改用原始链接（关闭加速）"
+                                    Command="{Binding UseDirectConnectionCommand}"
+                                    Padding="12,6" FontSize="12"
+                                    ToolTip.Tip="移除本程序的 Hosts 加速块，让 GitHub 回到原始链接直连"/>
+                            <Button Content="重新检测" Command="{Binding ApplyHostsCommand}"
+                                    Padding="12,6" FontSize="12"/>
+                            <Button Content="✕ 关闭" Command="{Binding DismissAllSourcesFailureCommand}"
+                                    Padding="12,4" FontSize="11"
+                                    Background="Transparent" BorderThickness="0"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
                 <!-- 推荐数据源 -->
                 <Border Padding="20" CornerRadius="12"
                         Background="{DynamicResource PrimaryColor}"
