@@ -41,17 +41,17 @@
 | P0-2 | P0 | 没有"开始/停止加速"单一开关，停止入口是垃圾桶图标 | [DashboardView#L169-L172](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Views/DashboardView.axaml#L169-L172)、[#L207-L209](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Views/DashboardView.axaml#L207-L209) | 首页、状态机 | 是（首启自动加速） | 2–3 人日 |
 | P0-3 | P0 | 首次使用是"读 4 步说明书"，不是引导浮层 | [QuickGuideWindow.axaml#L38-L120](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Views/QuickGuideWindow.axaml#L38-L120) | 首启、引导 | 否 | 2 人日 |
 | P0-4 | P0 | 回滚/还原语义不安全：备份恢复会被包进加速标记；清除非原子；卸载无还原 | [HostsBackupService#L109-L117](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Services/HostsBackupService.cs#L109-L117)、[ClearAppliedHosts#L981-L1002](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/ViewModels/MainWindowViewModel.cs#L981-L1002) | Hosts 写入、备份、卸载 | 否 | 1.5 人日 |
-| P0-5 | P0 | 分发不可达：发布在 GitHub Releases、146MB、无签名 | `publish/` 实测、[README#L37-L41](file:///E:/CsharpCode/repos/GithubAccelerator/README.md#L37-L41) | 发布/运营 | 否 | 2 人日（含渠道） |
+| P0-5 | P0 | 分发不可达：发布在 GitHub Releases、146MB、无签名（第 5 批已瘦身至 70.03MB、附 SHA256SUMS 与一页安装说明，仍不买证书） | `publish/` 实测 146.06MB → `artifacts/` 实测 70.03MB、[INSTALL.md](file:///E:/CsharpCode/repos/GithubAccelerator/docs/INSTALL.md) | 发布/运营 | 否 | 2 人日（含渠道） |
 | P0-6 | P0 | 遥测默认开启、无告知、无开关 | [StardustMonitorService#L29-L40](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Services/StardustMonitorService.cs#L29-L40)、[App.axaml.cs#L23](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/App.axaml.cs#L23) | 隐私、合规、信任 | 见 §三-6 | 0.5 人日 |
 | P1-1 | P1 | Git 加速原方案把 `http.proxy` 指向反向代理站（第 4 批已改为 `url.insteadOf`，可逆、带来源记录与历史清理） | [GitUrlRewriteService.cs](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/GitUrlRewriteService.cs)、[SettingsViewModel](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/ViewModels/SettingsViewModel.cs) | Git 场景 | 是 | 2 人日 |
 | P1-2 | P1 | 容器/包拉取：`ghcr.io` 只能文档指引；`pkg.github.com` 非下载端点，做不了（不加假开关） | [ChinazDnsService#L74-L89](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/ChinazDnsService.cs#L74-L89)、§P1-2 结论表 | 域名清单、文档 | 否 | 0.5 人日 |
-| P1-3 | P1 | 失败后没有可执行自救路径，错误是技术术语 | [MainWindowViewModel#L1379](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/ViewModels/MainWindowViewModel.cs#L1379) | 全失败分支 | 否 | 1.5 人日 |
+| P1-3 | P1 | 失败后没有可执行自救路径，错误是技术术语（第 5 批已做：五类人话 + 按钮、诊断包预览/脱敏/不外发） | [FailureAdvisor.cs](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Services/FailureAdvisor.cs)、[DiagnosticsBundleService.cs](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Services/DiagnosticsBundleService.cs) | 全失败分支 | 否 | 1.5 人日 |
 | P1-4 | P1 | 智能优选耗时不可预期、无进度、不可取消 | [HostsOptimizerService#L216-L260](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/HostsOptimizerService.cs#L216-L260) | 首页主流程 | 否 | 1 人日 |
 | P1-5 | P1 | 三个设置开关是假开关（持久化但无实现） | [SettingsViewModel#L53-L55](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/ViewModels/SettingsViewModel.cs#L53-L55)、[MainWindow.axaml.cs#L79-L85](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Views/MainWindow.axaml.cs#L79-L85) | 设置、托盘 | 否 | 0.5–1 人日 |
 | P1-6 | P1 | 无单实例保护，两个进程可同时改写 Hosts | [Program.cs#L13-L20](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Program.cs#L13-L20) | 启动、写入 | 否 | 0.5 人日 |
 | P1-7 | P1 | Git 代理设置被错误地要求管理员权限 | [SettingsViewModel#L324](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/ViewModels/SettingsViewModel.cs#L324) | 设置 | 否 | 0.2 人日 |
 | P1-8 | P1 | 镜像池含已停服站点，无运行时健康检查（第 4 批已健康化并移除 DNS 死站） | [MirrorHealthService.cs](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/MirrorHealthService.cs)、§P1-8 实测记录 | 下载加速 | 否 | 0.5 人日 |
-| P1-9 | P1 | 无版本检查，用户不知道有新版本 | 全仓无更新代码；[README#L116](file:///E:/CsharpCode/repos/GithubAccelerator/README.md#L116) 靠手写版本号 | 发布/支持 | 否 | 1 人日 |
+| P1-9 | P1 | 无版本检查，用户不知道有新版本（第 5 批已做：仅手动检查，私有仓库无公共通道，不假装自动更新） | [UpdateCheckService.cs](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Services/UpdateCheckService.cs)、[AboutWindow.axaml](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Views/AboutWindow.axaml) | 发布/支持 | 否 | 1 人日 |
 | P1-10 | P1 | 所有源都失败时无兜底，应用等于不可用 | [GithubHostsService#L171](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/GithubHostsService.cs#L171) | 极端网络 | 否 | 1 人日 |
 | P2-1 | P2 | 托盘只有显示/退出，无加速开关与状态 | [TrayIconManager 调用](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Views/MainWindow.axaml.cs#L53-L60) | 托盘 | 否 | 1 人日 |
 | P2-2 | P2 | 下载加速只生成链接，需要用户手动复制到浏览器 | [MirrorUrlService#L108-L160](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/MirrorUrlService.cs#L108-L160) | 下载页 | 否 | 2–3 人日 |
@@ -160,21 +160,47 @@
 
 ---
 
-### P0-5 分发与信任：让用户"下载得到、敢运行"
+### P0-5 分发与信任：让用户"下载得到、敢运行"（状态：已做，2026-11-05；不买代码签名证书）
 
-**现状**：README 指向 GitHub Releases（[README#L39](file:///E:/CsharpCode/repos/GithubAccelerator/README.md#L39)）；发布物是 `publish/` 下 146 MB 单文件 exe，无安装包、无数字签名、无 hash 清单。对"上不了 GitHub 的人"来说，下载这个工具本身就需要加速 —— 死循环。
+**现状（改造前）**：README 指向 GitHub Releases（[README#L39](file:///E:/CsharpCode/repos/GithubAccelerator/README.md#L39)）；发布物是 `publish/` 下 146 MB 单文件 exe，无安装包、无数字签名、无 hash 清单。
 
-**做法（代码 + 运营各一半）**
-- 增加国内可访问的发布渠道（任选：Gitee Releases / 自建 OSS / 网盘 + 固定短链），README 首位放置；GitHub Releases 作为备用。
-- 提供 `.sha256` 与版本说明；发布包命名带版本号（现在叫 `GithubAccelerator_v1.5.0.zip`，与 `1.5.5` 不一致）。
-- 体积：评估改为 framework-dependent（需 .NET 10 运行时）或裁剪（`PublishTrimmed`），把 146MB 降到可接受区间；若保留自包含，至少提供"精简版/完整版"两档。
-- 签名：短期至少给 exe 加版本信息 + 提供校验值；中期评估代码签名证书（成本项，需用户决策）。
+**第 5 批实测（Windows x64，`Get-ChildItem | Measure-Object Length -Sum` 实得，非估算）**
+
+| 项 | 改造前（`publish/`） | 改造后（`artifacts/v1.5.5/`） |
+|---|---|---|
+| 发布 exe | 146.06 MB | **70.03 MB**（73,429,145 B） |
+| 发布 zip | 无 | **64.48 MB**（67,616,549 B，`GithubAccelerator_v1.5.5_win-x64.zip`：exe + `Assets/app-icon.ico` + `INSTALL.md` + `SHA256SUMS`） |
+| 校验/说明 | 无 | `SHA256SUMS` + [INSTALL.md](file:///E:/CsharpCode/repos/GithubAccelerator/docs/INSTALL.md) 一页 |
+
+体积构成（未压缩、无 PDB 的实测分类，合计 173.06 MB；PDB 100.09 MB 不随包发布）：
+
+| 分类 | MB | 处理 |
+|---|---|---|
+| .NET 运行时 coreclr/host | 26.18 | 保留（自包含必须） |
+| System 基础库 | 57.60 | 保留（无法安全裁剪） |
+| WinForms 栈 | 23.16 | 保留（legacy 项目共用，删了会破坏构建） |
+| ASP.NET Core 栈（NewLife.Stardust 引入） | 21.60 | 保留（诊断上报功能仍在，关开关不等于删依赖） |
+| Avalonia + 托管 Skia | 11.88 | 保留 |
+| 原生 Skia/HarfBuzz/GL | 17.97 | 保留（渲染必需，压进单文件后随 exe 压缩） |
+| 卫星语言资源 | 8.57 | **Release 只保留 `zh-Hans;zh-Hant`**，其余语言不再随包 |
+| 程序与业务依赖 | 2.93 | 保留 |
+| 其他 | 3.17 | 保留 |
+
+**做法（落地）**
+- 瘦身顺序按约定执行：① 去掉未使用的语言资源（`SatelliteResourceLanguages`，Release 限定）→ ② 单文件压缩（`PublishSingleFile` + `IncludeNativeLibrariesForSelfExtract` + `EnableCompressionInSingleFile`）→ ③ framework-dependent **未采用**：实测约 61 MB（单文件 43.27 + 原生 17.97），只比现状少约 9 MB，却要求用户自装 .NET 10 桌面运行时，对"傻瓜化"是净负分，故放弃。
+- 发布参数固化在 [FolderProfile.pubxml](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Properties/PublishProfiles/FolderProfile.pubxml)（`SelfContained=true`、`PublishSingleFile=true`、`PublishReadyToRun=false`、`DebugType=None`、`PublishDir=..\artifacts\staging\`）；`Release` 配置额外排除 `AvaloniaUI.DiagnosticsSupport`（仅 Debug 需要）。
+- 可重复发布脚本 [Release.ps1](file:///E:/CsharpCode/repos/GithubAccelerator/scripts/Release.ps1)：清 staging → `dotnet publish -p:PublishProfile=FolderProfile` → 只留 exe → 复制托盘图标到 `dist/Assets/` → 生成 `SHA256SUMS` → 打 zip → 可选 `-Upload` 走 `gh release create/upload --clobber`。产物在 `artifacts/`，已在 [.gitignore](file:///E:/CsharpCode/repos/GithubAccelerator/.gitignore) 中忽略，不会被再次入库。
+- 校验：`SHA256SUMS` 为"小写哈希 + 两空格 + 文件名"；安装说明给出可直接复制的 `Get-FileHash .\GithubAccelerator.UI.exe -Algorithm SHA256` 对比命令，并写明"对不上就别装"。
+- 未签名如实说明：不写"数字签名可省略"，直接写明"未签名，首次运行 SmartScreen 会拦，这是正常现象"，给出放行路径（更多信息 → 仍要运行）。
+- 安装说明一页：解压 → 可选校验 → 双击 + 点"开始加速"（与 P0-3 的两步对齐）→ 出问题走诊断包（先预览、不自动上传）。
+
+**不做/未做**：国内镜像渠道（Gitee/OSS/网盘）仍属运营项，未在本批落地；代码签名证书按用户决策不购买。
 
 **不做会怎样**：目标用户根本拿不到安装包；即便拿到，SmartScreen/杀软拦截会让非技术用户直接放弃。
 
 **影响面**：发布脚本/文档（非业务代码）；`csproj` 的发布参数。
 **改变默认行为**：无。
-**回滚**：发布参数改回原值。
+**回滚**：发布参数改回原值，删 `scripts/Release.ps1` 与 `docs/INSTALL.md`。
 
 ---
 
@@ -283,20 +309,28 @@ Maven（`~/.m2/settings.xml` 的 `<proxies>`）：
 
 ---
 
-### P1-3 失败路径：从"报错"到"下一步"
+### P1-3 失败路径：从"报错"到"下一步"（状态：已做，2026-11-05）
 
-**现状**：全源失败只给一句"所有数据源均获取失败，请检查网络"（[MainWindowViewModel#L1379](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/ViewModels/MainWindowViewModel.cs#L1379)）；写入失败提示"请以管理员身份运行"（[#L1447-L1449](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/ViewModels/MainWindowViewModel.cs#L1447-L1449)，同样文案还出现在 L1569、L1727），但用户此时没有"以管理员重启"的按钮（P0-1）。日志在 `%AppData%\...\Logs`（[LogService#L95-L110](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Services/LogService.cs#L95-L110)），用户不会去找。
+**现状（改造前）**：全源失败只给一句"所有数据源均获取失败，请检查网络"（[MainWindowViewModel#L1379](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/ViewModels/MainWindowViewModel.cs#L1379)）；写入失败提示"请以管理员身份运行"（[#L1447-L1449](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/ViewModels/MainWindowViewModel.cs#L1447-L1449)，同样文案还出现在 L1569、L1727），但用户此时没有"以管理员重启"的按钮（P0-1）。日志在 `%AppData%\...\Logs`（[LogService#L95-L110](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Services/LogService.cs#L95-L110)），用户不会去找。
 
-**做法**
-- 建立"失败原因 → 一句人话 + 1~2 个动作"的映射表：无管理员 / DNS 被篡改 / 源站不可达 / 本机代理拦截 / 写入被占锁 / 优化超时。
-- 失败卡片提供：`重试`、`换一个数据源`、`复制诊断信息`、`打开日志目录`。
-- "复制诊断信息"= 版本 + OS + 是否管理员 + 三端点测试结果 + 当前 Hosts 是否含标记块 + 最近 30 行日志（脱敏：不包含用户名以外的路径细节）。
-- `StatusMessage` 只用于过程；结果一律走 toast/卡片，避免用户盯着底部一行小字。
+**做法（落地）**
+- [FailureAdvisor.cs](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Services/FailureAdvisor.cs)：`FailureKind` 六值 → "一句人话原因 + 一个可执行按钮"。
+  - 提权被拒 → "需要管理员权限才能改 Hosts"，按钮"以管理员身份重试"
+  - 全部镜像不可达 → "所有加速源都连不上"，按钮"换成全部数据源再试"
+  - Hosts 被第三方软件改写 → "Hosts 中的加速段被其它软件改过"，按钮"查看 Hosts 内容"
+  - git 配置冲突 → "Git 里已有别的加速配置"，按钮"打开设置"
+  - 无网络 → "本机连不上 GitHub"，按钮"测试 GitHub 连接"
+  - 默认兜底也给一句话 + 一个动作，不弹错误码。
+- 主窗口通知栏上方新增失败自救条（橙色左边框，原因文本 + 动作按钮 + ✕），不是只改底部 `StatusMessage`。
+- 诊断包 [DiagnosticsBundleService.cs](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Services/DiagnosticsBundleService.cs)：预览列出 8 个文件与 5 条脱敏规则，实测 68.1 KB；包含日志（最近 2 个 × 300 行）、系统信息（OS/.NET/版本/是否管理员）、设置（脱敏）、Git 相关配置（**只取** `url.*.insteadof/pushinsteadof`、`http(s).proxy`）、镜像健康结果、**仅本程序的 Hosts 标记块**（先 `ContainsBlock` 再 `GetBlock`，不导整份 hosts）。
+- 脱敏规则 [DiagnosticsSanitizer.cs](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Services/DiagnosticsSanitizer.cs)：`C:\Users\<x>`、`/home/<x>`、当前用户名、`ghp_*` / `github_pat_*` / `x-access-token`、`token|pat|password|secret|authorization` 键值（含 `Bearer ` 前缀）、`https://user:pass@host`。
+- 预览窗（[DiagnosticsPreviewWindow.axaml](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Views/DiagnosticsPreviewWindow.axaml)）：导出前必须先看清单；保存走系统文件选择器写本地 zip；**没有任何上传/发送代码路径**。日志被占用时用 `FileShare.ReadWrite` 共享读，失败文案不暴露路径。
+- 设置页新增"故障排查 · 诊断包"卡片（按钮"生成诊断包（先预览）"）；Git 状态下方新增 `GitRewriteAdvice` 提示（检测到已有 rewrite 时给出人话说明）。
 
 **不做会怎样**：当前用户失败后唯一能做的是"自己猜"；对非技术用户等价于"这软件坏了"，且没有任何信息能反馈给你（QQ 是唯一渠道）。
 
-**影响面**：`NotificationService`/`ToastControl`、`MainWindowViewModel`、新增诊断服务。
-**改变默认行为**：无。
+**影响面**：`MainWindowViewModel`、`MainWindow.axaml`、`SettingsView.axaml`/`SettingsViewModel`、新增诊断与失败服务。
+**改变默认行为**：无（诊断包仅手动触发、仅本地保存）。
 **回滚**：新增组件独立，可移除。
 
 ---
@@ -391,19 +425,27 @@ Maven（`~/.m2/settings.xml` 的 `<proxies>`）：
 
 ---
 
-### P1-9 版本检查与更新提示
+### P1-9 版本检查与更新提示（状态：已做，2026-11-05；仅手动检查）
 
-**现状**：全仓无版本检查/更新逻辑；`publish/` 里没有版本标识文件，README 版本号靠手写（[README#L116](file:///E:/CsharpCode/repos/GithubAccelerator/README.md#L116)）。
+**现状（改造前）**：全仓无版本检查/更新逻辑；`publish/` 里没有版本标识文件，README 版本号靠手写（[README#L116](file:///E:/CsharpCode/repos/GithubAccelerator/README.md#L116)）。
 
-**做法（分两档）**
-- 必做：启动后异步读取一个"版本清单"（可放在国内渠道/Gitee Raw/对象存储，带签名或 hash），比较 `AssemblyVersion`（当前 1.5.5，[csproj#L9-L11](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/GithubAccelerator.UI.csproj#L9-L11)），有新版本时在首页出一条"有新版本 vX（更新说明）→ 打开下载页"。
-- 可选（不建议先做）：自动下载替换 —— 需要签名与回滚机制，风险高。
+**可行性判定**：仓库是 private，没有公共更新通道。三条路：
+1. 带鉴权检查 → 要在客户端内置 token/PAT，对普通用户是"把凭据塞进客户端"，负分且不可轮换，**否决**。
+2. 公开清单文件 → 需要在仓库外或公开 Gist 维护第二份版本源，多一处易失效的东西，本批不引入。
+3. 手动检查 → 用户点"检查更新"时才请求一次，最简且诚实，**采用**。
+
+**做法（落地）**
+- [UpdateCheckService.cs](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Services/UpdateCheckService.cs)：`HttpUpdateCheckClient` 调 GitHub Releases `releases/latest` 匿名 GET，**无 token、无用户标识、无机器信息**，只带 `User-Agent: GithubAccelerator` 与 `Accept: application/vnd.github+json`；超时 5s；`Timeout`/`Failed`/`NoReleaseInfo`/`UpToDate`/`UpdateAvailable` 全部收敛为可读状态，失败只更新一行文字（静默降级）。
+- [AboutWindow.axaml](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Views/AboutWindow.axaml)：新增"检查更新"按钮 + 状态行 + "打开发布页"按钮（有新版才出现）。**不随启动运行、不加"自动更新"开关**，避免"假装能自动更新"。
+- 与诊断上报完全独立：本功能不读写 `DiagnosticsEnabled`，UI 也不把它和诊断开关混在一起。
+
+**代价**：不会自动提示更新，用户需自己点一次；私有仓库的 Releases 匿名可读（只要仓库公开前不会命中私有 404，`NoReleaseInfo` 有明确文案）。实测返回"已是最新版本（v1.5.5.0）"。
 
 **不做会怎样**：Hosts 类工具对"源/域名变化"高度敏感，版本落后会表现为"越来越不好用"，而用户没有升级路径。
 
-**影响面**：新增 `UpdateCheckService`、首页、发布流程（生成版本清单）。
-**改变默认行为**：启动多一次外网请求（可在设置里关）。
-**回滚**：移除服务与卡片。
+**影响面**：新增 `UpdateCheckService`、关于窗口。
+**改变默认行为**：无（不随启动请求）。
+**回滚**：移除按钮与服务。
 
 ---
 
