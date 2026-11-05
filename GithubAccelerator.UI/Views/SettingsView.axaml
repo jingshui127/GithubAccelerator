@@ -156,6 +156,9 @@
                                             Padding="16,6" FontSize="13"/>
                                 </StackPanel>
                             </Border>
+
+                            <TextBlock Text="容器与包拉取：ghcr.io 需在容器运行时侧配置可信镜像或代理；pkg.github.com 不是下载端点（GitHub Packages 私有包需 host 绑定的 token），无法自动加速。配置片段见 docs/Optimization_Plan_20261105.md 的 P1-2 小节。"
+                                       FontSize="12" Classes="SecondaryText" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>

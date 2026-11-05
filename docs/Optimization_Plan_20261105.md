@@ -43,14 +43,14 @@
 | P0-4 | P0 | 回滚/还原语义不安全：备份恢复会被包进加速标记；清除非原子；卸载无还原 | [HostsBackupService#L109-L117](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Services/HostsBackupService.cs#L109-L117)、[ClearAppliedHosts#L981-L1002](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/ViewModels/MainWindowViewModel.cs#L981-L1002) | Hosts 写入、备份、卸载 | 否 | 1.5 人日 |
 | P0-5 | P0 | 分发不可达：发布在 GitHub Releases、146MB、无签名 | `publish/` 实测、[README#L37-L41](file:///E:/CsharpCode/repos/GithubAccelerator/README.md#L37-L41) | 发布/运营 | 否 | 2 人日（含渠道） |
 | P0-6 | P0 | 遥测默认开启、无告知、无开关 | [StardustMonitorService#L29-L40](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Services/StardustMonitorService.cs#L29-L40)、[App.axaml.cs#L23](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/App.axaml.cs#L23) | 隐私、合规、信任 | 见 §三-6 | 0.5 人日 |
-| P1-1 | P1 | Git 加速实现错误，会把 `http.proxy` 指向反向代理站 | [SettingsViewModel#L393-L400](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/ViewModels/SettingsViewModel.cs#L393-L400)、[GitProxyService#L205-L235](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/GitProxyService.cs#L205-L235) | Git 场景 | 是 | 2 人日 |
-| P1-2 | P1 | 加速范围缺容器/包拉取：`ghcr.io`、`pkg.github.com` 未覆盖 | [ChinazDnsService#L74-L89](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/ChinazDnsService.cs#L74-L89)、[HostsOptimizerService#L34-L47](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/HostsOptimizerService.cs#L34-L47) | 域名清单、Hosts | 否 | 0.5 人日 |
+| P1-1 | P1 | Git 加速原方案把 `http.proxy` 指向反向代理站（第 4 批已改为 `url.insteadOf`，可逆、带来源记录与历史清理） | [GitUrlRewriteService.cs](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/GitUrlRewriteService.cs)、[SettingsViewModel](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/ViewModels/SettingsViewModel.cs) | Git 场景 | 是 | 2 人日 |
+| P1-2 | P1 | 容器/包拉取：`ghcr.io` 只能文档指引；`pkg.github.com` 非下载端点，做不了（不加假开关） | [ChinazDnsService#L74-L89](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/ChinazDnsService.cs#L74-L89)、§P1-2 结论表 | 域名清单、文档 | 否 | 0.5 人日 |
 | P1-3 | P1 | 失败后没有可执行自救路径，错误是技术术语 | [MainWindowViewModel#L1379](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/ViewModels/MainWindowViewModel.cs#L1379) | 全失败分支 | 否 | 1.5 人日 |
 | P1-4 | P1 | 智能优选耗时不可预期、无进度、不可取消 | [HostsOptimizerService#L216-L260](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/HostsOptimizerService.cs#L216-L260) | 首页主流程 | 否 | 1 人日 |
 | P1-5 | P1 | 三个设置开关是假开关（持久化但无实现） | [SettingsViewModel#L53-L55](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/ViewModels/SettingsViewModel.cs#L53-L55)、[MainWindow.axaml.cs#L79-L85](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Views/MainWindow.axaml.cs#L79-L85) | 设置、托盘 | 否 | 0.5–1 人日 |
 | P1-6 | P1 | 无单实例保护，两个进程可同时改写 Hosts | [Program.cs#L13-L20](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Program.cs#L13-L20) | 启动、写入 | 否 | 0.5 人日 |
 | P1-7 | P1 | Git 代理设置被错误地要求管理员权限 | [SettingsViewModel#L324](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/ViewModels/SettingsViewModel.cs#L324) | 设置 | 否 | 0.2 人日 |
-| P1-8 | P1 | 镜像池含已停服站点，无运行时健康检查 | [DownloadAccelerationService#L18-L24](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/DownloadAccelerationService.cs#L18-L24)、[MirrorUrlService#L13-L30](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/MirrorUrlService.cs#L13-L30) | 下载加速 | 否 | 0.5 人日 |
+| P1-8 | P1 | 镜像池含已停服站点，无运行时健康检查（第 4 批已健康化并移除 DNS 死站） | [MirrorHealthService.cs](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/MirrorHealthService.cs)、§P1-8 实测记录 | 下载加速 | 否 | 0.5 人日 |
 | P1-9 | P1 | 无版本检查，用户不知道有新版本 | 全仓无更新代码；[README#L116](file:///E:/CsharpCode/repos/GithubAccelerator/README.md#L116) 靠手写版本号 | 发布/支持 | 否 | 1 人日 |
 | P1-10 | P1 | 所有源都失败时无兜底，应用等于不可用 | [GithubHostsService#L171](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/GithubHostsService.cs#L171) | 极端网络 | 否 | 1 人日 |
 | P2-1 | P2 | 托盘只有显示/退出，无加速开关与状态 | [TrayIconManager 调用](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Views/MainWindow.axaml.cs#L53-L60) | 托盘 | 否 | 1 人日 |
@@ -67,10 +67,10 @@
 | 用户场景 | 当前能力 | 结论 |
 |---|---|---|
 | 浏览器打开 github.com / 网页 | Hosts 加速 | ✅ 覆盖（主路径） |
-| raw 文件、README 图片 | Hosts + 镜像链接 | 🟡 可用，但镜像列表含失效站点（P1-8） |
+| raw 文件、README 图片 | Hosts + 镜像链接 | 🟢 可用，镜像池按实测健康度排序（P1-8 已做） |
 | Release / archive 下载 | 生成 ghproxy 等链接，需手动复制 | 🟡 可用但多一步（P2-2） |
-| `git clone / pull / push` | 只有"设置 Git 代理"，实现方式错误 | ❌ 实际会破坏 Git（P1-1） |
-| `docker pull ghcr.io/...` | 域名清单无 `ghcr.io`/`pkg.github.com` | ❌ 未覆盖（P1-2） |
+| `git clone / pull / push` | HTTPS 远程改为 `url.insteadOf`；push 直连；SSH 未覆盖 | 🟢 HTTP 远程可用（P1-1 已做），SSH 见 P2-3 |
+| `docker pull ghcr.io/...` | 无法由本程序自动加速 | ⛔ 仅文档指引（P1-2） |
 | GitHub Pages（`*.github.io`） | 在域名清单内 | ✅ 覆盖 |
 | gist / codeload / media | gist 在优化器清单，codeload 部分覆盖 | 🟡 部分 |
 | SSH clone（22 端口） | 无 | ❌ 未覆盖（P2-3） |
@@ -197,38 +197,89 @@
 
 ---
 
-### P1-1 Git 加速：现在的实现会让 Git 变慢/失败
+### P1-1 Git 加速：改用 url.insteadOf（状态：已做，2026-11-05）
 
-**现状**：`UseRecommendedGitProxy` 把 `GitProxyUrl` 设为 `https://ghproxy.net`（[SettingsViewModel#L393-L400](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/ViewModels/SettingsViewModel.cs#L393-L400)），`SetProxyAsync` 把它写进 `git config --global http.proxy / https.proxy`（[GitProxyService#L205-L235](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/GitProxyService.cs#L205-L235)）。`ghproxy.net` 是"前缀式反向代理"，不是 HTTP CONNECT 代理；Git 会向它发 `CONNECT github.com:443`，大概率 4xx/超时。用户看到的是"设置了代理，clone 反而失败"。
+**原方案（已废弃，勿再按此实现）**：旧实现把 `https://ghproxy.net` 这类"前缀式反向代理"地址写进 `git config --global http.proxy / https.proxy`。它并不是 HTTP CONNECT 代理，Git 会对它发 `CONNECT github.com:443`，大概率 4xx/超时；而且会污染用户全局配置，停止时无法准确还原。
 
-**做法（按推荐顺序）**
-1. **URL 改写（最稳）**：`git config --global url."https://ghproxy.net/https://github.com/".insteadOf "https://github.com/"`，同时提供一键撤销（`--unset-all`）。只影响 clone/fetch，不碰代理语义。
-2. **本地 CONNECT 代理**：项目里已有 `GithubProxyService`（[GithubProxyService#L51-L83](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/GithubProxyService.cs#L51-L83)），但它用 `HttpListener` 实现"URL 转发"，**不是 CONNECT 代理**，且当前 UI 未使用它 —— 要走这条路必须补 CONNECT 处理、端口占用与常驻生命周期，成本高、风险大。
-3. **SSH over 443 引导**（归入 P2-3）：仅给配置说明，不自动改。
-4. 无论哪条路线：设置前先检测"当前是否已有代理"，给出"将被覆盖的现值"并保存快照，供 P0-4 恢复。
+**当前实现**（[GitUrlRewriteService.cs](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/GitUrlRewriteService.cs)）：
+- 只写 `url.<镜像前缀>.insteadOf = https://github.com/`，覆盖 clone/fetch/pull 的读取路径；不再写任何 `http.proxy` / `https.proxy`。
+- 写入前记录来源（`%AppData%\GithubAccelerator\git-url-rewrite.json`）：key、值、镜像、写入前该 key 的既有值、是否本程序写入。停止时只删本程序写入且当前仍存在的精确值。
+- 冲突保护：同名 key 已被用户占用（值不同）或已存在其它 `insteadOf` 规则匹配 `https://github.com/` 时，**不写入**并在 UI 报冲突；若已存在完全相同的规则，则不重复写入、不据为己有（停止时也不会删除）。
+- push：写入一条恒等 `url.https://github.com/.pushInsteadOf = https://github.com/` 让 push 保持直连；镜像站不支持带鉴权的写入转发，UI 与提示明确说明"push 不走镜像"。用户已有 push 改写时保持原配置。
+- 历史污染清理：设置页会扫描全局 `http.proxy`/`https.proxy`，按值匹配本项目曾用过的镜像 host 后列出 `key = value [来源文件]`，确认后一键删除这些精确条目，不碰用户自己的代理。
+- 不覆盖 SSH 远程（`git@github.com:`）：`insteadOf` 只匹配 `https://github.com/` 前缀，SSH 场景仍归 P2-3。
 
-**不做会怎样**：Git 场景是"用户实际想加速什么"里最高频的一种；现状下这个功能展示存在但结果可能是负向的，比没有更糟。
+**沙箱验证（未触碰用户全局 git 配置）**：
+```powershell
+$env:GIT_CONFIG_GLOBAL = "<临时文件>"; $env:HOME = "<临时目录>"; $env:GIT_CONFIG_NOSYSTEM = "1"
+git config --global --add "url.https://ghfast.top/https://github.com/.insteadOf" "https://github.com/"
+git config --global --add "url.https://github.com/.pushInsteadOf" "https://github.com/"
+git ls-remote --heads https://github.com/octocat/Hello-World.git   # 成功返回 refs
+git clone --depth 1 https://github.com/octocat/Hello-World.git <临时目录>\clone  # exit 0
+git config --global --unset-all "url.https://ghfast.top/https://github.com/.insteadOf" '^https://github\.com/$'
+git config --global --unset-all "url.https://github.com/.pushInsteadOf" '^https://github\.com/$'
+```
+结果：`remote get-url` 为镜像地址、`remote get-url --push` 仍为 `https://github.com/...`；ls-remote 与 clone 均成功；停止后沙箱配置 SHA256 与写入前一致（逐行 diff 为 0）。
 
-**影响面**：`GitProxyService`、`SettingsViewModel`、`SettingsView`。
-**改变默认行为**：是（默认推荐从"写 proxy"改为"insteadOf"，仅对 GitHub 生效）。
-**回滚**：保留两种模式并在设置页可切换；`insteadOf` 模式下"清除"要同时清理 `url.*.insteadOf`。
+**仍未覆盖**：SSH 远程；CLI 旧 `--git` 路径（本地 HttpListener 方案）未在本批改动。
 
 ---
 
-### P1-2 补齐加速覆盖：容器与包拉取
+### P1-2 ghcr.io / GitHub Packages：可行性结论（状态：ghcr.io 只能文档指引；pkg.github.com 做不了）
 
-**现状**：DNS 域名清单（[ChinazDnsService#L74-L89](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/ChinazDnsService.cs#L74-L89)）含 `github.com`、`raw`、`objects`、`codeload`、`github.io` 等；优化器清单含 `gist.github.com`（[#L41](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/HostsOptimizerService.cs#L41)）。但**两份清单都没有** `ghcr.io`、`pkg.github.com`（全仓检索无匹配），健康检查的子域表（[HealthCheckItem.cs#L73-L90](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Models/HealthCheckItem.cs#L73-L90)）也没有；第三个域名表 `SourcePerformanceMonitor` 同样缺（[#L336-L339](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/SourcePerformanceMonitor.cs#L336-L339)）。
+**结论**
 
-**做法**
-- 在 DNS 清单与核心域名表补：`ghcr.io`、`pkg.github.com`；`gist.github.com` 目前只在优化器清单里，也要同步进 DNS 清单与健康检查表。
-- 健康检查页、DNS 清单、优化器清单、性能监控表共用同一份"要加速的域名"常量，避免四处清单漂移（[ChinazDnsService#L74-L89](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/ChinazDnsService.cs#L74-L89)、[HostsOptimizerService#L34-L47](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/HostsOptimizerService.cs#L34-L47)、[HealthCheckItem.cs#L73-L90](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.UI/Models/HealthCheckItem.cs#L73-L90)、[SourcePerformanceMonitor#L336-L339](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/SourcePerformanceMonitor.cs#L336-L339)）。
-- 注意：`ghcr.io` 走的是 OCI Registry（`/v2/`），TLS 正常即可，Hosts 方案有效。
+| 目标 | 结论 | 原因 |
+|---|---|---|
+| `ghcr.io` | **只能文档指引，不做自动开关** | OCI Registry，客户端走 `https://ghcr.io/v2/...` + token 认证；本程序基于 Hosts/URL 前缀改写，无法改变容器客户端的 registry 协议；没有公开、稳定的 ghcr 镜像站，Hosts 只改解析地址并不能替代 registry 协议 |
+| `pkg.github.com` | **做不了，不加开关** | 它不是包下载端点。GitHub Packages 实际端点是 `npm.pkg.github.com`、`nuget.pkg.github.com`、`maven.pkg.github.com`；私有包下载必须携带绑定 host 的 token，公开镜像无法代拉，URL 改写还会破坏 token 校验 |
 
-**不做会怎样**：`docker pull ghcr.io/...`、GitHub Packages 用户完全没被加速，而这类用户往往就是"开发者"里最需要加速的群体。
+UI 只在设置页保留一段纯说明文字，没有任何"容器加速"开关（避免假开关）。
 
-**影响面**：域名清单、Hosts 生成、健康检查。
-**改变默认行为**：写入 Hosts 的条目会变多（需要提示"共 N 条域名"）。
-**回滚**：清单常量回退。
+**ghcr.io 手动配置片段（需自建/可信镜像；没有可用公共镜像时不要填）**
+
+`containerd` 的 `hosts.toml`：
+```toml
+# 例：/etc/containerd/certs.d/ghcr.io/hosts.toml
+server = "https://ghcr.io"
+
+[host."https://<你的可信镜像地址>"]
+  capabilities = ["pull", "resolve"]
+  skip_verify = false
+```
+
+或者给容器运行时/命令行设置代理（不改系统代理）：
+```powershell
+$env:HTTPS_PROXY = "http://127.0.0.1:7890"
+docker pull ghcr.io/owner/image:tag
+```
+
+**GitHub Packages 手动配置片段（企业/本地代理，不做自动改写）**
+
+npm（`%USERPROFILE%\.npmrc`）：
+```ini
+proxy=http://127.0.0.1:7890
+https-proxy=http://127.0.0.1:7890
+registry=https://npm.pkg.github.com/
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
+NuGet（当前进程）：
+```powershell
+$env:HTTPS_PROXY = "http://127.0.0.1:7890"
+dotnet nuget list source   # 源仍为 https://nuget.pkg.github.com/OWNER/index.json
+```
+
+Maven（`~/.m2/settings.xml` 的 `<proxies>`）：
+```xml
+<proxy>
+  <active>true</active>
+  <protocol>https</protocol>
+  <host>127.0.0.1</host>
+  <port>7890</port>
+</proxy>
+```
+
 
 ---
 
@@ -314,20 +365,29 @@
 
 ---
 
-### P1-8 镜像池健康化
+### P1-8 镜像池健康化（状态：已做，2026-11-05）
 
-**现状**：`DownloadAccelerationService` 镜像含 `raw.fastgit.org`（FastGit 已于 2022 年停服）、`raw.sevencdn.com`、`gh.api.99988866.xyz`（[#L18-L24](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/DownloadAccelerationService.cs#L18-L24)）；`MirrorUrlService` 另有一套 `gitclone.com`、`github.com.cnpmjs.org`（同样已停服/不稳定）（[#L13-L30](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/MirrorUrlService.cs#L13-L30)）。两套镜像配置并存、互不同步，且都没有运行时可用性检测。
+**实测记录（2026-11-05 19:48 +08:00，10s 超时；校验取回内容是否为 `Hello World!`，git 端点校验 `# service=git-upload-pack`）**
 
-**做法**
-- 合并为一份镜像配置（一个 `MirrorRegistry`），内置 `LastSuccessTime`，生成链接时按"最近成功 + 历史成功率"排序。
-- 点击"复制/打开"前做一次 HEAD 探测（2s 超时），失败自动换下一个并提示"已切换到 X"。
-- 移除已停服站点，或保留但排到末位并标注"可能失效"。
+| 条目 | 结果 | 判定依据 | 决策 |
+|---|---|---|---|
+| ghfast.top | 200 / 973ms / 内容正确 | 取回 13 字节 `Hello World!` | 保留，健康排序第 1 |
+| GHProxy ghproxy.net | 200 / 895ms / 内容正确 | 取回 `Hello World!`（19:35 同一条目曾 8s 超时，网络波动） | 保留，运行时按实测排序 |
+| gh.api.99988866.xyz | 000 / 674ms / TLS 握手失败 | `SEC_E_ILLEGAL_MESSAGE`，未取回内容 | 保留但排末位（证据不足以判定停服） |
+| jsDelivr CDN | 000 / 10039ms 超时（19:35 为 2794ms 正常） | 直连 CDN，非前缀代理 | 保留；不可达时自动降级 |
+| GitMirror gitmirror.com | DNS 无法解析 / 76ms | `Could not resolve host` | **移除** |
+| raw.fastgit.org | DNS 无法解析 / 54ms | `Could not resolve host`（FastGit 2022 已停服） | **移除** |
+| raw.gitmirror.com | DNS 无法解析 / 49ms | `Could not resolve host` | **移除** |
+| raw.sevencdn.com | DNS 无法解析 / 82ms | `Could not resolve host` | **移除** |
+| github.com.cnpmjs.org | DNS 无法解析 / 54ms | `Could not resolve host` | **移除** |
+| gitclone.com | 200 / 360ms / git 协议正确 | `application/x-git-upload-pack-advertisement` | 保留，clone 列表第 1 |
 
-**不做会怎样**：用户复制到的第一个链接很可能就是死的，会认为"加速功能没用"；且业界镜像站生命周期很短，硬编码列表必然腐化。
-
-**影响面**：`DownloadAccelerationService`、`MirrorUrlService`、`DownloadAcceleratorViewModel`。
-**改变默认行为**：可用镜像排序变化。
-**回滚**：镜像列表常量回退。
+**实现**
+- 新增 [MirrorHealthService.cs](file:///E:/CsharpCode/repos/GithubAccelerator/GithubAccelerator.Core/Services/MirrorHealthService.cs)：并行探测可达性、响应时间与内容正确性；**不只看 200**，HTML 错误页/内容不匹配都判为不健康；5s 超时，结果缓存 10 分钟。
+- 排序：健康（延迟升序）→ 可达但内容错误 → 不可达；`MirrorUrlService.ConvertUrlAsync` 按实测顺序重排结果。全源不可用时的提示包含检测时间、前两条失败原因，并明确"已保留原始链接，可稍后重试或直接使用原始地址"。
+- 合并镜像配置：`DownloadAccelerationService` 不再维护第二份含死站的列表，统一读取 `MirrorUrlService.AvailableMirrors`。
+- 移除仅依据 DNS 不可解析（确定性证据）的 5 个死站；超时/握手失败的条目保留并降级，不凭单次超时删除。
+- 测试：`MirrorHealthServiceTests` 共 11 个，覆盖排序、内容校验、缓存、全失败提示、URL 重排与死站移除。
 
 ---
 
