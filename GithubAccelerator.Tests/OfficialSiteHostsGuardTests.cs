@@ -14,14 +14,15 @@ using Xunit;
 namespace GithubAccelerator.Tests;
 
 /// <summary>
-/// M2 防护版 Hosts 的等价文件测试：全部在临时目录执行，不触碰系统 Hosts、不提权。
-/// 覆盖：候选选择、阈值过滤、写前快照、失效自愈、撤销复原、CDN 域不写入、默认关闭。
+/// 防护版 Hosts 的等价文件测试：全部在临时目录执行，不触碰系统 Hosts、不提权。
+/// 覆盖：整页选优、20% 准入、直连不可用例外、写前快照、自愈、撤销复原、CDN 不写入、种子观测。
 /// </summary>
 public class OfficialSiteHostsGuardTests
 {
     private const string FastIp = "20.27.177.113";
     private const string SlowIp = "140.82.114.4";
     private const string DeadIp = "20.201.28.151";
+    private const string BaselineIp = "1.1.1.1";
 
     private static readonly DateTimeOffset Now =
         new(2026, 11, 6, 18, 0, 0, TimeSpan.FromHours(8));
@@ -80,10 +81,66 @@ public class OfficialSiteHostsGuardTests
         }
     }
 
+    private sealed class FakePageLoader : IOfficialSitePageLoader
+    {
+        private readonly object _lock = new();
+        private readonly Dictionary<string, Queue<OfficialSitePageSample>> _samples = new();
+        private readonly Dictionary<string, OfficialSitePageSample> _defaults = new();
+
+        public int Calls { get; private set; }
+
+        public void Set(string ip, params OfficialSitePageSample[] samples)
+        {
+            lock (_lock)
+            {
+                _samples[ip] = new Queue<OfficialSitePageSample>(samples);
+                _defaults[ip] = samples.Length == 0 ? PageFail("无样本") : samples[^1];
+            }
+        }
+
+        public void Add(string ip, params OfficialSitePageSample[] samples)
+        {
+            lock (_lock)
+            {
+                if (!_samples.TryGetValue(ip, out var queue))
+                {
+                    queue = new Queue<OfficialSitePageSample>();
+                    _samples[ip] = queue;
+                }
+
+                foreach (var sample in samples) queue.Enqueue(sample);
+                if (samples.Length > 0) _defaults[ip] = samples[^1];
+            }
+        }
+
+        public void SetDefault(string ip, OfficialSitePageSample sample)
+        {
+            lock (_lock) _defaults[ip] = sample;
+        }
+
+        public Task<OfficialSitePageSample> MeasureAsync(
+            string domain, string ip, TimeSpan timeout, CancellationToken cancellationToken)
+        {
+            lock (_lock)
+            {
+                Calls++;
+                if (_samples.TryGetValue(ip, out var queue) && queue.Count > 0)
+                    return Task.FromResult(queue.Dequeue());
+                if (_defaults.TryGetValue(ip, out var fallback))
+                    return Task.FromResult(fallback);
+                return Task.FromResult(PageFail("整页加载超时（2s）"));
+            }
+        }
+    }
+
     private sealed class FakeDns : ISystemDnsResolver
     {
+        public string? Ip { get; set; } = BaselineIp;
+
         public Task<SystemResolution> ResolveAsync(string domain, CancellationToken cancellationToken)
-            => Task.FromResult(new SystemResolution(Array.Empty<string>(), 1, "测试中跳过基线"));
+            => Task.FromResult(Ip == null
+                ? new SystemResolution(Array.Empty<string>(), 1, "系统 DNS 未解析到 IPv4 地址")
+                : new SystemResolution(new[] { Ip }, 1, null));
     }
 
     private sealed class TempGuard : IDisposable
@@ -95,6 +152,8 @@ public class OfficialSiteHostsGuardTests
         public OfficialSiteSeedStore Seeds { get; }
         public OfficialSiteGuardStateStore StateStore { get; }
         public FakeProbe Probe { get; }
+        public FakePageLoader Page { get; }
+        public FakeDns Dns { get; }
         public OfficialSiteHostsGuardService Service { get; }
 
         public TempGuard(string original = "127.0.0.1 localhost\r\n192.168.1.1 router\r\n")
@@ -119,11 +178,13 @@ public class OfficialSiteHostsGuardTests
             Seeds = new OfficialSiteSeedStore(seedPath);
             StateStore = new OfficialSiteGuardStateStore(statePath);
             Probe = new FakeProbe();
+            Page = new FakePageLoader();
+            Dns = new FakeDns();
             Service = new OfficialSiteHostsGuardService(
                 Hosts, Seeds,
-                new OfficialSiteCandidateSelector(Probe, rounds: 5, minSuccessRate: 0.9,
-                    maxMedianTcpMs: 500, intervalMs: 0, timeout: TimeSpan.FromSeconds(2)),
-                new FakeDns(), StateStore, SnapshotDirectory, () => Now);
+                new OfficialSiteCandidateSelector(Probe, Page, rounds: 3, minSuccessRate: 0.9,
+                    intervalMs: 0, probeTimeout: TimeSpan.FromSeconds(2), pageTimeout: TimeSpan.FromSeconds(2)),
+                Dns, StateStore, SnapshotDirectory, () => Now);
         }
 
         public string Sha256() => Convert.ToHexString(
@@ -148,45 +209,76 @@ public class OfficialSiteHostsGuardTests
     private static OfficialSiteIpSample Fail(string reason) =>
         new(0, 0, 0, 5000, false, reason);
 
+    private static OfficialSitePageSample PageOk(int totalMs, long bytes = 200_000) =>
+        new(totalMs / 2, totalMs, 40_000, bytes, 5, 0, true, true, null);
+
+    private static OfficialSitePageSample PageFail(string reason) =>
+        new(0, 2000, 0, 0, 0, 0, false, false, reason);
+
+    private static OfficialSitePageSample PageInvalid(string reason) =>
+        new(100, 100, 100, 100, 0, 0, false, false, reason);
+
     private static OfficialSiteSeedEntry Candidate(string ip) =>
         new() { Ip = ip, Source = "测试", AddedAt = Now };
 
-    // ---------------------------------------------------------------- 候选选择
+    // ---------------------------------------------------------------- 整页选优
 
     [Fact]
-    public async Task Selector_PicksFastestQualifiedCandidate_AndKeepsAllCandidatesForAudit()
+    public async Task Selector_PicksFastestPage_NotFastestTcp()
     {
         var probe = new FakeProbe();
-        for (var i = 0; i < 5; i++)
-        {
-            probe.Add(FastIp, Ok(60));
-            probe.Add(SlowIp, Ok(300));
-            probe.Add(DeadIp, Fail("TCP 443 连接超时（5s）"));
-        }
+        var page = new FakePageLoader();
+        probe.SetDefault(FastIp, Ok(60));      // TCP 最快
+        probe.SetDefault(SlowIp, Ok(300));     // TCP 较慢
+        probe.SetDefault(DeadIp, Fail("TCP 443 连接超时（5s）"));
+        page.SetDefault(FastIp, PageOk(800));   // 整页最慢
+        page.SetDefault(SlowIp, PageOk(300));   // 整页最快
+        page.SetDefault(DeadIp, PageFail("超时"));
 
-        var selector = new OfficialSiteCandidateSelector(probe, rounds: 5, intervalMs: 0);
+        var selector = new OfficialSiteCandidateSelector(probe, page, rounds: 3, intervalMs: 0);
         var selection = await selector.SelectAsync(new[]
         {
             Candidate(FastIp), Candidate(SlowIp), Candidate(DeadIp)
         }, "github.com", CancellationToken.None);
 
         Assert.True(selection.HasSelection);
-        Assert.Equal(FastIp, selection.Selected!.Entry.Ip);
-        Assert.Equal(60, selection.Selected.MedianTcpMs);
+        Assert.Equal(SlowIp, selection.Selected!.Entry.Ip);
+        Assert.Equal(300, selection.Selected.MedianPageMs);
+        Assert.Equal(60, selection.Candidates.Single(c => c.Entry.Ip == FastIp).MedianTcpMs);
         Assert.Equal(3, selection.Candidates.Count);
         Assert.False(selector.IsQualified(selection.Candidates.Single(c => c.Entry.Ip == DeadIp)));
     }
 
     [Fact]
-    public async Task Selector_FiltersCandidatesBelowNinetyPercentSuccess()
+    public async Task Selector_TcpOver500msDoesNotDisqualify_WhenPageIsFast()
     {
         var probe = new FakeProbe();
-        for (var i = 0; i < 8; i++) probe.Add(FastIp, Ok(40));
-        for (var i = 0; i < 2; i++) probe.Add(FastIp, Fail("TCP 443 连接超时（5s）"));
-        for (var i = 0; i < 9; i++) probe.Add(SlowIp, Ok(420));
-        probe.Add(SlowIp, Fail("TLS 握手失败"));
+        var page = new FakePageLoader();
+        probe.SetDefault(FastIp, Ok(900));   // 旧口径会因 TCP >500ms 被拒
+        page.SetDefault(FastIp, PageOk(250));
+        probe.SetDefault(DeadIp, Fail("超时"));
+        page.SetDefault(DeadIp, PageFail("超时"));
 
-        var selector = new OfficialSiteCandidateSelector(probe, rounds: 10, intervalMs: 0);
+        var selector = new OfficialSiteCandidateSelector(probe, page, rounds: 3, intervalMs: 0);
+        var selection = await selector.SelectAsync(new[] { Candidate(FastIp), Candidate(DeadIp) },
+            "github.com", CancellationToken.None);
+
+        Assert.Equal(FastIp, selection.Selected!.Entry.Ip);
+        Assert.Equal(900, selection.Selected.MedianTcpMs); // 仅诊断列
+    }
+
+    [Fact]
+    public async Task Selector_FiltersCandidatesBelowNinetyPercentPageSuccess()
+    {
+        var probe = new FakeProbe();
+        var page = new FakePageLoader();
+        for (var i = 0; i < 8; i++) page.Add(FastIp, PageOk(200));
+        for (var i = 0; i < 2; i++) page.Add(FastIp, PageFail("整页超时"));
+        for (var i = 0; i < 10; i++) page.Add(SlowIp, PageOk(420));
+        probe.SetDefault(FastIp, Ok(40));
+        probe.SetDefault(SlowIp, Ok(80));
+
+        var selector = new OfficialSiteCandidateSelector(probe, page, rounds: 10, intervalMs: 0);
         var selection = await selector.SelectAsync(new[] { Candidate(FastIp), Candidate(SlowIp) },
             "github.com", CancellationToken.None);
 
@@ -197,34 +289,121 @@ public class OfficialSiteHostsGuardTests
     }
 
     [Fact]
-    public async Task Selector_RejectsTcpMedianAtOrAbove500ms()
+    public async Task Selector_RejectsContentInvalidPage()
     {
         var probe = new FakeProbe();
-        for (var i = 0; i < 5; i++)
-        {
-            probe.Add(FastIp, Ok(600));
-            probe.Add(SlowIp, Ok(499));
-        }
+        var page = new FakePageLoader();
+        probe.SetDefault(FastIp, Ok(60));
+        page.SetDefault(FastIp, PageInvalid("页面内容校验失败"));
 
-        var selector = new OfficialSiteCandidateSelector(probe, rounds: 5, maxMedianTcpMs: 500, intervalMs: 0);
-        var selection = await selector.SelectAsync(new[] { Candidate(FastIp), Candidate(SlowIp) },
-            "github.com", CancellationToken.None);
-
-        Assert.Equal(SlowIp, selection.Selected!.Entry.Ip);
-        Assert.False(selector.IsQualified(selection.Candidates.Single(c => c.Entry.Ip == FastIp)));
-    }
-
-    [Fact]
-    public async Task Selector_ReturnsNoSelection_WhenAllCandidatesMissThreshold()
-    {
-        var probe = new FakeProbe();
-        for (var i = 0; i < 5; i++) probe.Add(FastIp, Ok(700));
-
-        var selector = new OfficialSiteCandidateSelector(probe, rounds: 5, intervalMs: 0);
+        var selector = new OfficialSiteCandidateSelector(probe, page, rounds: 3, intervalMs: 0);
         var selection = await selector.SelectAsync(new[] { Candidate(FastIp) }, "github.com", CancellationToken.None);
 
         Assert.False(selection.HasSelection);
         Assert.Null(selection.Selected);
+        Assert.False(selector.IsQualified(selection.Candidates.Single()));
+    }
+
+    [Fact]
+    public async Task Selector_ReturnsNoSelection_WhenAllPagesFail()
+    {
+        var probe = new FakeProbe();
+        var page = new FakePageLoader();
+        probe.SetDefault(FastIp, Ok(60));
+        page.SetDefault(FastIp, PageFail("整页加载超时（2s）"));
+
+        var selector = new OfficialSiteCandidateSelector(probe, page, rounds: 3, intervalMs: 0);
+        var selection = await selector.SelectAsync(new[] { Candidate(FastIp) }, "github.com", CancellationToken.None);
+
+        Assert.False(selection.HasSelection);
+        Assert.Null(selection.Selected);
+    }
+
+    // ---------------------------------------------------------------- 20% 准入 / 超时例外
+
+    [Fact]
+    public async Task Preview_RejectsCandidateLessThan20PercentFaster_WithNumbersAndTime()
+    {
+        using var temp = new TempGuard();
+        SetAllHealthy(temp, fastPageMs: 900, slowPageMs: 1050, baselinePageMs: 1000);
+        var before = temp.Sha256();
+
+        var plan = await temp.Service.PreviewAsync();
+
+        Assert.False(plan.CanApply);
+        Assert.False(plan.AdmissionAllowed);
+        Assert.True(plan.BaselineUsable);
+        Assert.Contains("拒绝应用", plan.DecisionText);
+        Assert.Contains("900ms", plan.DecisionText);
+        Assert.Contains("1000ms", plan.DecisionText);
+        Assert.Contains("检测时间 2026-11-06 18:00:00", plan.DecisionText);
+        Assert.Equal(before, temp.Sha256());
+        Assert.DoesNotContain(HostsFileManager.StartMarker, await temp.Hosts.ReadAsync());
+    }
+
+    [Fact]
+    public async Task Preview_AllowsCandidateAtLeast20PercentFaster()
+    {
+        using var temp = new TempGuard();
+        SetAllHealthy(temp, fastPageMs: 700, slowPageMs: 1200, baselinePageMs: 1000);
+
+        var plan = await temp.Service.PreviewAsync();
+
+        Assert.True(plan.CanApply);
+        Assert.True(plan.AdmissionAllowed);
+        Assert.False(plan.IsFailureTransfer);
+        Assert.Contains("准入通过", plan.DecisionText);
+        Assert.Contains("快 30", plan.DecisionText);
+    }
+
+    [Fact]
+    public async Task Preview_AllowsReachableCandidate_WhenBaselinePageUnavailable()
+    {
+        using var temp = new TempGuard();
+        SetAllHealthy(temp, fastPageMs: 500, slowPageMs: 1200, baselinePageMs: 1000);
+        temp.Page.SetDefault(BaselineIp, PageFail("直连整页超时"));
+        temp.Probe.SetDefault(BaselineIp, Ok(100));
+
+        var plan = await temp.Service.PreviewAsync();
+
+        Assert.True(plan.CanApply, "直连不可用时属于故障转移，不应因算不出 20% 而拒绝");
+        Assert.True(plan.IsFailureTransfer);
+        Assert.False(plan.BaselineUsable);
+        Assert.Contains("准入例外（故障转移）", plan.DecisionText);
+        Assert.Contains("直连整页不可用", plan.DecisionText);
+    }
+
+    [Fact]
+    public async Task Apply_RejectsPlanWhoseAdmissionFailed_AndLeavesHostsUntouched()
+    {
+        using var temp = new TempGuard();
+        SetAllHealthy(temp, fastPageMs: 900, slowPageMs: 1050, baselinePageMs: 1000);
+        var plan = await temp.Service.PreviewAsync();
+        var before = temp.Sha256();
+
+        var result = await temp.Service.ApplyAsync(plan);
+
+        Assert.False(result.Success);
+        Assert.Contains("准入未通过", result.Message);
+        Assert.Equal(before, temp.Sha256());
+    }
+
+    [Fact]
+    public async Task Preview_DoesNotWriteHosts_WhenNoCandidateReachesPage()
+    {
+        using var temp = new TempGuard();
+        temp.Probe.SetDefault(FastIp, Fail("TCP 443 连接超时（5s）"));
+        temp.Probe.SetDefault(SlowIp, Fail("TCP 443 连接超时（5s）"));
+        temp.Probe.SetDefault(DeadIp, Fail("TCP 443 连接超时（5s）"));
+        temp.Probe.SetDefault(BaselineIp, Fail("TCP 443 连接超时（5s）"));
+        var before = temp.Sha256();
+
+        var plan = await temp.Service.PreviewAsync();
+
+        Assert.False(plan.CanApply);
+        Assert.Contains("拒绝应用", plan.DecisionText);
+        Assert.Equal(before, temp.Sha256());
+        Assert.DoesNotContain(HostsFileManager.StartMarker, await temp.Hosts.ReadAsync());
     }
 
     // ---------------------------------------------------------------- 种子与默认关闭
@@ -240,6 +419,9 @@ public class OfficialSiteHostsGuardTests
             Assert.False(string.IsNullOrWhiteSpace(s.Source));
             Assert.NotEqual(default, s.AddedAt);
         });
+        var fast = seeds.Single(s => s.Ip == FastIp);
+        Assert.Contains("0.065s", fast.Source + fast.Note);
+        Assert.Contains("65ms", fast.Note);
     }
 
     [Fact]
@@ -271,6 +453,53 @@ public class OfficialSiteHostsGuardTests
     }
 
     [Fact]
+    public void SeedStore_RecordObservation_AddsEntryWithSourceAndMeasurement()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "gha-obs-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var store = new OfficialSiteSeedStore(Path.Combine(root, "seeds.json"));
+            store.Save(new[] { Seed(FastIp, "原来源") });
+
+            Assert.True(store.RecordObservation("20.200.245.247", "复测自动补入",
+                420, 500_000, Now, "实测更优"));
+
+            var entry = store.Load().Single(e => e.Ip == "20.200.245.247");
+            Assert.Equal("复测自动补入", entry.Source);
+            Assert.Equal(420, entry.LastMeasuredPageMs);
+            Assert.Equal(500_000, entry.LastMeasuredPageBytes);
+            Assert.Equal(Now, entry.LastMeasuredAt);
+            Assert.Contains("420ms", entry.LastMeasurementText);
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void SeedStore_RecordObservation_RejectsMissingSourceOrPrivateIp()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "gha-obs-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var store = new OfficialSiteSeedStore(Path.Combine(root, "seeds.json"));
+            store.Save(new[] { Seed(FastIp, "原来源") });
+
+            Assert.False(store.RecordObservation("20.200.245.247", "", 420, 500_000, Now));
+            Assert.False(store.RecordObservation("192.168.1.10", "内网", 420, 500_000, Now));
+            Assert.DoesNotContain(store.Load(), e => e.Ip == "20.200.245.247");
+            Assert.DoesNotContain(store.Load(), e => e.Ip == "192.168.1.10");
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
+        }
+    }
+
+    [Fact]
     public void StateStore_DefaultsToDisabled_WhenFileMissing()
     {
         var root = Path.Combine(Path.GetTempPath(), "gha-state-tests-" + Guid.NewGuid().ToString("N"));
@@ -290,29 +519,13 @@ public class OfficialSiteHostsGuardTests
         }
     }
 
-    // ---------------------------------------------------------------- 先测后写 / 快照 / 域名白名单
-
-    [Fact]
-    public async Task Preview_DoesNotWriteHosts_WhenNoCandidateQualifies()
-    {
-        using var temp = new TempGuard();
-        temp.Probe.SetDefault(FastIp, Fail("TCP 443 连接超时（5s）"));
-        temp.Probe.SetDefault(SlowIp, Fail("TCP 443 连接超时（5s）"));
-        temp.Probe.SetDefault(DeadIp, Fail("TCP 443 连接超时（5s）"));
-        var before = temp.Sha256();
-
-        var plan = await temp.Service.PreviewAsync();
-
-        Assert.False(plan.CanApply);
-        Assert.Equal(before, temp.Sha256());
-        Assert.DoesNotContain(HostsFileManager.StartMarker, await temp.Hosts.ReadAsync());
-    }
+    // ---------------------------------------------------------------- 先测后写 / 快照 / 白名单
 
     [Fact]
     public async Task Apply_SavesPreApplySnapshotAndSha256_AndWritesOnlyPrimaryDomain()
     {
         using var temp = new TempGuard();
-        SetAllHealthy(temp.Probe);
+        SetAllHealthy(temp);
         var plan = await temp.Service.PreviewAsync();
         Assert.True(plan.CanApply);
         var originalHash = temp.Sha256();
@@ -340,20 +553,6 @@ public class OfficialSiteHostsGuardTests
     }
 
     [Fact]
-    public async Task Apply_RejectsUnqualifiedPlan_AndLeavesHostsUntouched()
-    {
-        using var temp = new TempGuard();
-        temp.Probe.SetDefault(FastIp, Fail("TCP 443 连接超时（5s）"));
-        var plan = await temp.Service.PreviewAsync();
-        var before = temp.Sha256();
-
-        var result = await temp.Service.ApplyAsync(plan);
-
-        Assert.False(result.Success);
-        Assert.Equal(before, temp.Sha256());
-    }
-
-    [Fact]
     public void Policy_NeverAllowsCdnOrSubResourceDomains()
     {
         var cdnDomains = new[]
@@ -375,7 +574,7 @@ public class OfficialSiteHostsGuardTests
     public async Task Undo_RestoresOriginalHostsSha256_AndRemovesBlock()
     {
         using var temp = new TempGuard();
-        SetAllHealthy(temp.Probe);
+        SetAllHealthy(temp);
         var plan = await temp.Service.PreviewAsync();
         var before = temp.Sha256();
         await temp.Service.ApplyAsync(plan);
@@ -415,15 +614,16 @@ public class OfficialSiteHostsGuardTests
     public async Task Verify_Healthy_UpdatesObservableCounters()
     {
         using var temp = new TempGuard();
-        SetAllHealthy(temp.Probe);
+        SetAllHealthy(temp);
         var plan = await temp.Service.PreviewAsync();
         await temp.Service.ApplyAsync(plan);
 
         var result = await temp.Service.VerifyAndHealAsync();
 
         Assert.Equal(OfficialSiteGuardHealOutcome.Healthy, result.Outcome);
-        Assert.Equal(5, result.SuccessCount);
+        Assert.Equal(3, result.SuccessCount);
         Assert.Equal(0, result.FailureCount);
+        Assert.Contains("整页中位", result.Message);
         var state = temp.StateStore.Load();
         Assert.Equal(1, state.VerifySuccessCount);
         Assert.Equal(0, state.VerifyFailureCount);
@@ -433,23 +633,17 @@ public class OfficialSiteHostsGuardTests
     // ---------------------------------------------------------------- 失效自愈
 
     [Fact]
-    public async Task Heal_WhenAppliedIpFails_SwitchesToNextCandidate()
+    public async Task Heal_WhenAppliedIpPageFails_SwitchesToNextCandidate()
     {
         using var temp = new TempGuard();
-        // A 先快速，应用后失效；B 一直可用
-        for (var i = 0; i < 5; i++)
-        {
-            temp.Probe.Add(FastIp, Ok(60));
-            temp.Probe.Add(SlowIp, Ok(180));
-            temp.Probe.Add(DeadIp, Fail("TCP 443 连接超时（5s）"));
-        }
+        SetAllHealthy(temp);
 
         var plan = await temp.Service.PreviewAsync();
         Assert.Equal(FastIp, plan.SelectedIp);
         await temp.Service.ApplyAsync(plan);
 
-        temp.Probe.SetDefault(FastIp, Fail("TCP 443 连接超时（5s）"));
-        temp.Probe.SetDefault(DeadIp, Fail("TCP 443 连接超时（5s）"));
+        temp.Page.SetDefault(FastIp, PageFail("整页加载超时（2s）"));
+        temp.Probe.SetDefault(FastIp, Ok(60)); // 建连仍正常，但整页不可达
 
         var result = await temp.Service.VerifyAndHealAsync();
 
@@ -462,24 +656,17 @@ public class OfficialSiteHostsGuardTests
     }
 
     [Fact]
-    public async Task Heal_WhenAllCandidatesFail_RollsBackToOriginalHosts()
+    public async Task Heal_WhenAllCandidatesPagesFail_RollsBackToOriginalHosts()
     {
         using var temp = new TempGuard();
-        for (var i = 0; i < 5; i++)
-        {
-            temp.Probe.Add(FastIp, Ok(60));
-            temp.Probe.Add(SlowIp, Ok(180));
-            temp.Probe.Add(DeadIp, Fail("TCP 443 连接超时（5s）"));
-        }
+        SetAllHealthy(temp);
 
         var before = temp.Sha256();
         var plan = await temp.Service.PreviewAsync();
         await temp.Service.ApplyAsync(plan);
 
-        var failures = Enumerable.Repeat(Fail("TCP 443 连接超时（5s）"), 5).ToArray();
-        temp.Probe.Set(FastIp, failures);
-        temp.Probe.Set(SlowIp, failures);
-        temp.Probe.Set(DeadIp, failures);
+        foreach (var ip in new[] { FastIp, SlowIp, DeadIp, BaselineIp })
+            temp.Page.SetDefault(ip, PageFail("整页加载超时（2s）"));
 
         var result = await temp.Service.VerifyAndHealAsync();
 
@@ -495,7 +682,7 @@ public class OfficialSiteHostsGuardTests
     public async Task RestoreSnapshot_ReturnsPreApplyContentAndSha256()
     {
         using var temp = new TempGuard();
-        SetAllHealthy(temp.Probe);
+        SetAllHealthy(temp);
         var plan = await temp.Service.PreviewAsync();
         var before = temp.Sha256();
         var apply = await temp.Service.ApplyAsync(plan);
@@ -509,13 +696,52 @@ public class OfficialSiteHostsGuardTests
         Assert.False(temp.StateStore.Load().Enabled);
     }
 
-    private static void SetAllHealthy(FakeProbe probe)
+    // ---------------------------------------------------------------- HTML 子资源解析
+
+    [Fact]
+    public void HtmlSubResourceParser_ExtractsScriptsAndStylesheets_DedupesAndSkipsData()
     {
-        for (var i = 0; i < 5; i++)
-        {
-            probe.Add(FastIp, Ok(60));
-            probe.Add(SlowIp, Ok(180));
-            probe.Add(DeadIp, Fail("TCP 443 连接超时（5s）"));
-        }
+        var html = "<html><head>" +
+                   "<link rel=\"stylesheet\" href=\"https://github.githubassets.com/assets/app.css\">" +
+                   "<link rel=\"icon\" href=\"/favicon.ico\">" +
+                   "</head><body>" +
+                   "<script src=\"/assets/a.js\"></script>" +
+                   "<script src=\"/assets/a.js\"></script>" +
+                   "<script src=\"data:text/javascript,1\"></script>" +
+                   "</body></html>";
+        var baseUri = new Uri("https://github.com/");
+
+        var resources = HtmlSubResourceParser.Parse(html, baseUri, max: 10);
+
+        Assert.Equal(2, resources.Count);
+        Assert.Contains(resources, u => u.AbsoluteUri == "https://github.com/assets/a.js");
+        Assert.Contains(resources, u => u.AbsoluteUri == "https://github.githubassets.com/assets/app.css");
+    }
+
+    [Fact]
+    public void HtmlSubResourceParser_RespectsLimit()
+    {
+        var html = string.Concat(Enumerable.Range(1, 20)
+            .Select(i => $"<script src=\"/assets/{i}.js\"></script>"));
+
+        var resources = HtmlSubResourceParser.Parse(html, new Uri("https://github.com/"), max: 5);
+
+        Assert.Equal(5, resources.Count);
+        Assert.Equal("https://github.com/assets/1.js", resources[0].AbsoluteUri);
+        Assert.Equal("https://github.com/assets/5.js", resources[4].AbsoluteUri);
+    }
+
+    private static void SetAllHealthy(
+        TempGuard temp, int fastPageMs = 300, int slowPageMs = 500, int baselinePageMs = 1000)
+    {
+        temp.Probe.SetDefault(FastIp, Ok(60));
+        temp.Probe.SetDefault(SlowIp, Ok(180));
+        temp.Probe.SetDefault(DeadIp, Fail("TCP 443 连接超时（5s）"));
+        temp.Probe.SetDefault(BaselineIp, Ok(100));
+
+        temp.Page.SetDefault(FastIp, PageOk(fastPageMs));
+        temp.Page.SetDefault(SlowIp, PageOk(slowPageMs));
+        temp.Page.SetDefault(DeadIp, PageFail("整页加载超时（2s）"));
+        temp.Page.SetDefault(BaselineIp, PageOk(baselinePageMs));
     }
 }

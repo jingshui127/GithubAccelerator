@@ -442,9 +442,10 @@ public class OfficialSiteDiagnosticsTests
         Assert.Equal(2, report.Domains.Count);
         Assert.Equal(2, report.Domains.Sum(d => d.Candidates.Count));
         Assert.NotEmpty(progress.Items);
-        var last = progress.Items[^1];
-        Assert.Equal(last.TotalIpCount, last.CompletedIpCount);
-        Assert.Equal(4, last.TotalIpCount);
+        // 并发任务完成顺序 ≠ Report 追加顺序：不能假设最后一条就是最终计数。
+        // 正确的不变量是“存在一条完成数=总数的进度”，且每条的总数与计划一致。
+        Assert.All(progress.Items, item => Assert.Equal(4, item.TotalIpCount));
+        Assert.Equal(4, progress.Items.Max(item => item.CompletedIpCount));
     }
 
     private sealed class CollectingProgress : IProgress<DiagnosticsProgress>
