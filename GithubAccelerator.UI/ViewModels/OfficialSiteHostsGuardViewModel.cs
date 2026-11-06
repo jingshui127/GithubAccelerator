@@ -105,7 +105,7 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
 
     public string ScopeWarning =>
         "只写 github.com；不写 githubassets/avatars/camo 等 CDN 域；不改 DNS/代理/证书；" +
-        "不做后台常驻轮询。TCP 建连更快只代表建连，不代表整页加载更快。";
+        "不做后台常驻轮询。TCP/TLS/TTFB 仅为诊断列，选优与准入看整页耗时；整页度量不执行 JS，不等同浏览器。";
 
     /// <summary>打开面板时读取状态；不联网、不写 Hosts（复测需要手动点击）。</summary>
     public async Task EnsureLoadedAsync()
@@ -161,7 +161,7 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
         _applyArmed = false;
         ApplyButtonText = "确认写入 Hosts";
         if (!IsEnabled) SetToggleSilently(true);
-        StatusText = "正在对所有候选做多轮 TCP/TLS/TTFB 实测（≥5 轮）…";
+        StatusText = "正在对候选与直连做整页实测（HTML + 主要 JS/CSS，最多 3 轮）…";
 
         try
         {
@@ -169,23 +169,31 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
             HasPreview = true;
             var selected = _lastPlan.Selection.Selected;
             var qualified = _service.CountQualified(_lastPlan.Selection.Candidates);
+            var baselineText = _lastPlan.BaselineIp == null
+                ? "直连：未解析到 IPv4"
+                : $"直连 {_lastPlan.BaselineIp}：{(_lastPlan.BaselinePageMedianMs.HasValue ? _lastPlan.BaselinePageMedianMs + "ms" : "整页不可用")}" +
+                  $"（{_lastPlan.BaselinePageSuccessCount}/{_lastPlan.BaselinePageRounds}）";
+
             if (selected == null)
             {
                 CanApply = false;
-                PreviewIpText = "无达标候选";
+                PreviewIpText = "无整页可达候选";
                 PreviewSourceText = "—";
-                PreviewCountsText = $"候选 {_lastPlan.Selection.Candidates.Count} 个，达标 0 个";
+                PreviewCountsText = $"候选 {_lastPlan.Selection.Candidates.Count} 个，达标 0 个；{baselineText}";
                 PreviewBenefitText = _lastPlan.ExpectedBenefitText;
-                StatusText = "没有候选达到阈值，不会写入 Hosts。可稍后重试或手动导入带来源的种子。";
+                StatusText = _lastPlan.DecisionText;
                 return;
             }
 
-            CanApply = true;
-            PreviewIpText = $"{selected.Entry.Ip}（TCP 中位 {selected.MedianTcpMs}ms / TLS {selected.MedianTlsMs}ms / TTFB {selected.MedianTtfbMs}ms）";
+            CanApply = _lastPlan.CanApply;
+            PreviewIpText = $"{selected.Entry.Ip}（{selected.PageMetricText}；诊断 {selected.DiagnosticText}）";
             PreviewSourceText = selected.Entry.Source + $"（加入时间 {selected.Entry.AddedAt:yyyy-MM-dd HH:mm}）";
-            PreviewCountsText = $"候选 {_lastPlan.Selection.Candidates.Count} 个，达标 {qualified} 个；选中 {selected.SuccessRateText}";
+            PreviewCountsText = $"候选 {_lastPlan.Selection.Candidates.Count} 个，达标 {qualified} 个；" +
+                                $"选中 {selected.SuccessRateText}；{baselineText}；检测 {_lastPlan.PreviewedAt:yyyy-MM-dd HH:mm:ss}";
             PreviewBenefitText = _lastPlan.ExpectedBenefitText;
-            StatusText = "预览完成，尚未写入。确认域名、IP 与适用时段后，再点击「确认写入 Hosts」。";
+            StatusText = _lastPlan.CanApply
+                ? "预览完成，准入通过但尚未写入。确认域名、IP 与两侧实测后，再点击「确认写入 Hosts」。"
+                : _lastPlan.DecisionText;
         }
         catch (Exception ex)
         {

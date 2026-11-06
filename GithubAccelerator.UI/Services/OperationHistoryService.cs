@@ -54,6 +54,7 @@ public class OperationHistoryService
     public static OperationHistoryService Instance => _instance.Value;
 
     private readonly List<OperationRecord> _records = new();
+    private readonly object _gate = new();
     private readonly string _historyFilePath;
     private const int MaxRecords = 500;
     private static readonly JsonSerializerOptions _jsonOptions = new()
@@ -62,7 +63,14 @@ public class OperationHistoryService
         Converters = { new JsonStringEnumConverter() }
     };
 
-    public IReadOnlyList<OperationRecord> Records => _records.AsReadOnly();
+    /// <summary>返回快照，避免导出/枚举时与后台记录并发修改集合。</summary>
+    public IReadOnlyList<OperationRecord> Records
+    {
+        get
+        {
+            lock (_gate) return _records.ToArray();
+        }
+    }
 
     public event Action<OperationRecord>? OnOperationRecorded;
 
@@ -87,37 +95,49 @@ public class OperationHistoryService
             Detail = detail
         };
 
-        _records.Insert(0, record);
-
-        if (_records.Count > MaxRecords)
+        lock (_gate)
         {
-            _records.RemoveAt(_records.Count - 1);
+            _records.Insert(0, record);
+
+            if (_records.Count > MaxRecords)
+            {
+                _records.RemoveAt(_records.Count - 1);
+            }
+
+            SaveToFile();
         }
 
-        SaveToFile();
         OnOperationRecorded?.Invoke(record);
         return record;
     }
 
     public void Clear()
     {
-        _records.Clear();
-        SaveToFile();
+        lock (_gate)
+        {
+            _records.Clear();
+            SaveToFile();
+        }
     }
 
     public IReadOnlyList<OperationRecord> GetRecentRecords(int count = 50)
     {
-        return _records.Count <= count ? _records.AsReadOnly() : _records.GetRange(0, count).AsReadOnly();
+        lock (_gate)
+        {
+            return _records.Count <= count
+                ? _records.ToArray()
+                : _records.GetRange(0, count).ToArray();
+        }
     }
 
     public IReadOnlyList<OperationRecord> GetRecordsByType(OperationType type)
     {
-        return _records.FindAll(r => r.Type == type).AsReadOnly();
+        lock (_gate) return _records.FindAll(r => r.Type == type).ToArray();
     }
 
     public IReadOnlyList<OperationRecord> GetRecordsByDateRange(DateTime start, DateTime end)
     {
-        return _records.FindAll(r => r.Timestamp >= start && r.Timestamp <= end).AsReadOnly();
+        lock (_gate) return _records.FindAll(r => r.Timestamp >= start && r.Timestamp <= end).ToArray();
     }
 
     private void SaveToFile()

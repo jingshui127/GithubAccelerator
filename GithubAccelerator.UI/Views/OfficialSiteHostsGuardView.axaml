@@ -36,7 +36,7 @@
                     Background="{DynamicResource ControlFillColorSecondaryBrush}">
                 <StackPanel Spacing="6">
                     <Grid ColumnDefinitions="80,*" ColumnSpacing="6">
-                        <TextBlock Grid.Column="0" Text="选中 IP" FontSize="10" Classes="SecondaryText"/>
+                        <TextBlock Grid.Column="0" Text="选中 IP（整页）" FontSize="10" Classes="SecondaryText"/>
                         <TextBlock Grid.Column="1" Text="{Binding PreviewIpText}" FontSize="12" FontWeight="SemiBold"
                                    TextWrapping="Wrap"/>
                     </Grid>
@@ -58,7 +58,7 @@
 
             <!-- 操作按钮 -->
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Content="🔎 预览并检测" Command="{Binding PreviewCommand}"
+                <Button Content="🔎 预览整页实测" Command="{Binding PreviewCommand}"
                         Padding="12,6" FontSize="11" IsEnabled="{Binding !IsBusy}"/>
                 <Button Content="{Binding ApplyButtonText}" Command="{Binding ApplyCommand}"
                         Padding="12,6" FontSize="11" FontWeight="SemiBold"
