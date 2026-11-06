@@ -35,7 +35,7 @@
             <Border Padding="14,12" CornerRadius="8" Background="{DynamicResource InfoBackground}"
                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="1">
                 <TextBlock TextWrapping="Wrap" FontSize="12" Classes="SecondaryText"
-                           Text="{Binding MirrorNotice} 镜像只能打开公开的下载/页面；api.github.com 与需要登录的操作请直接访问（直连可用，无需镜像），容器镜像（ghcr.io）不在覆盖范围。本工具不会安装证书，也不会修改系统代理或 Hosts。"/>
+                           Text="{Binding MirrorNotice} 镜像只能打开公开的下载/页面；api.github.com 与需要登录的操作请直接访问（直连可用，无需镜像），容器镜像（ghcr.io）不在覆盖范围。本工具不会安装证书，也不会修改系统代理或 Hosts。加速只作用于下载与克隆（clone/fetch/raw/release）；push 仍直连 github.com，不走镜像。若 push 失败，请重试或更换网络，加速器无法改善 push。公开页面能否直连视当时网络而定，直连可用时优先直连。"/>
             </Border>
 
             <!-- 输入区域 -->
@@ -88,14 +88,19 @@
                         <Button Content="🌐 打开镜像版页面"
                                 Command="{Binding OpenMirrorPageCommand}"
                                 Padding="16,10" FontSize="13"
-                                IsEnabled="{Binding !IsBusy}"
-                                ToolTip.Tip="用当前最健康的镜像打开该链接；打不开时会给原因，并保留原始链接选项"/>
+                                IsEnabled="{Binding CanClickMirrorPage}"
+                                ToolTip.Tip="用实测通过页面校验的镜像打开该链接；页面路径不可用时入口禁用并给出原因，同时保留原始链接"/>
                         <Button Content="⚡ 生成加速链接"
                                 Command="{Binding ConvertUrlCommand}"
                                 Padding="20,10" FontSize="13"
                                 IsEnabled="{Binding !IsBusy}"
                                 Classes="Primary"/>
                     </StackPanel>
+
+                    <!-- 入口被禁用时的原因（页面路径实测不健康，避免送出 403 页） -->
+                    <TextBlock IsVisible="{Binding MirrorPageHint, Converter={StaticResource StringNotEmptyConverter}}"
+                               Text="{Binding MirrorPageHint}" TextWrapping="Wrap"
+                               FontSize="12" Foreground="#B45309"/>
                 </StackPanel>
             </Border>
 

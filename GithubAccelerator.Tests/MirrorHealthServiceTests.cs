@@ -117,6 +117,68 @@ public class MirrorHealthServiceTests
         Assert.Equal(expected, MirrorHealthService.IsExpectedContent(body));
     }
 
+    [Fact]
+    public async Task CheckPageAsync_Rejects403AndShortBody_AcceptsValidPage()
+    {
+        var validBody = new string('x', 3000) + " Hello-World";
+        var client = new FakeProbeClient(new Dictionary<string, MirrorProbeResponse>
+        {
+            ["a.example"] = new(200, validBody, 200, null),
+            ["b.example"] = new(403, "Forbidden", 10, null),
+            ["c.example"] = new(0, string.Empty, 5000, "SSL connect error"),
+        });
+        var now = new DateTimeOffset(2026, 11, 6, 13, 40, 0, TimeSpan.FromHours(8));
+        var service = new MirrorHealthService(TestMirrors, client, () => now);
+
+        var pages = await service.CheckPageAsync("https://github.com/octocat/Hello-World");
+
+        Assert.Equal(3, pages.Count); // jsDelivr 无页面模板，不参与页面检测
+        var a = pages.Single(p => p.SiteName == "MirrorA");
+        Assert.True(a.Healthy);
+        Assert.Null(a.Reason);
+        Assert.Equal(now, a.CheckedAt);
+
+        var b = pages.Single(p => p.SiteName == "MirrorB");
+        Assert.False(b.Healthy);
+        Assert.Contains("HTTP 403", b.Reason);
+
+        var c = pages.Single(p => p.SiteName == "MirrorC");
+        Assert.False(c.Healthy);
+        Assert.Contains("SSL", c.Reason);
+    }
+
+    [Fact]
+    public async Task CheckPageAsync_Rejects200PageWithoutRepoMarker()
+    {
+        var service = new MirrorHealthService(TestMirrors, new FakeProbeClient(new Dictionary<string, MirrorProbeResponse>
+        {
+            ["a.example"] = new(200, new string('x', 3000), 120, null)
+        }));
+
+        var pages = await service.CheckPageAsync("https://github.com/octocat/Hello-World");
+
+        var a = pages.Single(p => p.SiteName == "MirrorA");
+        Assert.False(a.Healthy);
+        Assert.Contains("仓库特征", a.Reason);
+    }
+
+    [Fact]
+    public async Task CheckPageAsync_CachesResultsWithinTenMinutes()
+    {
+        var client = new FakeProbeClient(new Dictionary<string, MirrorProbeResponse>
+        {
+            ["a.example"] = new(200, new string('x', 3000) + " Hello-World", 100, null)
+        });
+        var service = new MirrorHealthService(TestMirrors, client, () => DateTimeOffset.Now);
+
+        await service.CheckPageAsync("https://github.com/octocat/Hello-World");
+        var firstCalls = client.Calls;
+        await service.CheckPageAsync("https://github.com/octocat/Hello-World");
+
+        Assert.Equal(3, firstCalls);
+        Assert.Equal(firstCalls, client.Calls);
+    }
+
     private sealed class FakeHealthService : IMirrorHealthService
     {
         private readonly MirrorHealthReport _report;
@@ -124,6 +186,9 @@ public class MirrorHealthServiceTests
 
         public Task<MirrorHealthReport> CheckAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(_report);
+
+        public Task<IReadOnlyList<MirrorPageHealth>> CheckPageAsync(string githubUrl, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<MirrorPageHealth>>(Array.Empty<MirrorPageHealth>());
     }
 
     [Fact]

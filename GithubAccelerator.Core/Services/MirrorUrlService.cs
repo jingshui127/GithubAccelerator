@@ -62,6 +62,24 @@ public class MirrorUrlService
             result.HealthMessage = $"镜像健康检测失败：{ex.Message}；以下链接可能仍可手动尝试";
         }
 
+        // 仓库页面：额外探测「页面路径」是否真的能打开（只有 2xx + 内容校验通过才放行）。
+        if (result.UrlType == GithubUrlType.Repository)
+        {
+            try
+            {
+                var pages = await _health.CheckPageAsync(result.NormalizedUrl, cancellationToken);
+                result.PageHealth.AddRange(pages);
+            }
+            catch (Exception ex)
+            {
+                foreach (var mirror in result.MirrorUrls)
+                {
+                    result.PageHealth.Add(new MirrorPageHealth(mirror.SiteName, mirror.Url, false, null,
+                        DateTimeOffset.Now, $"页面路径检测失败：{ex.Message}"));
+                }
+            }
+        }
+
         return result;
     }
 
@@ -295,6 +313,16 @@ public class MirrorResult
     /// <summary>镜像检测时间；未检测时为 null。</summary>
     public DateTimeOffset? HealthCheckedAt { get; set; }
 
+    /// <summary>仓库页面路径的逐镜像实测结果（仅仓库页面类型有值）。</summary>
+    public List<MirrorPageHealth> PageHealth { get; } = new();
+
+    public bool HasPageHealth => PageHealth.Count > 0;
+
+    /// <summary>至少有一个镜像的页面路径通过内容校验；未检测时为 false（不假装可用）。</summary>
+    public bool AnyHealthyPageMirror => PageHealth.Any(h => h.Healthy);
+
+    public DateTimeOffset? PageCheckedAt => HasPageHealth ? PageHealth.Max(h => h.CheckedAt) : null;
+
     /// <summary>域名不被镜像覆盖时的明确原因（如 api.github.com）。</summary>
     public string UnsupportedReason { get; set; } = "";
 
@@ -384,6 +412,31 @@ public static class MirrorOpenPlanner
                 return new(false, null, "", "该链接只生成了 Git 命令或 CDN 链接，没有可打开的镜像版页面。", false);
             }
             return new(false, null, "", "没有可用的镜像地址：该链接不在镜像覆盖范围内，或镜像转换失败。", true);
+        }
+
+        // 仓库页面：以「页面路径」实测结果为准，避免把 403/错误页送给用户。
+        if (result.HasPageHealth)
+        {
+            var healthy = result.PageHealth
+                .Where(h => h.Healthy)
+                .OrderBy(h => h.LatencyMs ?? int.MaxValue)
+                .FirstOrDefault();
+
+            if (healthy != null)
+            {
+                return new(true, healthy.Url, healthy.SiteName,
+                    $"{MirrorNotice}（镜像：{healthy.SiteName}）", false);
+            }
+
+            var checkedAt = result.PageCheckedAt ?? now;
+            var timeText = checkedAt == null ? "本次检测" : $"{checkedAt:yyyy-MM-dd HH:mm} 检测";
+            var reasons = string.Join("；", result.PageHealth
+                .Where(h => !h.Healthy)
+                .Take(3)
+                .Select(h => $"{h.SiteName}：{h.Reason ?? "页面路径不可用"}"));
+            return new(false, null, "",
+                $"{timeText}：镜像页面路径不可用（{reasons}）。已保留原始链接，可直接打开（能否打开视当时网络而定）。",
+                true);
         }
 
         if (!result.AnyHealthyMirror)
