@@ -28,11 +28,16 @@ public partial class OfficialSiteDiagnosticsViewModel : ObservableObject
     {
     }
 
-    public OfficialSiteDiagnosticsViewModel(OfficialSiteDiagnosticsService service)
+    public OfficialSiteDiagnosticsViewModel(
+        OfficialSiteDiagnosticsService service, OfficialSiteHostsGuardViewModel? guard = null)
     {
         _service = service;
+        Guard = guard ?? new OfficialSiteHostsGuardViewModel();
         ScopeText = "核心域名：" + string.Join(" / ", OfficialSiteDiagnosticsDefaults.CoreDomains);
     }
+
+    /// <summary>M2 防护版加速：默认关闭，只在用户预览并确认后写 Hosts。</summary>
+    public OfficialSiteHostsGuardViewModel Guard { get; }
 
     [ObservableProperty]
     private ObservableCollection<OfficialSiteDiagnosticsRow> _rows = new();
@@ -98,6 +103,7 @@ public partial class OfficialSiteDiagnosticsViewModel : ObservableObject
     public async Task EnsureLoadedAsync()
     {
         if (_hasAttempted || IsRunning) return;
+        await Guard.EnsureLoadedAsync();
         await RunCoreAsync(forceRefresh: false);
     }
 
