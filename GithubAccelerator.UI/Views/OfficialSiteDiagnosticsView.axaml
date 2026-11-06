@@ -1,0 +1,184 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:GithubAccelerator.UI.ViewModels"
+             xmlns:m="using:GithubAccelerator.UI.Models"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="640"
+             x:Class="GithubAccelerator.UI.Views.OfficialSiteDiagnosticsView"
+             x:DataType="vm:OfficialSiteDiagnosticsViewModel">
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16" RowSpacing="10">
+        <!-- 顶部：检测时间 / 解析耗时 / 直连可用性 / 探测参数 / DoH 源状态 -->
+        <Border Grid.Row="0" Padding="14" CornerRadius="12"
+                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                BorderThickness="1"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+            <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" Spacing="3">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="🔎" FontSize="20"/>
+                            <TextBlock Text="官网访问诊断（只读）" FontSize="17" FontWeight="SemiBold"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding ScopeText}" FontSize="11" Classes="SecondaryText" Margin="28,0,0,0"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding ProgressText}" FontSize="11"
+                                   VerticalAlignment="Center" Classes="SecondaryText"/>
+                        <Button Content="🔄 重新检测" Command="{Binding RefreshCommand}"
+                                Padding="14,7" FontSize="12" FontWeight="SemiBold"
+                                IsEnabled="{Binding !IsRunning}"/>
+                    </StackPanel>
+                </Grid>
+
+                <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="8">
+                    <Border Grid.Column="0" Padding="10,6" CornerRadius="8"
+                            Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="检测时间" FontSize="10" Classes="SecondaryText"/>
+                            <TextBlock Text="{Binding CheckedAtText}" FontSize="13" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="1" Padding="10,6" CornerRadius="8"
+                            Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="解析耗时（DoH 并行查询）" FontSize="10" Classes="SecondaryText"/>
+                            <TextBlock Text="{Binding ResolutionText}" FontSize="13" FontWeight="SemiBold"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <Border Grid.Row="2" Padding="10,6" CornerRadius="8"
+                        Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                    <StackPanel>
+                        <TextBlock Text="当前网络直连可用性" FontSize="10" Classes="SecondaryText"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Border Width="8" Height="8" CornerRadius="4" VerticalAlignment="Center"
+                                    Background="#4CAF50" IsVisible="{Binding IsDirectUsable}"/>
+                            <Border Width="8" Height="8" CornerRadius="4" VerticalAlignment="Center"
+                                    Background="#FF5722" IsVisible="{Binding !IsDirectUsable}"/>
+                            <TextBlock Text="{Binding DirectStatusText}" FontSize="11" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Grid.Row="3" Spacing="3">
+                    <TextBlock Text="{Binding SettingsText}" FontSize="10" Classes="SecondaryText"/>
+                    <TextBlock Text="{Binding DohSourceText}" FontSize="10" TextWrapping="Wrap"
+                               Classes="SecondaryText"/>
+                    <TextBlock Text="{Binding StatusMessage}" FontSize="10" TextWrapping="Wrap"
+                               Foreground="{DynamicResource SecondaryTextBrush}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 结论 + 明细表 -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="10">
+                <!-- 结论：本面板的主要产出 -->
+                <Border Padding="14" CornerRadius="12"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                        BorderThickness="4,0,0,0"
+                        BorderBrush="{Binding ConclusionBrush}">
+                    <Grid RowDefinitions="Auto,Auto" RowSpacing="6">
+                        <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="{Binding ConclusionTitle}"
+                                       FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+                            <Border Grid.Column="1" Padding="8,3" CornerRadius="6"
+                                    Background="{Binding ConclusionBrush}" Margin="10,0,0,0"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="{Binding ConclusionBadge}" FontSize="10"
+                                           FontWeight="SemiBold" Foreground="White"/>
+                            </Border>
+                        </Grid>
+                        <TextBlock Grid.Row="1" Text="{Binding ConclusionDetail}" FontSize="11.5"
+                                   TextWrapping="Wrap" LineHeight="18"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"/>
+                    </Grid>
+                </Border>
+
+                <!-- 无结果时的占位 -->
+                <Border Padding="24" CornerRadius="12"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                        BorderThickness="1"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        IsVisible="{Binding !HasResult}">
+                    <TextBlock Text="尚无检测结果。点击右上角「重新检测」开始只读诊断；本面板不会写入 Hosts，也不需要管理员权限。"
+                               FontSize="12" TextWrapping="Wrap" Classes="SecondaryText"/>
+                </Border>
+
+                <!-- 明细表：域名 / IP / 来源 / 握手中位耗时 / 可用性 / 与基线对比 -->
+                <Border CornerRadius="12"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                        BorderThickness="1"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        IsVisible="{Binding HasResult}">
+                    <StackPanel>
+                        <Grid ColumnDefinitions="150,122,88,96,*,80" ColumnSpacing="6"
+                              Margin="12,10,12,6">
+                            <TextBlock Grid.Column="0" Text="域名" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"/>
+                            <TextBlock Grid.Column="1" Text="IP" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"/>
+                            <TextBlock Grid.Column="2" Text="来源" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"/>
+                            <TextBlock Grid.Column="3" Text="握手中位耗时" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"/>
+                            <TextBlock Grid.Column="4" Text="可用性" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"/>
+                            <TextBlock Grid.Column="5" Text="与基线对比" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"/>
+                        </Grid>
+
+                        <Border Height="1" Background="{DynamicResource ControlStrokeColorDefaultBrush}"/>
+
+                        <ItemsControl ItemsSource="{Binding Rows}" Margin="0,3">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="m:OfficialSiteDiagnosticsRow">
+                                    <Border Background="{Binding RowBackground}" Padding="12,6">
+                                        <Grid ColumnDefinitions="150,122,88,96,*,80" ColumnSpacing="6">
+                                            <Grid Grid.Column="0" ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                                                <TextBlock Grid.Column="0" Text="{Binding Domain}" FontSize="10.5"
+                                                           FontWeight="SemiBold" VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <Border Grid.Column="1" Padding="4,1" CornerRadius="4"
+                                                        Background="{DynamicResource ControlFillColorDisabledBrush}"
+                                                        IsVisible="{Binding IsBaseline}" VerticalAlignment="Center">
+                                                    <TextBlock Text="基线" FontSize="9" Classes="SecondaryText"/>
+                                                </Border>
+                                            </Grid>
+                                            <TextBlock Grid.Column="1" Text="{Binding Ip}" FontSize="11"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding Source}" FontSize="10"
+                                                       Classes="SecondaryText" TextWrapping="Wrap"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="3" Text="{Binding MedianText}" FontSize="12"
+                                                       FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="4" Text="{Binding AvailabilityText}" FontSize="10"
+                                                       TextWrapping="Wrap" VerticalAlignment="Center"
+                                                       Foreground="{Binding AvailabilityBrush}"/>
+                                            <TextBlock Grid.Column="5" Text="{Binding ComparisonText}" FontSize="11"
+                                                       FontWeight="SemiBold" VerticalAlignment="Center"
+                                                       Foreground="{Binding ComparisonBrush}"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Border Padding="12,8" BorderThickness="0,1,0,0"
+                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                            <TextBlock FontSize="10" TextWrapping="Wrap" Classes="SecondaryText"
+                                       Text="基线 = 系统当前解析（OS DNS）的 IP 实测结果；候选 = DoH 返回的 IP。对比阈值 20%：候选比基线快 20% 以上记为“更快”，慢 20% 以上记为“更慢”，其余为“相近”。每个 IP 采样 3 次取中位数，失败样本不参与排序。"/>
+                        </Border>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- 能力边界（明确不做） -->
+        <Border Grid.Row="2" Padding="14,10" CornerRadius="8"
+                Background="{DynamicResource ControlFillColorSecondaryBrush}">
+            <TextBlock FontSize="11" TextWrapping="Wrap" Classes="SecondaryText"
+                       Text="本页仅只读观测：不写 Hosts、不请求管理员权限、不改 DNS/代理/防火墙、不安装证书、不做后台常驻轮询、不自动打开浏览器。结论只说明“解析层是否瓶颈”，不承诺登录/PR/push 一定可通。"/>
+        </Border>
+    </Grid>
+</UserControl>
