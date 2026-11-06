@@ -35,6 +35,12 @@ public sealed class OfficialSiteSeedEntry
     public string Source { get; set; } = string.Empty;
     public DateTimeOffset AddedAt { get; set; }
     public string? Note { get; set; }
+
+    /// <summary>最近一次整页实测（中位耗时/字节），仅用于审计与展示，不改变来源。</summary>
+    public int? LastMeasuredPageMs { get; set; }
+    public long? LastMeasuredPageBytes { get; set; }
+    public DateTimeOffset? LastMeasuredAt { get; set; }
+    public string? LastMeasurementText { get; set; }
 }
 
 /// <summary>候选种子仓库（本地 JSON，可手动导入）。</summary>
@@ -76,9 +82,9 @@ public sealed class OfficialSiteSeedStore
         new OfficialSiteSeedEntry
         {
             Ip = "20.27.177.113",
-            Source = "内置种子：M1.5 人工核验的 GitHub 边缘 IP（2026-11-06）",
+            Source = "M1.5 实测（2026-11-06）+ 17:19 预览实测 0.065s",
             AddedAt = new DateTimeOffset(2026, 11, 6, 15, 0, 0, TimeSpan.FromHours(8)),
-            Note = "M1.5 两时段 TCP 中位均为最快"
+            Note = "M1.5 两时段 TCP 中位最快；2026-11-06 17:19 实测 TCP 65ms、TTFB 238ms"
         },
         new OfficialSiteSeedEntry
         {
@@ -205,6 +211,46 @@ public sealed class OfficialSiteSeedStore
 
         if (added > 0) Save(existing);
         return new OfficialSiteSeedImportResult(added, rejected, null);
+    }
+
+    /// <summary>
+    /// 记录一次实测观测：已存在则更新“最近实测”字段，不存在则补入种子。
+    /// 只接受带来源的合法公网 IPv4 与正数耗时，保证可审计；不做批量抓取。
+    /// </summary>
+    public bool RecordObservation(
+        string ip, string source, int pageMs, long pageBytes, DateTimeOffset measuredAt, string? note = null)
+    {
+        if (pageMs <= 0 || pageBytes <= 0) return false;
+
+        var seed = new OfficialSiteSeedEntry
+        {
+            Ip = ip,
+            Source = source,
+            AddedAt = measuredAt,
+            Note = note,
+            LastMeasuredPageMs = pageMs,
+            LastMeasuredPageBytes = pageBytes,
+            LastMeasuredAt = measuredAt,
+            LastMeasurementText = $"整页中位 {pageMs}ms / {pageBytes / 1024}KB（{measuredAt:yyyy-MM-dd HH:mm:ss}）"
+        };
+        if (!IsValid(seed)) return false;
+
+        var entries = Load().ToList();
+        var existing = entries.FirstOrDefault(e => string.Equals(e.Ip, ip, StringComparison.Ordinal));
+        if (existing != null)
+        {
+            existing.LastMeasuredPageMs = seed.LastMeasuredPageMs;
+            existing.LastMeasuredPageBytes = seed.LastMeasuredPageBytes;
+            existing.LastMeasuredAt = seed.LastMeasuredAt;
+            existing.LastMeasurementText = seed.LastMeasurementText;
+        }
+        else
+        {
+            entries.Add(seed);
+        }
+
+        Save(entries);
+        return true;
     }
 
     private static bool IsValid(OfficialSiteSeedEntry entry)
@@ -357,7 +403,7 @@ public sealed class TcpTlsHttpProbe : IOfficialSiteIpProbe
     }
 }
 
-/// <summary>单个候选的多轮实测汇总。</summary>
+/// <summary>单个候选的多轮实测汇总：整页耗时为选优依据，TCP/TLS/TTFB 仅作诊断列。</summary>
 public sealed record OfficialSiteCandidateResult(
     OfficialSiteSeedEntry Entry,
     int Rounds,
@@ -365,56 +411,75 @@ public sealed record OfficialSiteCandidateResult(
     int? MedianTcpMs,
     int? MedianTlsMs,
     int? MedianTtfbMs,
+    int? MedianPageMs,
+    long? MedianPageBytes,
+    int PageSubResourceFailures,
     string? FailureReason)
 {
     public double SuccessRate => Rounds <= 0 ? 0 : (double)SuccessCount / Rounds;
 
     public string SuccessRateText => $"{SuccessCount}/{Rounds}（{SuccessRate * 100:0.#}%）";
+
+    public string PageMetricText => MedianPageMs.HasValue
+        ? $"整页中位 {MedianPageMs}ms / {(MedianPageBytes ?? 0) / 1024}KB"
+        : "整页不可用";
+
+    public string DiagnosticText => MedianTcpMs.HasValue
+        ? $"TCP {MedianTcpMs}ms / TLS {MedianTlsMs}ms / TTFB {MedianTtfbMs}ms"
+        : "诊断列不可用";
 }
 
-/// <summary>一轮候选选择的完整结果；<see cref="Selected"/> 为 null 表示无候选达到阈值。</summary>
+/// <summary>一轮候选选择的完整结果；<see cref="Selected"/> 为 null 表示没有候选整页可达。</summary>
 public sealed record OfficialSiteSelection(
     DateTimeOffset CheckedAt,
     string Domain,
     int Rounds,
     double MinSuccessRate,
-    int MaxMedianTcpMs,
     IReadOnlyList<OfficialSiteCandidateResult> Candidates,
     OfficialSiteCandidateResult? Selected)
 {
-    public bool HasSelection => Selected != null && Selected.MedianTcpMs.HasValue;
+    public bool HasSelection => Selected != null && Selected.MedianPageMs.HasValue;
 }
 
-/// <summary>候选选择：成功率 ≥ 阈值且 TCP 中位 &lt; 0.5s 的候选才参与排序，按 TCP 中位取最优。</summary>
+/// <summary>
+/// 候选选择：按“整页加载”中位耗时排序；成功率 ≥ 90% 且整页内容校验通过才合格。
+/// TCP/TLS/TTFB 只作为诊断列，不参与排序与资格判定。
+/// 每个候选先做 3 次握手诊断（仅展示）；整页最多测 <c>rounds</c> 轮，首次失败即停止以节省超时等待。
+/// </summary>
 public sealed class OfficialSiteCandidateSelector
 {
+    private const int DiagnosticRounds = 3;
+
     private readonly IOfficialSiteIpProbe _probe;
+    private readonly IOfficialSitePageLoader _pageLoader;
     private readonly int _rounds;
     private readonly double _minSuccessRate;
-    private readonly int _maxMedianTcpMs;
     private readonly int _intervalMs;
-    private readonly TimeSpan _timeout;
+    private readonly TimeSpan _probeTimeout;
+    private readonly TimeSpan _pageTimeout;
 
     public OfficialSiteCandidateSelector(
         IOfficialSiteIpProbe probe,
-        int rounds = 5,
+        IOfficialSitePageLoader pageLoader,
+        int rounds = 3,
         double minSuccessRate = 0.9,
-        int maxMedianTcpMs = 500,
         int intervalMs = 300,
-        TimeSpan? timeout = null)
+        TimeSpan? probeTimeout = null,
+        TimeSpan? pageTimeout = null)
     {
         _probe = probe;
+        _pageLoader = pageLoader;
         _rounds = Math.Max(1, rounds);
         _minSuccessRate = Math.Clamp(minSuccessRate, 0.0, 1.0);
-        _maxMedianTcpMs = Math.Max(1, maxMedianTcpMs);
         _intervalMs = Math.Max(0, intervalMs);
-        _timeout = timeout ?? TimeSpan.FromSeconds(5);
+        _probeTimeout = probeTimeout ?? TimeSpan.FromSeconds(5);
+        _pageTimeout = pageTimeout ?? TimeSpan.FromSeconds(10);
     }
 
     public int Rounds => _rounds;
     public double MinSuccessRate => _minSuccessRate;
-    public int MaxMedianTcpMs => _maxMedianTcpMs;
-    public TimeSpan Timeout => _timeout;
+    public TimeSpan ProbeTimeout => _probeTimeout;
+    public TimeSpan PageTimeout => _pageTimeout;
 
     public async Task<OfficialSiteSelection> SelectAsync(
         IEnumerable<OfficialSiteSeedEntry> entries,
@@ -430,7 +495,7 @@ public sealed class OfficialSiteCandidateSelector
 
         var qualified = results
             .Where(IsQualified)
-            .OrderBy(r => r.MedianTcpMs)
+            .OrderBy(r => r.MedianPageMs)
             .ThenBy(r => r.MedianTtfbMs)
             .ToList();
 
@@ -439,42 +504,76 @@ public sealed class OfficialSiteCandidateSelector
             domain,
             _rounds,
             _minSuccessRate,
-            _maxMedianTcpMs,
             results,
             qualified.FirstOrDefault());
     }
 
-    /// <summary>只测一个 IP，供“复测已应用 IP”使用。</summary>
+    /// <summary>只测一个 IP，供“复测已应用 IP”与“直连基线”使用。</summary>
     public Task<OfficialSiteCandidateResult> MeasureAsync(
         OfficialSiteSeedEntry entry, string domain, CancellationToken cancellationToken)
         => MeasureEntryAsync(entry, domain, cancellationToken);
 
     public bool IsQualified(OfficialSiteCandidateResult result)
         => result.SuccessRate >= _minSuccessRate
-           && result.MedianTcpMs.HasValue
-           && result.MedianTcpMs.Value < _maxMedianTcpMs;
+           && result.MedianPageMs.HasValue
+           && result.MedianPageMs.Value > 0;
 
     private async Task<OfficialSiteCandidateResult> MeasureEntryAsync(
         OfficialSiteSeedEntry entry, string domain, CancellationToken cancellationToken)
     {
-        var samples = new List<OfficialSiteIpSample>();
+        var diagnostics = new List<OfficialSiteIpSample>();
+        for (var i = 0; i < DiagnosticRounds; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var sample = await _probe.MeasureAsync(domain, entry.Ip, _probeTimeout, cancellationToken);
+            diagnostics.Add(sample);
+            if (!sample.Success) break;
+        }
+
+        var diagnosticOk = diagnostics.Where(s => s.Success).ToList();
+        if (diagnosticOk.Count == 0)
+        {
+            var reason = diagnostics.FirstOrDefault(s => !s.Success)?.FailureReason ?? "未知原因";
+            return new OfficialSiteCandidateResult(
+                entry, _rounds, 0, null, null, null, null, null, 0,
+                $"TCP/TLS 预筛失败：{reason}；已跳过整页加载");
+        }
+
+        var pages = new List<OfficialSitePageSample>();
         for (var round = 0; round < _rounds; round++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            samples.Add(await _probe.MeasureAsync(domain, entry.Ip, _timeout, cancellationToken));
+            var page = await _pageLoader.MeasureAsync(domain, entry.Ip, _pageTimeout, cancellationToken);
+            pages.Add(page);
+            // 整页失败（通常是超时）后不再重复等待，避免一个死 IP 耗尽 3 倍超时。
+            if (!page.Success) break;
             if (round < _rounds - 1 && _intervalMs > 0)
                 await Task.Delay(_intervalMs, cancellationToken);
         }
 
-        var ok = samples.Where(s => s.Success).ToList();
+        var pageOk = pages.Where(p => p.Success).ToList();
+        var pageFailure = pages.LastOrDefault(p => !p.Success);
         return new OfficialSiteCandidateResult(
             entry,
             _rounds,
-            ok.Count,
-            OfficialSiteDiagnosticsService.ComputeMedian(ok.Select(s => (int?)s.TcpMs)),
-            OfficialSiteDiagnosticsService.ComputeMedian(ok.Select(s => (int?)s.TlsMs)),
-            OfficialSiteDiagnosticsService.ComputeMedian(ok.Select(s => (int?)s.TtfbMs)),
-            samples.LastOrDefault(s => !s.Success)?.FailureReason);
+            pageOk.Count,
+            OfficialSiteDiagnosticsService.ComputeMedian(diagnosticOk.Select(s => (int?)s.TcpMs)),
+            OfficialSiteDiagnosticsService.ComputeMedian(diagnosticOk.Select(s => (int?)s.TlsMs)),
+            OfficialSiteDiagnosticsService.ComputeMedian(diagnosticOk.Select(s => (int?)s.TtfbMs)),
+            OfficialSiteDiagnosticsService.ComputeMedian(pageOk.Select(p => (int?)p.TotalMs)),
+            ComputeMedianBytes(pageOk.Select(p => p.TotalBytes)),
+            OfficialSiteDiagnosticsService.ComputeMedian(pageOk.Select(p => (int?)p.SubResourceFailedCount)) ?? 0,
+            pageFailure?.FailureReason);
+    }
+
+    private static long? ComputeMedianBytes(IEnumerable<long> values)
+    {
+        var list = values.OrderBy(v => v).ToList();
+        if (list.Count == 0) return null;
+        var middle = list.Count / 2;
+        return list.Count % 2 == 1
+            ? list[middle]
+            : (long)Math.Round((list[middle - 1] + list[middle]) / 2.0);
     }
 }
 
@@ -541,19 +640,29 @@ public sealed class OfficialSiteGuardStateStore
     }
 }
 
-/// <summary>预览结果：写哪些域、选中哪个 IP、来源、预计收益与适用时段。</summary>
+/// <summary>
+/// 预览结果：候选整页实测 vs 直连整页实测、准入结论、写哪些域、来源与适用时段。
+/// <see cref="AdmissionAllowed"/> 为 false 时即使存在候选也不允许应用。
+/// </summary>
 public sealed record OfficialSiteGuardPlan(
     DateTimeOffset PreviewedAt,
     IReadOnlyList<string> WriteDomains,
     OfficialSiteSelection Selection,
     string? BaselineIp,
-    int? BaselineTcpMedianMs,
-    int BaselineSuccessCount,
-    int BaselineRounds,
+    int? BaselinePageMedianMs,
+    long? BaselinePageBytes,
+    int BaselinePageSuccessCount,
+    int BaselinePageRounds,
+    bool BaselineUsable,
+    bool AdmissionAllowed,
+    string DecisionText,
     string ExpectedBenefitText,
     string ScopeWarning)
 {
-    public bool CanApply => Selection.HasSelection;
+    public bool CanApply => Selection.HasSelection && AdmissionAllowed;
+
+    /// <summary>直连整页不可用时的故障转移场景：不要求 20% 更快，只要求候选可达。</summary>
+    public bool IsFailureTransfer => !BaselineUsable && AdmissionAllowed;
 
     public string SelectedIp => Selection.Selected?.Entry.Ip ?? string.Empty;
 
@@ -637,7 +746,7 @@ public sealed class OfficialSiteHostsGuardService
     public string Domain => OfficialSiteHostsPolicy.PrimaryDomain;
 
     public double MinSuccessRate => _selector.MinSuccessRate;
-    public int MaxMedianTcpMs => _selector.MaxMedianTcpMs;
+    public TimeSpan PageTimeout => _selector.PageTimeout;
 
     /// <summary>预览展示用：与选择器口径完全一致的达标候选数。</summary>
     public int CountQualified(IEnumerable<OfficialSiteCandidateResult> candidates)
@@ -655,7 +764,12 @@ public sealed class OfficialSiteHostsGuardService
         return new OfficialSiteHostsGuardService(
             new HostsFileManager(hostsPath),
             new OfficialSiteSeedStore(),
-            new OfficialSiteCandidateSelector(new TcpTlsHttpProbe()),
+            new OfficialSiteCandidateSelector(
+                new TcpTlsHttpProbe(),
+                new HttpPageLoader(maxSubResources: 10, maxConcurrency: 6),
+                rounds: 3,
+                minSuccessRate: 0.9,
+                pageTimeout: TimeSpan.FromSeconds(10)),
             new SystemDnsResolver(),
             new OfficialSiteGuardStateStore(),
             Path.Combine(dataDirectory, "OfficialSiteGuard", "snapshots"));
@@ -681,45 +795,64 @@ public sealed class OfficialSiteHostsGuardService
     /// <summary>先测后写：预览只做探测，不写任何文件。</summary>
     public async Task<OfficialSiteGuardPlan> PreviewAsync(CancellationToken cancellationToken = default)
     {
-        var entries = _seeds.Load();
-        var selection = await _selector.SelectAsync(entries, Domain, cancellationToken);
+        var selection = await _selector.SelectAsync(_seeds.Load(), Domain, cancellationToken);
+        var checkedAt = _clock();
 
         string? baselineIp = null;
-        int? baselineTcp = null;
+        int? baselinePageMs = null;
+        long? baselineBytes = null;
         var baselineSuccess = 0;
         var baselineRounds = _selector.Rounds;
+        var baselineUsable = false;
+        string? baselineFailure = null;
 
         try
         {
             var resolution = await _dnsResolver.ResolveAsync(Domain, cancellationToken);
             baselineIp = resolution.Ipv4Addresses.FirstOrDefault();
-            if (baselineIp != null)
+            if (baselineIp == null)
+            {
+                baselineFailure = resolution.FailureReason ?? "系统 DNS 未解析到 IPv4 地址";
+            }
+            else
             {
                 var baselineEntry = new OfficialSiteSeedEntry
                 {
                     Ip = baselineIp,
-                    Source = "系统 DNS 基线",
-                    AddedAt = _clock()
+                    Source = "系统 DNS 基线（整页对照）",
+                    AddedAt = checkedAt
                 };
                 var baselineResult = await _selector.MeasureAsync(baselineEntry, Domain, cancellationToken);
+                baselineRounds = baselineResult.Rounds;
                 baselineSuccess = baselineResult.SuccessCount;
-                baselineTcp = baselineResult.MedianTcpMs;
+                baselinePageMs = baselineResult.MedianPageMs;
+                baselineBytes = baselineResult.MedianPageBytes;
+                baselineUsable = _selector.IsQualified(baselineResult);
+                baselineFailure = baselineResult.FailureReason;
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // 基线只用于“预计收益”文案，失败不影响候选选择
+            baselineFailure = ex.Message;
         }
 
+        var decision = BuildAdmission(
+            selection, baselineIp, baselinePageMs, baselineSuccess, baselineRounds, baselineUsable,
+            baselineFailure, checkedAt);
+
         return new OfficialSiteGuardPlan(
-            _clock(),
+            checkedAt,
             OfficialSiteHostsPolicy.WriteDomains,
             selection,
             baselineIp,
-            baselineTcp,
+            baselinePageMs,
+            baselineBytes,
             baselineSuccess,
             baselineRounds,
-            BuildBenefitText(selection, baselineTcp, baselineSuccess, baselineRounds),
+            baselineUsable,
+            decision.Allowed,
+            decision.Text,
+            BuildBenefitText(decision.Text),
             BuildScopeWarning());
     }
 
@@ -730,10 +863,15 @@ public sealed class OfficialSiteHostsGuardService
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            if (!plan.CanApply || plan.Selection.Selected == null)
+            if (plan.Selection.Selected == null || !plan.Selection.HasSelection)
                 return new OfficialSiteGuardApplyResult(false, false,
-                    "没有达到阈值的候选（成功率 ≥ 90% 且 TCP 中位 < 500ms），不会写入 Hosts。",
+                    "没有整页可达的候选（成功率 ≥ 90% 且 2xx+内容校验通过），不会写入 Hosts。",
                     null, null, null, null, Array.Empty<string>());
+
+            if (!plan.AdmissionAllowed)
+                return new OfficialSiteGuardApplyResult(false, false,
+                    "准入未通过，拒绝写入 Hosts。" + plan.DecisionText,
+                    plan.SelectedIp, plan.SelectedSource, null, null, Array.Empty<string>());
 
             if (!HasWriteAccess())
                 return new OfficialSiteGuardApplyResult(false, true,
@@ -790,28 +928,38 @@ public sealed class OfficialSiteHostsGuardService
             {
                 state.VerifySuccessCount++;
                 _stateStore.Save(state);
+                if (verification.MedianPageMs.HasValue)
+                    _seeds.RecordObservation(verification.Entry.Ip, verification.Entry.Source,
+                        verification.MedianPageMs.Value, verification.MedianPageBytes ?? 0, _clock(),
+                        "复测实测的整页数据");
                 return new OfficialSiteGuardHealResult(OfficialSiteGuardHealOutcome.Healthy,
-                    $"复测正常：{verification.Entry.Ip} {verification.SuccessRateText}，TCP 中位 {verification.MedianTcpMs}ms（仅建连指标）。",
+                    $"复测正常：{verification.Entry.Ip} {verification.SuccessRateText}，{verification.PageMetricText}（简化整页度量，不执行 JS）。",
                     verification.Entry.Ip, verification.Entry.Source, false,
                     verification.SuccessCount, verification.Rounds - verification.SuccessCount);
             }
 
             state.VerifyFailureCount++;
 
-            // 失效：尝试其余候选（排除当前 IP）
+            // 失效：尝试其余候选（排除当前 IP）；此时属于故障转移，不要求比直连快 20%。
             var alternatives = _seeds.Load().Where(e => !string.Equals(e.Ip, state.AppliedIp, StringComparison.Ordinal)).ToList();
             var selection = await _selector.SelectAsync(alternatives, Domain, cancellationToken);
             if (selection.HasSelection && selection.Selected != null)
             {
+                var decisionText =
+                    $"原 IP {state.AppliedIp} 整页复测失败（{verification.FailureReason}）；" +
+                    $"候选 {selection.Selected.Entry.Ip} {selection.Selected.PageMetricText}，按故障转移场景允许切换。" +
+                    $"检测时间 {_clock():yyyy-MM-dd HH:mm:ss}。";
                 var plan = new OfficialSiteGuardPlan(
                     _clock(), OfficialSiteHostsPolicy.WriteDomains, selection,
-                    null, null, 0, 0,
-                    $"原 IP {state.AppliedIp} 复测失败（{verification.FailureReason}），切换到 {selection.Selected.Entry.Ip}。",
-                    BuildScopeWarning());
+                    null, null, null, 0, selection.Rounds, false, true,
+                    decisionText, BuildBenefitText(decisionText), BuildScopeWarning());
 
                 var apply = await ApplySelectedAsync(selection.Selected, plan, keepEnabled: true, cancellationToken);
                 if (apply.Success)
                 {
+                    _seeds.RecordObservation(selection.Selected.Entry.Ip, selection.Selected.Entry.Source,
+                        selection.Selected.MedianPageMs ?? 0, selection.Selected.MedianPageBytes ?? 0, _clock(),
+                        "自愈复测实测的整页数据");
                     // ApplySelectedAsync 已重写过状态文件；这里重新读取再累加计数，避免把旧 AppliedIp 写回去。
                     var appliedState = _stateStore.Load();
                     appliedState.VerifySuccessCount = state.VerifySuccessCount;
@@ -819,21 +967,21 @@ public sealed class OfficialSiteHostsGuardService
                     appliedState.LastVerificationAt = state.LastVerificationAt;
                     _stateStore.Save(appliedState);
                     return new OfficialSiteGuardHealResult(OfficialSiteGuardHealOutcome.Healed,
-                        $"原 IP {state.AppliedIp} 建连失败，已自动切换到 {apply.Ip}（来源：{apply.Source}）。",
+                        $"原 IP {state.AppliedIp} 整页不可达，已自动切换到 {apply.Ip}（来源：{apply.Source}；{selection.Selected.PageMetricText}）。",
                         apply.Ip, apply.Source, false,
                         selection.Selected.SuccessCount, selection.Selected.Rounds - selection.Selected.SuccessCount);
                 }
 
                 _stateStore.Save(state);
                 return new OfficialSiteGuardHealResult(OfficialSiteGuardHealOutcome.Failed,
-                    "已发现可用候选，但写入失败：" + apply.Message, state.AppliedIp, state.AppliedSource, false,
+                    "已发现整页可达的候选，但写入失败：" + apply.Message, state.AppliedIp, state.AppliedSource, false,
                     verification.SuccessCount, verification.Rounds - verification.SuccessCount);
             }
 
             // 全部失效：回退到原值（删除标记块），不留半坏状态
             var undo = await UndoInternalAsync(state, cancellationToken);
             return new OfficialSiteGuardHealResult(OfficialSiteGuardHealOutcome.RolledBack,
-                $"所有候选均未达到阈值，已回退到原 Hosts；SHA256 复原：{(undo.Sha256Restored ? "是" : "否")}。",
+                $"所有候选整页均不可达，已回退到原 Hosts；SHA256 复原：{(undo.Sha256Restored ? "是" : "否")}。",
                 null, null, undo.Sha256Restored,
                 verification.SuccessCount, verification.Rounds - verification.SuccessCount);
         }
@@ -951,8 +1099,8 @@ public sealed class OfficialSiteHostsGuardService
         _stateStore.Save(state);
 
         return new OfficialSiteGuardApplyResult(true, false,
-            $"已写入 {OfficialSiteHostsPolicy.PrimaryDomain} → {selected.Entry.Ip}（{selected.SuccessRateText}，TCP 中位 {selected.MedianTcpMs}ms）；" +
-            "不写 CDN 域。",
+            $"已写入 {OfficialSiteHostsPolicy.PrimaryDomain} → {selected.Entry.Ip}（{selected.SuccessRateText}，" +
+            $"{selected.PageMetricText}；诊断 {selected.DiagnosticText}）；不写 CDN 域。",
             selected.Entry.Ip, selected.Entry.Source, snapshotPath, preSha, rejected);
     }
 
@@ -986,7 +1134,7 @@ public sealed class OfficialSiteHostsGuardService
         {
             $"# {BlockSignature}：仅写入 {OfficialSiteHostsPolicy.PrimaryDomain}",
             $"# 来源：{selected.Entry.Source}；加入时间：{selected.Entry.AddedAt:yyyy-MM-dd HH:mm:ss zzz}；" +
-            $"成功率：{selected.SuccessRateText}；TCP 中位：{selected.MedianTcpMs}ms"
+            $"成功率：{selected.SuccessRateText}；{selected.PageMetricText}；诊断：{selected.DiagnosticText}"
         };
 
         foreach (var domain in OfficialSiteHostsPolicy.WriteDomains)
@@ -1003,26 +1151,69 @@ public sealed class OfficialSiteHostsGuardService
         return lines;
     }
 
-    private static string BuildBenefitText(
-        OfficialSiteSelection selection, int? baselineTcp, int baselineSuccess, int baselineRounds)
+    /// <summary>
+    /// 应用前强制对比：候选整页中位必须比直连快 ≥20% 才准入。
+    /// 若直连整页本身不可用（成功率 &lt;90% 或全部失败），则走故障转移例外：
+    /// 只要求候选整页可达（2xx + 内容校验通过），不因“算不出 20%”而拒绝。
+    /// </summary>
+    private static (bool Allowed, string Text) BuildAdmission(
+        OfficialSiteSelection selection,
+        string? baselineIp,
+        int? baselinePageMs,
+        int baselineSuccess,
+        int baselineRounds,
+        bool baselineUsable,
+        string? baselineFailure,
+        DateTimeOffset checkedAt)
     {
-        if (!selection.HasSelection || selection.Selected == null)
-            return "没有候选达到阈值（成功率 ≥ 90% 且 TCP 中位 < 500ms），不会写入 Hosts。";
+        var time = checkedAt.ToString("yyyy-MM-dd HH:mm:ss");
+        var candidate = selection.Selected;
+        if (candidate == null || !candidate.MedianPageMs.HasValue)
+        {
+            return (false,
+                $"拒绝应用：没有整页可达的候选（成功率需 ≥90% 且 2xx+内容校验通过）；检测时间 {time}。");
+        }
 
-        var selected = selection.Selected;
-        if (baselineTcp == null || baselineSuccess < baselineRounds)
-            return $"系统解析当前不可用或不稳定；应用后可在该 IP 建连超时期间恢复访问（候选 TCP 中位 {selected.MedianTcpMs}ms）。";
+        var candidateMs = candidate.MedianPageMs.Value;
+        if (!baselineUsable || !baselinePageMs.HasValue)
+        {
+            var reason = baselineIp == null
+                ? $"系统 DNS 未给出可用直连 IP（{baselineFailure}）"
+                : $"直连整页不可用（{baselineSuccess}/{baselineRounds} 成功；{baselineFailure ?? "内容校验未通过"}）";
+            return (true,
+                $"准入例外（故障转移）：{reason}；候选 {candidate.Entry.Ip} 整页中位 {candidateMs}ms 且 2xx+内容校验通过，" +
+                $"允许应用；检测时间 {time}。");
+        }
 
-        var candidateMs = selected.MedianTcpMs ?? int.MaxValue;
-        if (baselineTcp > 0 && candidateMs < baselineTcp * 0.8)
-            return $"候选比系统解析快约 {(1 - (double)candidateMs / baselineTcp) * 100:0}%（仅 TCP 建连指标，不代表整页加载）。";
+        var baselineMs = baselinePageMs.Value;
+        var candidateFasterBy20Percent = (long)candidateMs * 5 <= (long)baselineMs * 4;
+        var improvement = (1 - (double)candidateMs / baselineMs) * 100;
+        var compareText = candidateMs <= baselineMs
+            ? $"快 {improvement:0.#}%"
+            : $"慢 {Math.Abs(improvement):0.#}%";
 
-        return $"当前时段候选不比系统解析更快（{candidateMs}ms vs {baselineTcp}ms）；价值只在该 IP 建连超时的时段。";
+        if (candidateFasterBy20Percent)
+        {
+            return (true,
+                $"准入通过：候选 {candidate.Entry.Ip} 整页中位 {candidateMs}ms，直连 {baselineMs}ms，" +
+                $"快 {improvement:0.#}%（要求 ≥20%）；检测时间 {time}。");
+        }
+
+        return (false,
+            $"拒绝应用：候选 {candidate.Entry.Ip} 整页中位 {candidateMs}ms，直连 {baselineMs}ms，" +
+            $"{compareText}（要求候选快 ≥20%）；检测时间 {time}。");
     }
+
+    private static string BuildBenefitText(string decisionText) =>
+        decisionText + " " + PageMetricLimitation;
+
+    private const string PageMetricLimitation =
+        "度量口径：页面 HTML + 前 10 个 JS/CSS（最多 6 并发）；不执行 JS、无浏览器缓存、不模拟 HTTP/2 多路复用，" +
+        "只用于候选相对比较，不等同浏览器打开耗时。";
 
     private static string BuildScopeWarning() =>
         "只写入 github.com；不写 githubassets/avatars/camo 等 CDN 域；不修改 DNS/代理；" +
-        "只在这个 IP 建连超时的时段才有价值，TCP 建连更快不代表整页更快。";
+        "TCP/TLS/TTFB 仅作诊断列，选优与准入看整页耗时；不做后台常驻轮询。";
 
     private static async Task<string> Sha256FileAsync(string path, CancellationToken cancellationToken)
     {

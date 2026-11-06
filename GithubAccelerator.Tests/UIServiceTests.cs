@@ -6,6 +6,7 @@ using GithubAccelerator.UI.Services;
 
 namespace GithubAccelerator.Tests;
 
+[Collection(GlobalStateCollection.Name)]
 public class OperationHistoryServiceTests : IDisposable
 {
     private readonly OperationHistoryService _service;
@@ -398,6 +399,7 @@ public class HostsGroupTests
     }
 }
 
+[Collection(GlobalStateCollection.Name)]
 public class HostsGroupServiceTests
 {
     [Fact]
@@ -566,6 +568,7 @@ public class HostsGroupServiceTests
     }
 }
 
+[Collection(GlobalStateCollection.Name)]
 public class DataExportImportServiceTests : IDisposable
 {
     private readonly string _testDir;
@@ -723,8 +726,7 @@ public class DataExportImportServiceTests : IDisposable
         Assert.True(exportResult, "导出应该成功");
         Assert.True(File.Exists(exportPath), "导出文件应该存在");
 
-        await Task.Delay(100);
-
+        // ExportAsync 已完成全部写入，不再用 Task.Delay 等待（时间依赖是旧抖动来源之一）。
         var data = await DataExportImportService.Instance.ImportAsync(exportPath);
 
         Assert.NotNull(data);
