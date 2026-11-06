@@ -687,4 +687,59 @@ Maven（`~/.m2/settings.xml` 的 `<proxies>`）：
 - [batch6-mirror-unsupported.png](file:///E:/CsharpCode/repos/GithubAccelerator/docs/screenshots/batch6-mirror-unsupported.png)：`api.github.com` 提示"直连可用，无需加速" + 原始链接回退
 - [batch6-boundary-guide.png](file:///E:/CsharpCode/repos/GithubAccelerator/docs/screenshots/batch6-boundary-guide.png)：首启引导的"能做什么 / 不能做什么"
 
+---
+
+## 十、自测（dogfooding，用产品自身测产品）
+
+测试时间：2026-11-06 13:31–13:34（本机，Asia/Shanghai）。被测对象：本仓库 `E:\CsharpCode\repos\GithubAccelerator`（页面路径 `jingshui127/GithubAccelerator`）与小体量公开仓库 `octocat/Hello-World`。方法与产品运行时同一套规则（`MirrorUrlService.AvailableMirrors` 镜像前缀、`GitUrlRewriteService` 的 `insteadOf` 键名/取值），用 `curl.exe` 与 `git` 命令证实。全程未改系统代理、Hosts、防火墙，未装证书。
+
+### 10.1 A. 网页路径
+
+| 路径 | 状态码 | 耗时 | 内容校验 | 结论 |
+|---|---|---|---|---|
+| 直连 `https://github.com/jingshui127/GithubAccelerator` | 200 | 1.56s | 264074 字节，HTML 内含 `GithubAccelerator` 与 `jingshui127` | 本次可用（与 2026-11-05 的 12s 超时相反，网络状态会变） |
+| 镜像版页面 `https://ghfast.top/https://github.com/jingshui127/GithubAccelerator`（产品镜像池首位） | 403 | 1.93s | 14 字节，非仓库页 | 不能替代 |
+| 镜像版页面 `https://gh.api.99988866.xyz/https://github.com/jingshui127/GithubAccelerator` | 000（TLS 握手失败） | 0.61s | 无内容 | 不能替代 |
+
+结论：**镜像版页面不能替代 github.com 页面浏览**——ghfast 对页面路径直接返回 403，99988866 TLS 握手失败；本次直连本身可用，不需要走镜像。产品界面的口径（"镜像站页面不是 github.com"、健康检测不通过时只给原始链接）不变。
+
+### 10.2 B. git 读路径
+
+用产品真实写入的全局改写（`url."https://<base>/https://github.com/".insteadOf = https://github.com/`，外加恒等 `url."https://github.com/".pushInsteadOf`）实测，测完立即按字节还原。
+
+| 路径 | `git ls-remote` | `git clone --depth 1` | 改写命中证据 | 结论 |
+|---|---|---|---|---|
+| 直连 | 1.11s 成功 | 2.32s 成功 | — | 基线 |
+| `ghfast.top`（产品默认 `DefaultMirrorBaseUrl`） | 5.70s 成功 | 3.03s 成功 | `GIT_TRACE`：`git-remote-https https://github.com/octocat/Hello-World.git https://ghfast.top/https://github.com/octocat/Hello-World.git` | 可用，但比直连慢 |
+| `gitclone.com`（`GitCloneMirrors` 首位） | 0.52s 成功 | 1.12s 成功 | 同一 `insteadOf` 机制 | 比直连快，推荐 |
+
+两条镜像链路克隆出的 HEAD 与直连一致（`7fd1a60b01f91b314f59955a4e4d4e80d8edf11d`），内容正确。
+
+### 10.3 C. git 写路径（边界验证，不是缺陷）
+
+- `git remote get-url --push origin` = `https://github.com/jingshui127/GithubAccelerator.git`。
+- 在 `insteadOf` 生效期间执行 `GIT_TRACE=1 git push --dry-run origin main`：实际调用为 `git-remote-https origin https://github.com/jingshui127/GithubAccelerator.git`，**没有被改写到镜像**。
+- 本轮真实 push（合入 `main`）成功，耗时 16.1s。
+- 结论：**设计如此——镜像不做鉴权转发，push 无法加速**；产品额外写入恒等 `pushInsteadOf` 正是为此。不记作缺陷，也不列入改进项。此前 443 连接失败属于网络侧波动，与镜像能力无关。
+
+### 10.4 D. 安全与还原
+
+- 未改系统代理、Hosts、防火墙；未装证书；未占用任何被占用端口/串口。
+- 全局 `~/.gitconfig` 测试前 SHA256 = `C9435D20D29028C41BBD6B57FE2078AABE0B1BA129CFB80609369CDB12D07CEC`，备份到临时目录 `dogfood\gitconfig-backup`；两次写入后均用备份文件按字节覆盖还原，**还原后 SHA256 与此前完全相同**。
+- 写入前确认不存在任何 `url.*.insteadOf` / `pushInsteadOf` 条目（`git config --global --get-regexp` 无输出），因此**未覆盖用户既有配置**。
+
+### 10.5 自测暴露的问题（如实记录，未在本轮改动）
+
+1. **产品默认 git 镜像与实际推荐不一致**：`GitUrlRewriteService.DefaultMirrorBaseUrl` 是 `ghfast.top`，而本次实测 gitclone.com 更快（0.52s vs 5.70s），镜像清单里也把 gitclone.com 标为"推荐"。按"不改范围、不留半成品"要求，本轮只记录不动代码。
+2. **"直连不可用"是随时间变化的结论**：2026-11-05 21:45 github.com 页面 12s 超时，2026-11-06 13:31 直连 200 / 1.56s。文档与界面凡"页面直连超时"的表述都应附检测时间，不能当固定事实。
+3. **"打开镜像版页面"当前会打开一个 403 页面**：ghfast 对页面路径 403；产品只在健康检测判定全源不健康时拒绝打开并给原始链接，而健康检测若不覆盖页面路径，用户点击后仍可能看到 403。建议（未实施）：健康检测对页面路径单独判定。
+4. **镜像不一定更快**：本次两条 git 镜像中 ghfast 反而比直连慢（5.70s vs 1.11s），说明网络恢复后"加速"可能为负收益；产品把直连作为回退是对的。
+
+截图（本构建 UI 证据，2026-11-05 采集；今日镜像页返回 403，故沿用同一界面）：
+
+- [batch6-mirror-link-entry.png](file:///E:/CsharpCode/repos/GithubAccelerator/docs/screenshots/batch6-mirror-link-entry.png)：下载加速器界面，含"镜像站页面不是 github.com"与"不装证书/不改系统代理"提示
+- [batch6-all-sources-failed.png](file:///E:/CsharpCode/repos/GithubAccelerator/docs/screenshots/batch6-all-sources-failed.png)：全源不可用时的兜底（检测时间 + 逐源原因 + 一键改用原始链接）
+
+验收：本轮为命令行实测，未新增测试代码；Release 构建 0 error；全量测试 328 通过 / 0 失败（与基线一致）。
+
 
