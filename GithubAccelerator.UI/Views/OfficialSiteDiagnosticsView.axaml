@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:GithubAccelerator.UI.ViewModels"
+             xmlns:views="using:GithubAccelerator.UI.Views"
              xmlns:m="using:GithubAccelerator.UI.Models"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="640"
              x:Class="GithubAccelerator.UI.Views.OfficialSiteDiagnosticsView"
@@ -19,7 +20,7 @@
                     <StackPanel Grid.Column="0" Spacing="3">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBlock Text="🔎" FontSize="20"/>
-                            <TextBlock Text="官网访问诊断（只读）" FontSize="17" FontWeight="SemiBold"/>
+                            <TextBlock Text="官网访问诊断" FontSize="17" FontWeight="SemiBold"/>
                         </StackPanel>
                         <TextBlock Text="{Binding ScopeText}" FontSize="11" Classes="SecondaryText" Margin="28,0,0,0"
                                    TextTrimming="CharacterEllipsis"/>
@@ -101,13 +102,16 @@
                     </Grid>
                 </Border>
 
+                <!-- M2 防护版加速：默认关闭，先预览再确认写入 -->
+                <views:OfficialSiteHostsGuardView DataContext="{Binding Guard}"/>
+
                 <!-- 无结果时的占位 -->
                 <Border Padding="24" CornerRadius="12"
                         Background="{DynamicResource ControlFillColorDefaultBrush}"
                         BorderThickness="1"
                         BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                         IsVisible="{Binding !HasResult}">
-                    <TextBlock Text="尚无检测结果。点击右上角「重新检测」开始只读诊断；本面板不会写入 Hosts，也不需要管理员权限。"
+                    <TextBlock Text="尚无检测结果。点击右上角「重新检测」开始只读诊断；上方诊断不会写入 Hosts，也不需要管理员权限。"
                                FontSize="12" TextWrapping="Wrap" Classes="SecondaryText"/>
                 </Border>
 
@@ -178,7 +182,7 @@
         <Border Grid.Row="2" Padding="14,10" CornerRadius="8"
                 Background="{DynamicResource ControlFillColorSecondaryBrush}">
             <TextBlock FontSize="11" TextWrapping="Wrap" Classes="SecondaryText"
-                       Text="本页仅只读观测：不写 Hosts、不请求管理员权限、不改 DNS/代理/防火墙、不安装证书、不做后台常驻轮询、不自动打开浏览器。结论只说明“解析层是否瓶颈”，不承诺登录/PR/push 一定可通。"/>
+                       Text="上方诊断仅只读观测：不写 Hosts、不请求管理员权限。下方「防护版 Hosts 加速」默认关闭，只有用户预览并二次确认后才写入 github.com，且不写 CDN 域；不改 DNS/代理/证书，不做后台常驻轮询。"/>
         </Border>
     </Grid>
 </UserControl>

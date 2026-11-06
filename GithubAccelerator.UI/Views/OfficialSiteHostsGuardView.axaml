@@ -1,0 +1,116 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:GithubAccelerator.UI.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="880"
+             x:Class="GithubAccelerator.UI.Views.OfficialSiteHostsGuardView"
+             x:DataType="vm:OfficialSiteHostsGuardViewModel">
+
+    <Border Padding="14" CornerRadius="12"
+            Background="{DynamicResource ControlFillColorDefaultBrush}"
+            BorderThickness="1"
+            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+        <StackPanel Spacing="10">
+            <!-- 标题 + 默认关闭 -->
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" Spacing="3">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="🛡" FontSize="18"/>
+                        <TextBlock Text="防护版 Hosts 加速" FontSize="15" FontWeight="SemiBold"/>
+                        <Border Padding="6,1" CornerRadius="4"
+                                Background="{DynamicResource ControlFillColorDisabledBrush}"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="默认关闭" FontSize="9" Classes="SecondaryText"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="{Binding DomainText}" FontSize="10.5" Classes="SecondaryText"
+                               TextWrapping="Wrap" Margin="26,0,0,0"/>
+                </StackPanel>
+                <CheckBox Grid.Column="1" Content="启用" IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                          IsEnabled="{Binding !IsBusy}" VerticalAlignment="Center" FontSize="12"/>
+            </Grid>
+
+            <!-- 启用前必须看到的预览信息 -->
+            <Border Padding="10" CornerRadius="8"
+                    Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="80,*" ColumnSpacing="6">
+                        <TextBlock Grid.Column="0" Text="选中 IP" FontSize="10" Classes="SecondaryText"/>
+                        <TextBlock Grid.Column="1" Text="{Binding PreviewIpText}" FontSize="12" FontWeight="SemiBold"
+                                   TextWrapping="Wrap"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="80,*" ColumnSpacing="6">
+                        <TextBlock Grid.Column="0" Text="来源" FontSize="10" Classes="SecondaryText"/>
+                        <TextBlock Grid.Column="1" Text="{Binding PreviewSourceText}" FontSize="10.5"
+                                   TextWrapping="Wrap" Classes="SecondaryText"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="80,*" ColumnSpacing="6">
+                        <TextBlock Grid.Column="0" Text="候选/达标" FontSize="10" Classes="SecondaryText"/>
+                        <TextBlock Grid.Column="1" Text="{Binding PreviewCountsText}" FontSize="10.5"
+                                   TextWrapping="Wrap" Classes="SecondaryText"/>
+                    </Grid>
+                    <Border Height="1" Background="{DynamicResource ControlStrokeColorDefaultBrush}"/>
+                    <TextBlock Text="{Binding PreviewBenefitText}" FontSize="10.5" TextWrapping="Wrap"
+                               Foreground="{DynamicResource SecondaryTextBrush}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- 操作按钮 -->
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="🔎 预览并检测" Command="{Binding PreviewCommand}"
+                        Padding="12,6" FontSize="11" IsEnabled="{Binding !IsBusy}"/>
+                <Button Content="{Binding ApplyButtonText}" Command="{Binding ApplyCommand}"
+                        Padding="12,6" FontSize="11" FontWeight="SemiBold"
+                        IsEnabled="{Binding CanApply}" IsVisible="{Binding !IsApplied}"/>
+                <Button Content="复测并自愈" Command="{Binding VerifyAndHealCommand}"
+                        Padding="12,6" FontSize="11" IsEnabled="{Binding IsApplied}"/>
+                <Button Content="{Binding UndoButtonText}" Command="{Binding UndoCommand}"
+                        Padding="12,6" FontSize="11" IsVisible="{Binding IsUndoVisible}"
+                        IsEnabled="{Binding IsApplied}"/>
+                <Button Content="{Binding RestoreButtonText}" Command="{Binding RestoreFirstRunSnapshotCommand}"
+                        Padding="12,6" FontSize="11" IsVisible="{Binding IsRestoreVisible}"
+                        IsEnabled="{Binding !IsBusy}"/>
+                <Button Content="取消确认" Command="{Binding CancelConfirmCommand}"
+                        Padding="10,6" FontSize="10" Classes="SecondaryText"
+                        IsEnabled="{Binding !IsBusy}"/>
+            </StackPanel>
+
+            <!-- 运行状态（可观测） -->
+            <Border Padding="10" CornerRadius="8"
+                    Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,*" ColumnSpacing="10">
+                        <StackPanel Grid.Column="0" Spacing="1">
+                            <TextBlock Text="当前已应用 IP" FontSize="9" Classes="SecondaryText"/>
+                            <TextBlock Text="{Binding AppliedIpText}" FontSize="12" FontWeight="SemiBold"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="1">
+                            <TextBlock Text="来源" FontSize="9" Classes="SecondaryText"/>
+                            <TextBlock Text="{Binding AppliedSourceText}" FontSize="10"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </Grid>
+                    <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="10">
+                        <StackPanel Grid.Column="0" Spacing="1">
+                            <TextBlock Text="最近检测时间" FontSize="9" Classes="SecondaryText"/>
+                            <TextBlock Text="{Binding LastCheckText}" FontSize="10.5"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="1">
+                            <TextBlock Text="成功 / 失败次数" FontSize="9" Classes="SecondaryText"/>
+                            <TextBlock Text="{Binding CountersText}" FontSize="10" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock Grid.Row="2" Text="{Binding StatusText}" FontSize="10.5" TextWrapping="Wrap"
+                               Foreground="{DynamicResource SecondaryTextBrush}"/>
+                    <TextBlock Grid.Row="3" Text="当前不是管理员，写入/撤销/恢复都需要管理员权限；本程序不会静默提权。"
+                               FontSize="10" TextWrapping="Wrap" Foreground="#E8A23D"
+                               IsVisible="{Binding NeedsElevation}"/>
+                </Grid>
+            </Border>
+
+            <TextBlock Text="{Binding ScopeWarning}" FontSize="9.5" TextWrapping="Wrap"
+                       Classes="SecondaryText"/>
+        </StackPanel>
+    </Border>
+</UserControl>
