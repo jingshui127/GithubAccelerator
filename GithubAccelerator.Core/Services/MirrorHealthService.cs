@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace GithubAccelerator.Core.Services;
 
@@ -75,7 +76,22 @@ public sealed record MirrorHealthReport(
 public interface IMirrorHealthService
 {
     Task<MirrorHealthReport> CheckAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 探测「镜像版页面路径」是否真的能打开：状态码 2xx 且返回内容含仓库特征/体积合理。
+    /// 结果与池级检测一样缓存 10 分钟、单次 5 秒超时。
+    /// </summary>
+    Task<IReadOnlyList<MirrorPageHealth>> CheckPageAsync(string githubUrl, CancellationToken cancellationToken = default);
 }
+
+/// <summary>镜像「页面路径」的实测结果（决定"打开镜像版页面"是否放行）。</summary>
+public sealed record MirrorPageHealth(
+    string SiteName,
+    string Url,
+    bool Healthy,
+    int? LatencyMs,
+    DateTimeOffset CheckedAt,
+    string? Reason);
 
 /// <summary>
 /// 镜像池健康化：并行探测可达性、响应时间与内容正确性（校验取回内容确实是目标文件，
@@ -97,6 +113,12 @@ public sealed class MirrorHealthService : IMirrorHealthService
 
     private MirrorHealthReport? _cached;
     private DateTimeOffset _cachedAt;
+
+    /// <summary>页面路径内容校验的体积下限：镜像的错误页通常只有几十到几百字节。</summary>
+    public const int MinPageContentLength = 2000;
+
+    private readonly Dictionary<string, (IReadOnlyList<MirrorPageHealth> Results, DateTimeOffset At)> _pageCache = new();
+    private readonly object _pageCacheLock = new();
 
     public MirrorHealthService(
         IReadOnlyList<MirrorSite>? mirrors = null,
@@ -144,6 +166,91 @@ public sealed class MirrorHealthService : IMirrorHealthService
         _cached = report;
         _cachedAt = checkedAt;
         return report;
+    }
+
+    /// <summary>
+    /// 页面路径探测：并行请求各镜像的镜像版页面 URL，校验状态码、体积与仓库特征串。
+    /// 结果按 URL 缓存 10 分钟，与池级检测一致的 5 秒超时（由探测客户端提供）。
+    /// </summary>
+    public async Task<IReadOnlyList<MirrorPageHealth>> CheckPageAsync(string githubUrl, CancellationToken cancellationToken = default)
+    {
+        var key = (githubUrl ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(key)) return Array.Empty<MirrorPageHealth>();
+
+        lock (_pageCacheLock)
+        {
+            if (_pageCache.TryGetValue(key, out var cached) && _clock() - cached.At < _cacheTtl)
+            {
+                return cached.Results;
+            }
+        }
+
+        var marker = ExtractRepoMarker(key);
+        var targets = _mirrors
+            .Where(m => m.UrlTemplate != null)
+            .Select(m => (m.Name, Url: m.UrlTemplate!.Replace("{url}", key)))
+            .ToArray();
+
+        var probes = targets.Select(t => ProbePageAsync(t.Name, t.Url, marker, cancellationToken)).ToArray();
+        var results = await Task.WhenAll(probes);
+
+        lock (_pageCacheLock)
+        {
+            _pageCache[key] = (results, _clock());
+        }
+        return results;
+    }
+
+    /// <summary>从 https://github.com/{owner}/{repo} 提取仓库名，作为页面内容特征串。</summary>
+    public static string? ExtractRepoMarker(string githubUrl)
+    {
+        var match = Regex.Match(githubUrl ?? string.Empty, @"github\.com/([^/?#]+)/([^/?#\s]+)",
+            RegexOptions.IgnoreCase);
+        if (!match.Success) return null;
+
+        var repo = match.Groups[2].Value.TrimEnd('/');
+        if (repo.EndsWith(".git", StringComparison.OrdinalIgnoreCase)) repo = repo[..^4];
+        return string.IsNullOrWhiteSpace(repo) ? null : repo;
+    }
+
+    private async Task<MirrorPageHealth> ProbePageAsync(string siteName, string url, string? marker, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _client.GetAsync(new Uri(url), cancellationToken);
+            var checkedAt = _clock();
+
+            if (response.StatusCode == 0)
+            {
+                return new MirrorPageHealth(siteName, url, false, response.ElapsedMs, checkedAt,
+                    response.Error ?? "无法连接");
+            }
+
+            if (response.StatusCode < 200 || response.StatusCode >= 300)
+            {
+                return new MirrorPageHealth(siteName, url, false, response.ElapsedMs, checkedAt,
+                    $"HTTP {response.StatusCode}");
+            }
+
+            var body = response.Body ?? string.Empty;
+            if (body.Length < MinPageContentLength)
+            {
+                return new MirrorPageHealth(siteName, url, false, response.ElapsedMs, checkedAt,
+                    $"返回内容过短（{body.Length} 字节，疑似错误页）");
+            }
+
+            if (marker != null && body.IndexOf(marker, StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                return new MirrorPageHealth(siteName, url, false, response.ElapsedMs, checkedAt,
+                    "返回内容不含仓库特征，疑似错误页");
+            }
+
+            return new MirrorPageHealth(siteName, url, true, response.ElapsedMs, checkedAt, null);
+        }
+        catch (Exception ex)
+        {
+            return new MirrorPageHealth(siteName, url, false, null, _clock(), ex.Message);
+        }
     }
 
     /// <summary>健康（延迟升序）→ 可达但内容错误 → 不可达。</summary>

@@ -126,6 +126,51 @@ public class MirrorLinkAndCoverageTests
     }
 
     [Fact]
+    public void Plan_PagePathUnhealthy_DisablesEntryAndOffersOriginal()
+    {
+        var checkedAt = new DateTimeOffset(2026, 11, 6, 13, 40, 0, TimeSpan.FromHours(8));
+        var result = new MirrorResult
+        {
+            OriginalUrl = "https://github.com/cli/cli",
+            AnyHealthyMirror = true,
+            HealthCheckedAt = checkedAt
+        };
+        result.MirrorUrls.Add(new ConvertedUrl("ghfast.top", "https://ghfast.top/https://github.com/cli/cli", ""));
+        result.PageHealth.Add(new MirrorPageHealth("ghfast.top",
+            "https://ghfast.top/https://github.com/cli/cli", false, 100, checkedAt, "HTTP 403"));
+
+        var plan = MirrorOpenPlanner.Plan(result);
+
+        Assert.False(plan.CanOpen);
+        Assert.Null(plan.Url);
+        Assert.True(plan.OfferOriginalLink);
+        Assert.Contains("2026-11-06 13:40", plan.Message);
+        Assert.Contains("HTTP 403", plan.Message);
+        Assert.Contains("视当时网络而定", plan.Message);
+    }
+
+    [Fact]
+    public void Plan_PagePathHealthy_OpensHealthiestPageMirror()
+    {
+        var checkedAt = new DateTimeOffset(2026, 11, 6, 13, 40, 0, TimeSpan.FromHours(8));
+        var result = new MirrorResult { OriginalUrl = "https://github.com/cli/cli" };
+        result.MirrorUrls.Add(new ConvertedUrl("ghfast.top", "https://ghfast.top/https://github.com/cli/cli", ""));
+        result.MirrorUrls.Add(new ConvertedUrl("gh.api.99988866.xyz",
+            "https://gh.api.99988866.xyz/https://github.com/cli/cli", ""));
+        result.PageHealth.Add(new MirrorPageHealth("ghfast.top",
+            "https://ghfast.top/https://github.com/cli/cli", false, 80, checkedAt, "HTTP 403"));
+        result.PageHealth.Add(new MirrorPageHealth("gh.api.99988866.xyz",
+            "https://gh.api.99988866.xyz/https://github.com/cli/cli", true, 200, checkedAt, null));
+
+        var plan = MirrorOpenPlanner.Plan(result);
+
+        Assert.True(plan.CanOpen);
+        Assert.Equal("https://gh.api.99988866.xyz/https://github.com/cli/cli", plan.Url);
+        Assert.Contains("不是访问 github.com", plan.Message);
+        Assert.False(plan.OfferOriginalLink);
+    }
+
+    [Fact]
     public void Plan_UnknownLinkWithoutMirrors_OffersOriginal()
     {
         var result = new MirrorResult { OriginalUrl = "https://example.com/file" };

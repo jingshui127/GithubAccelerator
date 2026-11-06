@@ -43,6 +43,27 @@ public partial class DownloadAcceleratorViewModel : ObservableObject
     [ObservableProperty]
     private string _fallbackUrl = "";
 
+    /// <summary>仓库页面路径实测不健康时禁用"打开镜像版页面"入口（避免送出 403 页）。</summary>
+    [ObservableProperty]
+    private bool _mirrorPageEnabled = true;
+
+    /// <summary>入口被禁用时的原因（含检测时间与逐镜像原因）。</summary>
+    [ObservableProperty]
+    private string _mirrorPageHint = "";
+
+    partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(CanClickMirrorPage));
+
+    partial void OnMirrorPageEnabledChanged(bool value) => OnPropertyChanged(nameof(CanClickMirrorPage));
+
+    partial void OnInputUrlChanged(string value)
+    {
+        // 输入变化后不沿用上一次的禁用状态，等重新检测再定。
+        MirrorPageEnabled = true;
+        MirrorPageHint = "";
+    }
+
+    public bool CanClickMirrorPage => !IsBusy && MirrorPageEnabled;
+
     /// <summary>
     /// 转换后的镜像 URL 列表（用于 UI 绑定）
     /// </summary>
@@ -131,6 +152,8 @@ public partial class DownloadAcceleratorViewModel : ObservableObject
             {
                 FallbackVisible = true;
                 FallbackUrl = Result.OriginalUrl;
+                MirrorPageEnabled = true;
+                MirrorPageHint = "";
                 StatusMessage = Result.UnsupportedReason;
                 return;
             }
@@ -158,6 +181,8 @@ public partial class DownloadAcceleratorViewModel : ObservableObject
             {
                 StatusMessage = "未能识别该链接格式，请检查 URL 是否正确";
             }
+
+            UpdateMirrorPageAvailability();
         }
         catch (Exception ex)
         {
@@ -265,6 +290,26 @@ public partial class DownloadAcceleratorViewModel : ObservableObject
         await CopyToClipboardAsync(text);
     }
 
+    /// <summary>仓库页面：按页面路径实测结果决定"打开镜像版页面"入口是否可用（不把 403 页送出去）。</summary>
+    private void UpdateMirrorPageAvailability()
+    {
+        if (Result is { UrlType: GithubUrlType.Repository } && Result.HasPageHealth)
+        {
+            var plan = MirrorOpenPlanner.Plan(Result);
+            MirrorPageEnabled = plan.CanOpen;
+            MirrorPageHint = plan.CanOpen ? "" : plan.Message;
+            if (!plan.CanOpen)
+            {
+                FallbackVisible = true;
+                FallbackUrl = Result.OriginalUrl;
+            }
+            return;
+        }
+
+        MirrorPageEnabled = true;
+        MirrorPageHint = "";
+    }
+
     /// <summary>
     /// 打开镜像版页面：按实测健康度取最健康的镜像；全不可用时只给原因 + 原始链接回退，不硬开。
     /// </summary>
@@ -294,6 +339,8 @@ public partial class DownloadAcceleratorViewModel : ObservableObject
             var plan = MirrorOpenPlanner.Plan(Result);
             FallbackVisible = plan.OfferOriginalLink;
             FallbackUrl = Result.OriginalUrl;
+            MirrorPageEnabled = plan.CanOpen;
+            MirrorPageHint = plan.CanOpen ? "" : plan.Message;
 
             if (plan.CanOpen && plan.Url != null)
             {

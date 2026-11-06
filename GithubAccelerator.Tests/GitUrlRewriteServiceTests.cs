@@ -78,6 +78,28 @@ public class GitUrlRewriteServiceTests
     }
 
     [Fact]
+    public async Task EnableAsync_DefaultMirror_IsGitCloneWithHostPathRewrite()
+    {
+        // 2026-11-06 实测：gitclone 0.52s/1.12s 优于直连 1.11s/2.32s 与 ghfast 5.70s/3.03s
+        Assert.Equal("https://gitclone.com", GitUrlRewriteService.DefaultMirrorBaseUrl);
+
+        using var temp = new TempGit();
+        var enabled = await temp.Service.EnableAsync(GitUrlRewriteService.DefaultMirrorBaseUrl);
+        Assert.True(enabled.Success);
+        Assert.True(enabled.OwnedByApp);
+
+        var config = temp.ReadConfig();
+        Assert.Contains("[url \"https://gitclone.com/github.com/\"]", config);
+        Assert.Contains("insteadOf = https://github.com/", config);
+        Assert.DoesNotContain("https://gitclone.com/https://github.com/", config);
+        Assert.Contains("pushInsteadOf", config);
+
+        var disabled = await temp.Service.DisableAsync();
+        Assert.True(disabled.Success);
+        Assert.Equal(string.Empty, temp.ReadConfig().ReplaceLineEndings("\n"));
+    }
+
+    [Fact]
     public async Task EnableThenDisable_RestoresConfigExactly()
     {
         using var temp = new TempGit(cfg => Git(cfg, "user.name", "tester"));

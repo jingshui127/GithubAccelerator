@@ -51,11 +51,27 @@ public sealed record GitLegacyCleanupResult(
 /// </summary>
 public sealed class GitUrlRewriteService
 {
-    /// <summary>默认镜像。可用性以 <see cref="MirrorHealthService"/> 的实测结果为准：2026-11-05 本机实测 release 仅有响应（未做完整性校验），raw/页面超时。</summary>
-    public const string DefaultMirrorBaseUrl = "https://ghfast.top";
+    /// <summary>
+    /// 默认镜像：gitclone.com。2026-11-06 本机实测 git ls-remote 0.52s / clone --depth 1 1.12s，
+    /// 优于直连（1.11s / 2.32s）与 ghfast.top（5.70s / 3.03s）；ghfast.top 保留在镜像池中但不作默认。
+    /// </summary>
+    public const string DefaultMirrorBaseUrl = "https://gitclone.com";
 
     public const string InsteadOfValue = "https://github.com/";
     private const string PushInsteadOfKey = "url.https://github.com/.pushInsteadOf";
+
+    /// <summary>
+    /// gitclone.com 采用 host-path 形式（https://gitclone.com/github.com/{owner}/{repo}.git），
+    /// 与前缀反代（https://&lt;mirror&gt;/https://github.com/...）不同，改写 key 需要单独构造。
+    /// </summary>
+    public const string GitCloneRewritePrefix = "https://gitclone.com/github.com/";
+
+    internal static string BuildInsteadOfPrefix(string normalizedBaseUrl)
+    {
+        return normalizedBaseUrl.Equals("https://gitclone.com", StringComparison.OrdinalIgnoreCase)
+            ? GitCloneRewritePrefix
+            : normalizedBaseUrl + "/" + InsteadOfValue;
+    }
 
     /// <summary>本程序历史版本可能写进 http(s).proxy 的镜像地址（按 host 判定）。</summary>
     private static readonly string[] KnownLegacyProxyHosts =
@@ -181,7 +197,7 @@ public sealed class GitUrlRewriteService
                 return new GitRewriteEnableResult(false, ex.Message, null, false);
             }
 
-            var prefix = baseUrl + "/" + InsteadOfValue;
+            var prefix = BuildInsteadOfPrefix(baseUrl);
             var mainKey = $"url.{prefix}.insteadOf";
             var rules = await GetUrlRulesAsync();
             Step();
