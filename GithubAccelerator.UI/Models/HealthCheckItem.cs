@@ -43,12 +43,32 @@ public partial class HealthCheckItem : ObservableObject
 
     public string LatencyText => IsCanceled
         ? "已取消"
-        : LatencyMs switch
-        {
-            < 0 => Status == "TIMEOUT" ? "⏱ 超时" : "❌ 失败",
-            < 1000 => $"{LatencyMs} ms",
-            _ => $"{LatencyMs / 1000.0:F1} s"
-        };
+        : IsPending
+            ? "— 未检测"
+            : LatencyMs switch
+            {
+                < 0 => Status == "TIMEOUT" ? "⏱ 超时" : "❌ 失败",
+                < 1000 => $"{LatencyMs} ms",
+                _ => $"{LatencyMs / 1000.0:F1} s"
+            };
+
+    /// <summary>延迟文本颜色：未检测为中性灰，只有检测完成后才用成功/失败色。</summary>
+    public Avalonia.Media.IBrush LatencyBrush => IsPending || IsCanceled
+        ? PendingBrush
+        : IsOk
+            ? OkBrush
+            : IsSlow
+                ? SlowBrush
+                : FailBrush;
+
+    private static readonly Avalonia.Media.IBrush PendingBrush =
+        new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#9E9E9E"));
+    private static readonly Avalonia.Media.IBrush OkBrush =
+        new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#4CAF50"));
+    private static readonly Avalonia.Media.IBrush SlowBrush =
+        new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#FFC107"));
+    private static readonly Avalonia.Media.IBrush FailBrush =
+        new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#FF5722"));
 
     public bool IsOk => Status == "OK";
     public bool IsSlow => Status == "SLOW";
@@ -64,6 +84,7 @@ public partial class HealthCheckItem : ObservableObject
         OnPropertyChanged(nameof(IsCanceled));
         OnPropertyChanged(nameof(IsPending));
         OnPropertyChanged(nameof(LatencyText));
+        OnPropertyChanged(nameof(LatencyBrush));
     }
 
     partial void OnLatencyMsChanged(long value)

@@ -18,7 +18,7 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
                     <TextBlock Text="🌐" FontSize="20"/>
                     <StackPanel>
-                        <TextBlock Text="GitHub 真实访问速度" FontSize="16" FontWeight="SemiBold"/>
+                        <TextBlock Text="GitHub 单次请求响应（不含页面加载）" FontSize="16" FontWeight="SemiBold"/>
                         <TextBlock Text="{Binding StatusMessage}" FontSize="11"
                                    Foreground="{DynamicResource SecondaryTextBrush}"/>
                     </StackPanel>
@@ -48,6 +48,7 @@
                     Background="{DynamicResource ControlFillColorSecondaryBrush}"
                     CornerRadius="8" BorderThickness="1"
                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                <StackPanel>
                 <ctrl:SimpleLineChart Values="{Binding ChartValues}"
                                       YAxisLabel="响应时间 (ms)"
                                       XAxisLabel="测试次数"
@@ -57,6 +58,10 @@
                                       FillColor="#1A4FC3F7"
                                       AxisColor="#666666"
                                       TextColor="#999999"/>
+                <TextBlock Margin="4,8,4,0" FontSize="11" TextWrapping="Wrap"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
+                           Text="度量口径：每 10 秒对 github.com 的单次请求首字节/响应（favicon → 首页 → API，取首个成功），只代表单个请求，不代表整页打开耗时。整页对比请在「官网访问诊断」查看候选与直连的整页实测。"/>
+                </StackPanel>
             </Border>
 
             <!-- 底部统计 -->

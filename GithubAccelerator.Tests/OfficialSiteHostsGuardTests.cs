@@ -156,7 +156,8 @@ public class OfficialSiteHostsGuardTests
         public FakeDns Dns { get; }
         public OfficialSiteHostsGuardService Service { get; }
 
-        public TempGuard(string original = "127.0.0.1 localhost\r\n192.168.1.1 router\r\n")
+        public TempGuard(string original = "127.0.0.1 localhost\r\n192.168.1.1 router\r\n",
+            IOfficialSitePageLoader? pageLoader = null)
         {
             Root = Path.Combine(Path.GetTempPath(), "gha-guard-tests-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(Root);
@@ -182,7 +183,7 @@ public class OfficialSiteHostsGuardTests
             Dns = new FakeDns();
             Service = new OfficialSiteHostsGuardService(
                 Hosts, Seeds,
-                new OfficialSiteCandidateSelector(Probe, Page, rounds: 3, minSuccessRate: 0.9,
+                new OfficialSiteCandidateSelector(Probe, pageLoader ?? Page, rounds: 3, minSuccessRate: 0.9,
                     intervalMs: 0, probeTimeout: TimeSpan.FromSeconds(2), pageTimeout: TimeSpan.FromSeconds(2)),
                 Dns, StateStore, SnapshotDirectory, () => Now);
         }
@@ -729,6 +730,116 @@ public class OfficialSiteHostsGuardTests
         Assert.Equal(5, resources.Count);
         Assert.Equal("https://github.com/assets/1.js", resources[0].AbsoluteUri);
         Assert.Equal("https://github.com/assets/5.js", resources[4].AbsoluteUri);
+    }
+
+    // ---------------------------------------------------------------- 交错配对（A/B×6）
+
+    [Fact]
+    public async Task PairedComparer_AdmissionUsesMedianPairDiff()
+    {
+        var page = new DelegatePageLoader((ip, _) => ip == FastIp ? PageOk(600) : PageOk(900));
+        var comparer = new OfficialSitePairedComparer(page, groups: 6, pageTimeout: TimeSpan.FromSeconds(2));
+        var result = await comparer.CompareAsync(FastIp, BaselineIp, "github.com", Now, CancellationToken.None);
+
+        Assert.Equal(6, result.Rounds.Count);
+        Assert.Equal(6, result.ValidPairs);
+        Assert.Equal(-300, result.MedianDiffMs);
+        Assert.Equal(900, result.MedianBaselineMs);
+        Assert.True(result.Stable);
+        Assert.True(result.MeetsThreshold); // -300 / 900 = -33.3%，≥20%
+        Assert.Contains("候选快 33.3%", result.MedianText);
+    }
+
+    [Fact]
+    public async Task PairedComparer_RejectsWhenMedianImprovementBelow20Percent()
+    {
+        var page = new DelegatePageLoader((ip, _) => ip == FastIp ? PageOk(810) : PageOk(900));
+        var comparer = new OfficialSitePairedComparer(page, groups: 6, pageTimeout: TimeSpan.FromSeconds(2));
+        var result = await comparer.CompareAsync(FastIp, BaselineIp, "github.com", Now, CancellationToken.None);
+
+        Assert.True(result.Stable);
+        Assert.Equal(-90, result.MedianDiffMs);
+        Assert.False(result.MeetsThreshold); // 只快 10%
+    }
+
+    [Fact]
+    public async Task PairedComparer_FlagsUnstableWhenDiffSignFlips()
+    {
+        var page = new DelegatePageLoader((ip, n) =>
+            ip == FastIp
+                ? (n % 2 == 0 ? PageOk(300) : PageOk(900))
+                : PageOk(700));
+        var comparer = new OfficialSitePairedComparer(page, groups: 6, pageTimeout: TimeSpan.FromSeconds(2));
+        var result = await comparer.CompareAsync(FastIp, BaselineIp, "github.com", Now, CancellationToken.None);
+
+        Assert.Equal(6, result.ValidPairs);
+        Assert.False(result.Stable);
+        Assert.Contains("不作准入依据", result.UnstableReason);
+        Assert.Contains("翻转", result.UnstableReason);
+    }
+
+    [Fact]
+    public async Task PairedComparer_RequiresAtLeastFourValidPairs()
+    {
+        var page = new DelegatePageLoader((ip, n) =>
+            ip == FastIp
+                ? (n <= 3 ? PageFail("整页加载超时（2s）") : PageOk(300))
+                : PageOk(900));
+        var comparer = new OfficialSitePairedComparer(page, groups: 6, pageTimeout: TimeSpan.FromSeconds(2));
+        var result = await comparer.CompareAsync(FastIp, BaselineIp, "github.com", Now, CancellationToken.None);
+
+        Assert.Equal(3, result.ValidPairs);
+        Assert.False(result.Stable);
+        Assert.Contains("样本不足", result.UnstableReason);
+    }
+
+    [Fact]
+    public async Task Preview_UnstablePairing_IsRejectedWithExplicitNote()
+    {
+        var loader = new DelegatePageLoader((ip, n) =>
+        {
+            if (ip == FastIp)
+                return n <= 3 ? PageOk(700) : (n % 2 == 0 ? PageOk(300) : PageOk(900));
+            if (ip == BaselineIp)
+                return PageOk(700);
+            return PageFail("整页加载超时（2s）");
+        });
+
+        using var temp = new TempGuard(pageLoader: loader);
+        temp.Probe.SetDefault(FastIp, Ok(50));
+        temp.Probe.SetDefault(SlowIp, Ok(180));
+        temp.Probe.SetDefault(DeadIp, Fail("TCP 443 连接超时（5s）"));
+
+        var plan = await temp.Service.PreviewAsync();
+
+        Assert.False(plan.AdmissionAllowed);
+        Assert.Contains("结果不稳定，不作准入依据", plan.DecisionText);
+        Assert.NotNull(plan.Pairs);
+        Assert.False(plan.Pairs!.Stable);
+        Assert.Contains("交错配对", plan.PairingText);
+        Assert.Contains("#1 候选", plan.PairingText);
+    }
+
+    private sealed class DelegatePageLoader : IOfficialSitePageLoader
+    {
+        private readonly Func<string, int, OfficialSitePageSample> _factory;
+        private readonly Dictionary<string, int> _calls = new();
+        private readonly object _lock = new();
+
+        public DelegatePageLoader(Func<string, int, OfficialSitePageSample> factory) => _factory = factory;
+
+        public Task<OfficialSitePageSample> MeasureAsync(
+            string domain, string ip, TimeSpan timeout, CancellationToken cancellationToken)
+        {
+            int callIndex;
+            lock (_lock)
+            {
+                callIndex = (_calls.TryGetValue(ip, out var previous) ? previous : 0) + 1;
+                _calls[ip] = callIndex;
+            }
+
+            return Task.FromResult(_factory(ip, callIndex));
+        }
     }
 
     private static void SetAllHealthy(

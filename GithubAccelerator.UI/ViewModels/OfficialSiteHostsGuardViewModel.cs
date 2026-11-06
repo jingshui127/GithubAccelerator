@@ -73,6 +73,14 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
     [ObservableProperty]
     private string _previewBenefitText = "点击「预览并检测」查看将写入的域名、选中 IP 与预计收益；默认关闭，未确认不会写 Hosts。";
 
+    /// <summary>交错配对表：每组两侧数值、配对差值、中位差值与稳定性判定。</summary>
+    [ObservableProperty]
+    private string _previewPairingText = string.Empty;
+
+    public bool HasPairingText => !string.IsNullOrEmpty(PreviewPairingText);
+
+    partial void OnPreviewPairingTextChanged(string value) => OnPropertyChanged(nameof(HasPairingText));
+
     [ObservableProperty]
     private string _appliedIpText = "未应用";
 
@@ -105,7 +113,8 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
 
     public string ScopeWarning =>
         "只写 github.com；不写 githubassets/avatars/camo 等 CDN 域；不改 DNS/代理/证书；" +
-        "不做后台常驻轮询。TCP/TLS/TTFB 仅为诊断列，选优与准入看整页耗时；整页度量不执行 JS，不等同浏览器。";
+        "不做后台常驻轮询。选优与准入看整页耗时：准入用 6 组交错配对的差值中位数，顺序测法仅作诊断、不作依据；" +
+        "配对符号反复翻转时明确标注“结果不稳定，不作准入依据”。整页度量不执行 JS，不等同浏览器。";
 
     /// <summary>打开面板时读取状态；不联网、不写 Hosts（复测需要手动点击）。</summary>
     public async Task EnsureLoadedAsync()
@@ -161,12 +170,13 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
         _applyArmed = false;
         ApplyButtonText = "确认写入 Hosts";
         if (!IsEnabled) SetToggleSilently(true);
-        StatusText = "正在对候选与直连做整页实测（HTML + 主要 JS/CSS，最多 3 轮）…";
+        StatusText = "正在对候选与直连做交错配对整页实测（每轮 A/B 相邻完成，共 6 组；另含 3 轮顺序诊断，仅参考）…";
 
         try
         {
             _lastPlan = await _service.PreviewAsync();
             HasPreview = true;
+            PreviewPairingText = _lastPlan.PairingText;
             var selected = _lastPlan.Selection.Selected;
             var qualified = _service.CountQualified(_lastPlan.Selection.Candidates);
             var baselineText = _lastPlan.BaselineIp == null
@@ -199,6 +209,7 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
         {
             HasPreview = false;
             CanApply = false;
+            PreviewPairingText = string.Empty;
             StatusText = "预览失败：" + ex.Message;
         }
         finally

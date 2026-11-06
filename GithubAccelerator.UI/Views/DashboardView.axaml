@@ -69,10 +69,7 @@
                             BoxShadow="0 2 8 0 #20000000">
                         <StackPanel Spacing="8">
                             <TextBlock Text="⚡ 最佳响应" FontSize="12" Foreground="#AAFFFFFF"/>
-                            <StackPanel Orientation="Horizontal" Spacing="4">
-                                <TextBlock Text="{Binding BestSourceResponseTime}" FontSize="24" FontWeight="Bold" Foreground="White"/>
-                                <TextBlock Text="ms" FontSize="14" Foreground="#AAFFFFFF" VerticalAlignment="Bottom" Margin="0,0,0,4"/>
-                            </StackPanel>
+                            <TextBlock Text="{Binding BestSourceResponseText}" FontSize="24" FontWeight="Bold" Foreground="White"/>
                         </StackPanel>
                     </Border>
 
@@ -82,10 +79,7 @@
                             BoxShadow="0 2 8 0 #20000000">
                         <StackPanel Spacing="8">
                             <TextBlock Text="📊 综合评分" FontSize="12" Foreground="#AAFFFFFF"/>
-                            <StackPanel Orientation="Horizontal" Spacing="4">
-                                <TextBlock Text="{Binding BestSourceScore, StringFormat={}{0:F1}}" FontSize="24" FontWeight="Bold" Foreground="White"/>
-                                <TextBlock Text="/100" FontSize="14" Foreground="#AAFFFFFF" VerticalAlignment="Bottom" Margin="0,0,0,4"/>
-                            </StackPanel>
+                            <TextBlock Text="{Binding BestSourceScoreText}" FontSize="24" FontWeight="Bold" Foreground="White"/>
                         </StackPanel>
                     </Border>
 
@@ -96,12 +90,12 @@
                         <StackPanel Spacing="4">
                             <TextBlock Text="📡 数据源" FontSize="12" Foreground="#AAFFFFFF"/>
                             <StackPanel Orientation="Horizontal" Spacing="4">
-                                <TextBlock Text="{Binding TotalSourcesCount}" FontSize="24" FontWeight="Bold" Foreground="White"/>
+                                <TextBlock Text="{Binding TotalSourcesText}" FontSize="24" FontWeight="Bold" Foreground="White"/>
                                 <TextBlock Text="个" FontSize="14" Foreground="#AAFFFFFF" VerticalAlignment="Bottom" Margin="0,0,0,4"/>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="4">
                                 <TextBlock Text="可用: " FontSize="11" Foreground="#AAFFFFFF"/>
-                                <TextBlock Text="{Binding HealthySourcesCount}" FontSize="11" FontWeight="SemiBold" Foreground="White"/>
+                                <TextBlock Text="{Binding HealthySourcesText}" FontSize="11" FontWeight="SemiBold" Foreground="White"/>
                                 <TextBlock Text="个" FontSize="11" Foreground="#AAFFFFFF"/>
                             </StackPanel>
                         </StackPanel>
@@ -235,15 +229,13 @@
                         
                         <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="24,0" MinWidth="80">
                             <TextBlock Text="响应" FontSize="10" Foreground="#AAFFFFFF" HorizontalAlignment="Center"/>
-                            <TextBlock FontSize="16" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center">
-                                <Run Text="{Binding BestSourceResponseTime}"/>
-                                <Run Text="ms" FontSize="11"/>
-                            </TextBlock>
+                            <TextBlock Text="{Binding BestSourceResponseText}"
+                                       FontSize="16" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                         </StackPanel>
                         
                         <StackPanel Grid.Column="3" VerticalAlignment="Center" Margin="24,0" MinWidth="60">
                             <TextBlock Text="评分" FontSize="10" Foreground="#AAFFFFFF" HorizontalAlignment="Center"/>
-                            <TextBlock Text="{Binding BestSourceScore, StringFormat={}{0:F1}}"
+                            <TextBlock Text="{Binding BestSourceScoreText}"
                                        FontSize="16" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                         </StackPanel>
                         
@@ -270,6 +262,8 @@
                 <StackPanel Spacing="12">
                     <DockPanel Margin="0,8,0,0">
                         <TextBlock Text="📊 数据源列表" FontSize="16" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding SourcesCountText}" FontSize="12" Classes="SecondaryText"
+                                   VerticalAlignment="Center" Margin="8,0,0,0"/>
                         <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                             <!-- 搜索框 -->
                             <TextBox Text="{Binding SearchText}" Watermark="🔍 搜索数据源..."
