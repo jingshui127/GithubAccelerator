@@ -121,6 +121,9 @@
                                 <TextBlock Text="镜像前缀" FontSize="14" FontWeight="SemiBold"/>
                                 <TextBlock Text="用 url.&lt;镜像&gt;.insteadOf 改写 https://github.com/ 开头的地址，只影响 clone/fetch/pull；push 需要鉴权，仍直连 GitHub"
                                            FontSize="12" Classes="SecondaryText" TextWrapping="Wrap"/>
+                                <TextBlock Text="加速只作用于下载与克隆（clone/fetch/raw/release）；push 仍直连 github.com，不走镜像。若 push 失败，请重试或更换网络，加速器无法改善 push。"
+                                           Margin="0,4,0,0"
+                                           FontSize="12" Classes="SecondaryText" TextWrapping="Wrap"/>
                                 <TextBox Text="{Binding GitMirrorBaseUrl}"
                                          Margin="0,8,0,0"
                                          HorizontalAlignment="Stretch"/>
@@ -140,7 +143,7 @@
                                 <StackPanel Spacing="4">
                                     <TextBlock Text="加速范围（部分路径，不是全站）" FontSize="12" FontWeight="SemiBold" Foreground="#8D6E00"/>
                                     <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#6D5A00"
-                                               Text="覆盖：git clone/fetch/pull、raw.githubusercontent.com 文件、release 下载、公开仓库页面。不需要加速：api.github.com 接口与需要登录的操作（直连可用）；页面内脚本请求与 ghcr.io 容器镜像不在覆盖范围。镜像站不可用时工具会提示原因，不会假装已加速。"/>
+                                               Text="覆盖：git clone/fetch/pull、raw.githubusercontent.com 文件、release 下载、公开仓库页面。不需要加速：api.github.com 接口与需要登录的操作（直连可用）；直连是否可用视当时网络而定，直连可用时优先直连。页面内脚本请求与 ghcr.io 容器镜像不在覆盖范围。镜像站不可用时工具会提示原因，不会假装已加速。"/>
                                 </StackPanel>
                             </Border>
 
