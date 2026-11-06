@@ -36,8 +36,8 @@ public sealed class StardustMonitorService : IDisposable
         set => _server = value;
     }
 
-    /// <summary>是否启用监控（受设置控制）</summary>
-    public bool Enabled { get; set; } = true;
+    /// <summary>是否启用监控（受设置控制，默认关闭）</summary>
+    public bool Enabled { get; set; } = false;
 
     /// <summary>是否已连接（客户端已登录）</summary>
     public bool Connected => _factory?.App is { Logined: true };
@@ -57,14 +57,15 @@ public sealed class StardustMonitorService : IDisposable
     /// </summary>
     public void Initialize()
     {
-        if (_initialized) return;
-        _initialized = true;
-
         if (!Enabled)
         {
-            XTrace.WriteLine("[Star] 星尘监控已禁用（设置项）");
+            XTrace.WriteLine("[Diagnostics] diagnostics disabled（诊断信息上报未开启，无出站请求）");
+            Serilog.Log.Information("[Diagnostics] diagnostics disabled（诊断信息上报未开启，无出站请求）");
             return;
         }
+
+        if (_initialized) return;
+        _initialized = true;
 
         try
         {
@@ -197,6 +198,31 @@ public sealed class StardustMonitorService : IDisposable
         if (span == null) return NoopDisposable.Instance;
         if (tag != null) span.SetTag(tag);
         return new TracedScope(span, sw);
+    }
+
+    /// <summary>运行时关闭：停止心跳并断开连接，之后不再产生任何上报。</summary>
+    public void Reset()
+    {
+        try
+        {
+            _heartbeatTimer?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            XTrace.Log.Debug("[Diagnostics] 停止心跳异常：{0}", ex.Message);
+        }
+        _heartbeatTimer = null;
+
+        try
+        {
+            _factory?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            XTrace.Log.Debug("[Diagnostics] 断开连接异常：{0}", ex.Message);
+        }
+        _factory = null;
+        _initialized = false;
     }
 
     public void Dispose()

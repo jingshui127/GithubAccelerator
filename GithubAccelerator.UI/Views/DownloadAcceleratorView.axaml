@@ -25,10 +25,17 @@
                     </Border>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
                         <TextBlock Text="GitHub 下载加速器" FontSize="22" FontWeight="Bold" Foreground="White"/>
-                        <TextBlock Text="将 GitHub 链接转换为可用的加速镜像链接，解决国内访问缓慢的问题"
+                        <TextBlock Text="把 GitHub 的下载/页面链接改写成第三方镜像地址，只覆盖部分路径，不是让 GitHub 全站可访问"
                                    FontSize="12" Foreground="#AAFFFFFF" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Grid>
+            </Border>
+
+            <!-- 定位说明：镜像页不是 github.com；不装证书/不改系统代理/Hosts -->
+            <Border Padding="14,12" CornerRadius="8" Background="{DynamicResource InfoBackground}"
+                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="1">
+                <TextBlock TextWrapping="Wrap" FontSize="12" Classes="SecondaryText"
+                           Text="{Binding MirrorNotice} 镜像只能打开公开的下载/页面；api.github.com 与需要登录的操作请直接访问（直连可用，无需镜像），容器镜像（ghcr.io）不在覆盖范围。本工具不会安装证书，也不会修改系统代理或 Hosts。"/>
             </Border>
 
             <!-- 输入区域 -->
@@ -78,6 +85,11 @@
                         <Button Content="🧹 清空"
                                 Command="{Binding ClearInputCommand}"
                                 Padding="14,8" FontSize="12"/>
+                        <Button Content="🌐 打开镜像版页面"
+                                Command="{Binding OpenMirrorPageCommand}"
+                                Padding="16,10" FontSize="13"
+                                IsEnabled="{Binding !IsBusy}"
+                                ToolTip.Tip="用当前最健康的镜像打开该链接；打不开时会给原因，并保留原始链接选项"/>
                         <Button Content="⚡ 生成加速链接"
                                 Command="{Binding ConvertUrlCommand}"
                                 Padding="20,10" FontSize="13"
@@ -102,6 +114,20 @@
                     Padding="16" CornerRadius="8"
                     Background="{DynamicResource InfoBackground}">
                 <TextBlock Text="{Binding StatusMessage}" FontSize="13" TextWrapping="Wrap"/>
+            </Border>
+
+            <!-- 回退：源不可用或域名不支持时，提供明确的"改用原始链接" -->
+            <Border IsVisible="{Binding FallbackVisible}"
+                    Padding="16" CornerRadius="8"
+                    BorderThickness="1" BorderBrush="#FFB74D" Background="#FFF8E1">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="镜像不可用时的退路" FontSize="13" FontWeight="SemiBold" Foreground="#8D6E00"/>
+                    <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#6D5A00"
+                               Text="可以直接打开原始链接，但未经镜像，能否打开取决于本机网络；也可以稍后重新点“打开镜像版页面”再试一次。"/>
+                    <Button Content="🔗 打开原始链接（直连）"
+                            Command="{Binding OpenOriginalLinkCommand}"
+                            Padding="14,8" FontSize="12" HorizontalAlignment="Left"/>
+                </StackPanel>
             </Border>
 
             <!-- 结果区域 -->

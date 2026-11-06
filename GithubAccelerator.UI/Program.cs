@@ -1,5 +1,7 @@
 using Avalonia;
+using GithubAccelerator.UI.Services;
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace GithubAccelerator.UI;
@@ -17,7 +19,25 @@ sealed class Program
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        LaunchContext.Parse(args);
+
+        // 提权重启时当前实例正在退出，给旧实例留出释放互斥体的时间
+        var wait = LaunchContext.IsElevatedRelaunch ? TimeSpan.FromSeconds(10) : TimeSpan.Zero;
+        if (!SingleInstanceGuard.TryAcquire(wait))
+        {
+            // 已有实例：前置其窗口后退出，不启动第二份后台逻辑
+            SingleInstanceGuard.ActivateExistingWindow();
+            return;
+        }
+
+        try
+        {
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+        finally
+        {
+            SingleInstanceGuard.Release();
+        }
     }
 
     private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)

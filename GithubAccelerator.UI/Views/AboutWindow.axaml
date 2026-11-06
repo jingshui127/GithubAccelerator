@@ -5,7 +5,7 @@
         mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="300"
         x:Class="GithubAccelerator.UI.Views.AboutWindow"
         Title="关于 GitHub 加速器 Pro"
-        Width="450" Height="400"
+        Width="450" Height="470"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         CanResize="False">
@@ -33,6 +33,17 @@
                     <TextBlock Grid.Column="0" Text="构建日期：" FontSize="13"/>
                     <TextBlock Grid.Column="1" x:Name="BuildDateText" FontSize="13"/>
                 </Grid>
+                <StackPanel Spacing="6" Margin="0,4,0,0">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="CheckUpdateButton" Content="检查更新" Click="CheckUpdate_Click"
+                                Padding="12,4" FontSize="12"/>
+                        <Button x:Name="OpenReleasesButton" Content="打开发布页" Click="OpenReleases_Click"
+                                Padding="12,4" FontSize="12" IsVisible="False"/>
+                    </StackPanel>
+                    <TextBlock x:Name="UpdateStatusText"
+                               Text="仅在你点击时检查一次；不会随启动自动联网。"
+                               FontSize="11" Classes="SecondaryText" TextWrapping="Wrap" MaxWidth="360"/>
+                </StackPanel>
             </StackPanel>
         </Border>
 

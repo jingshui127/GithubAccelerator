@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
@@ -46,6 +47,13 @@ public partial class HealthCheckViewModel : ObservableObject
     [ObservableProperty]
     private bool _canCopy = false;
 
+    /// <summary>确定进度：已完成 X/共 N 项（不编造百分比）。</summary>
+    [ObservableProperty]
+    private string _progressText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isProgressVisible = false;
+
     public HealthCheckViewModel()
     {
         // 初始化空白条目（避免首次空白）
@@ -66,14 +74,33 @@ public partial class HealthCheckViewModel : ObservableObject
     private async Task RunCheck()
     {
         if (IsRunning) return;
+
+        // 取消后要回到上一个稳定状态：先保存当前结果快照，成功后才替换。
+        var snapshot = Items.Select(CloneItem).ToList();
+        var snapshotOverall = OverallStatus;
+        var snapshotTime = LastCheckTime;
+        var snapshotCanCopy = CanCopy;
+
         IsRunning = true;
-        StatusMessage = "正在并行探测全部子域...";
+        StatusMessage = "正在探测全部子域...";
+        ProgressText = $"已完成 0/共 {GitHubSubDomains.Items.Count} 项";
+        IsProgressVisible = true;
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
 
         try
         {
-            var results = await _service.ProbeAllAsync(ct);
+            var results = await _service.ProbeAllAsync(
+                ct,
+                (done, total) => Avalonia.Threading.Dispatcher.UIThread.Post(
+                    () => ProgressText = $"已完成 {done}/共 {total} 项"));
+
+            if (ct.IsCancellationRequested)
+            {
+                RestoreSnapshot(snapshot, snapshotOverall, snapshotTime, snapshotCanCopy);
+                return;
+            }
+
             Items.Clear();
             foreach (var item in results)
             {
@@ -105,6 +132,11 @@ public partial class HealthCheckViewModel : ObservableObject
 
             CanCopy = true;
         }
+        catch (OperationCanceledException)
+        {
+            // 取消不是失败：回到取消前的状态，不写任何结果。
+            RestoreSnapshot(snapshot, snapshotOverall, snapshotTime, snapshotCanCopy);
+        }
         catch (Exception ex)
         {
             StatusMessage = $"检测失败：{ex.Message}";
@@ -113,8 +145,38 @@ public partial class HealthCheckViewModel : ObservableObject
         finally
         {
             IsRunning = false;
+            IsProgressVisible = false;
+            ProgressText = string.Empty;
+            _cts?.Dispose();
+            _cts = null;
         }
     }
+
+    private void RestoreSnapshot(
+        List<HealthCheckItem> snapshot, string overall, DateTime time, bool canCopy)
+    {
+        Items.Clear();
+        foreach (var item in snapshot)
+        {
+            Items.Add(item);
+        }
+        StatusMessage = "已取消检测：保留上一次结果";
+        OverallStatus = overall;
+        LastCheckTime = time;
+        CanCopy = canCopy;
+    }
+
+    private static HealthCheckItem CloneItem(HealthCheckItem source) => new()
+    {
+        Name = source.Name,
+        Host = source.Host,
+        ProbeUrl = source.ProbeUrl,
+        Description = source.Description,
+        LatencyMs = source.LatencyMs,
+        Status = source.Status,
+        LastCheckTime = source.LastCheckTime,
+        ErrorMessage = source.ErrorMessage
+    };
 
     /// <summary>
     /// 由 View 层设置的剪贴板设置委托。
@@ -180,12 +242,16 @@ public partial class HealthCheckViewModel : ObservableObject
         return sb.ToString();
     }
 
+    /// <summary>
+    /// 只请求取消；IsRunning 由正在执行的 RunCheck 在真正停止后复位，
+    /// 避免"按钮恢复可点但后台仍在探测/回写"。
+    /// </summary>
     [RelayCommand]
     private void Cancel()
     {
-        _cts?.Cancel();
-        StatusMessage = "已取消检测";
-        IsRunning = false;
+        if (_cts == null || !IsRunning) return;
+        _cts.Cancel();
+        StatusMessage = "正在取消：已停止发起新的站点请求…";
     }
 
     private void UpdateSummary()

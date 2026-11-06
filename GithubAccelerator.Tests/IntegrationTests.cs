@@ -72,7 +72,6 @@ public class IntegrationTests
     [Fact]
     public void WindowsHostsFileService_MultipleGithubBlocks_RemovesAllBlocks()
     {
-        var service = new WindowsHostsFileService();
         var contentWithMultipleBlocks = @"127.0.0.1 localhost
 # === GitHub Accelerator Start ===
 140.82.114.4 github.com
@@ -84,9 +83,7 @@ public class IntegrationTests
 10.0.0.1 minecraft
 ";
 
-        var method = typeof(WindowsHostsFileService).GetMethod("RemoveGithubHostsBlock",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static);
-        var result = (string)method!.Invoke(service, new object[] { contentWithMultipleBlocks })!;
+        var result = HostsContent.RemoveBlock(contentWithMultipleBlocks, separatorAdded: true).Content;
 
         Assert.DoesNotContain("github.com", result);
         Assert.DoesNotContain("gitlab.com", result);
@@ -197,7 +194,6 @@ public class IntegrationTests
     [Fact]
     public void WindowsHostsFileService_UnicodeInHosts_HandlesCorrectly()
     {
-        var service = new WindowsHostsFileService();
         var contentWithUnicode = @"127.0.0.1 localhost
 # === GitHub Accelerator Start ===
 140.82.114.4 github.com
@@ -205,9 +201,7 @@ public class IntegrationTests
 # 注释行
 ";
 
-        var method = typeof(WindowsHostsFileService).GetMethod("RemoveGithubHostsBlock",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static);
-        var result = (string)method!.Invoke(service, new object[] { contentWithUnicode })!;
+        var result = HostsContent.RemoveBlock(contentWithUnicode, separatorAdded: true).Content;
 
         Assert.Contains("localhost", result);
         Assert.DoesNotContain("github.com", result);

@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Security.Principal;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia.Controls;
@@ -14,6 +15,7 @@ using Avalonia.Styling;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GithubAccelerator.Core.Services;
+using GithubAccelerator.Models;
 using GithubAccelerator.Services;
 using GithubAccelerator.UI.Controls;
 using GithubAccelerator.UI.Services;
@@ -196,6 +198,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly GithubHostsService _hostsService;
     private readonly GithubConnectionService _connectionService;
     private readonly IHostsFileService _hostsFileService;
+    private readonly IHostsBackupService _backupService;
     private readonly IDnsFlusher _dnsFlusher;
     private readonly DownloadAccelerationService _downloadAccelerationService;
     private readonly SettingsViewModel _settings;
@@ -388,8 +391,108 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _appVersion = string.Empty;
 
-    [ObservableProperty]
-    private bool _isApplyingHosts;
+    private readonly AccelerationStateMachine _accelState = new();
+    private CancellationTokenSource? _applyCts;
+    private string? _applyIssue;
+    private ElevationResult? _lastElevationResult;
+
+    /// <summary>进行中（可取消）：由状态机派生，避免"按钮灰着但后台在跑"。</summary>
+    public bool IsApplyingHosts => _accelState.IsBusy;
+
+    /// <summary>唯一的可观测状态文案。</summary>
+    public string AccelerationStateText => _accelState.StateText;
+
+    public bool CanCancelApply => _accelState.CanCancel;
+
+    private void RaiseAccelerationStateChanged()
+    {
+        OnPropertyChanged(nameof(IsApplyingHosts));
+        OnPropertyChanged(nameof(AccelerationStateText));
+        OnPropertyChanged(nameof(CanCancelApply));
+        ApplyHostsCommand.NotifyCanExecuteChanged();
+        ClearAppliedHostsCommand.NotifyCanExecuteChanged();
+        RunSpeedTestCommand.NotifyCanExecuteChanged();
+        CancelApplyCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>进入进行中；已在运行时返回 false，保证同一时刻只有一个流程。</summary>
+    private bool BeginAcceleration()
+    {
+        if (_accelState.State == AccelerationState.WaitingForElevation)
+        {
+            StatusMessage = "正在等待提权确认，请先处理 UAC 提示";
+            return false;
+        }
+
+        if (!_accelState.Begin())
+        {
+            StatusMessage = "已有加速任务在执行中";
+            return false;
+        }
+
+        _applyCts?.Dispose();
+        _applyCts = new CancellationTokenSource();
+        _applyIssue = null;
+        AccelerationProgressText = "已完成 0 项，准备开始…";
+        HasAllSourcesFailure = false;
+        AllSourcesFailureText = string.Empty;
+        RaiseAccelerationStateChanged();
+        StatusMessage = "开始加速…";
+        return true;
+    }
+
+    /// <summary>结束进行中：按 Hosts 实际是否写入决定"已加速/部分失败/回到原状态"。</summary>
+    private void FinishAcceleration()
+    {
+        if (!_accelState.IsBusy) return;
+
+        if (IsHostsApplied)
+        {
+            var issue = _applyIssue;
+            if (string.IsNullOrEmpty(issue)) _accelState.Complete();
+            else _accelState.CompleteWithIssues(issue);
+        }
+        else
+        {
+            _accelState.FailedBeforeWrite(_applyIssue);
+        }
+
+        _applyIssue = null;
+        _applyCts?.Dispose();
+        _applyCts = null;
+        AccelerationProgressText = string.Empty;
+        RaiseAccelerationStateChanged();
+    }
+
+    private bool IsCancelRequested => _applyCts?.IsCancellationRequested == true;
+
+    /// <summary>设置确定进度：只报已完成的项数，不猜百分比。</summary>
+    private void SetAccelerationProgress(int done, int total, string phase)
+    {
+        AccelerationProgressText = $"已完成 {done}/共 {total} 项（{phase}）";
+    }
+
+    /// <summary>取消当前进行中的任务：不会写入 Hosts，回到上一个稳定状态。</summary>
+    [RelayCommand(CanExecute = nameof(CanCancelApply))]
+    private void CancelApply()
+    {
+        if (!_accelState.IsBusy) return;
+        _applyCts?.Cancel();
+        StatusMessage = "正在取消（不会写入 Hosts）…";
+        Log.Information("[State] 用户请求取消加速");
+    }
+
+    private void AbortIfCanceled()
+    {
+        if (!IsCancelRequested) return;
+
+        _accelState.Cancel();
+        _applyIssue = null;
+        AccelerationProgressText = string.Empty;
+        RaiseAccelerationStateChanged();
+        StatusMessage = "已取消：Hosts 未被修改";
+        Log.Information("[State] 加速已取消，Hosts 未修改");
+    }
 
     public ObservableCollection<SourceStatusViewModel> FilteredSources { get; } = new();
 
@@ -403,6 +506,100 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private string _latestNotification = string.Empty;
+
+    /// <summary>失败自救提示：一句人话原因 + 一个按钮；成功或用户关闭后清空。</summary>
+    [ObservableProperty]
+    private FailureAdvice? _failureAdvice;
+
+    /// <summary>进行中任务的确定进度：已完成 X/共 N 项（不编造百分比）。</summary>
+    [ObservableProperty]
+    private string _accelerationProgressText = string.Empty;
+
+    /// <summary>全部数据源失败详情：检测时间 + 每个源的原因 + 直连动作。</summary>
+    [ObservableProperty]
+    private bool _hasAllSourcesFailure = false;
+
+    [ObservableProperty]
+    private string _allSourcesFailureText = string.Empty;
+
+    public bool HasFailureAdvice => FailureAdvice != null;
+    public string FailureCauseText => FailureAdvice?.Cause ?? string.Empty;
+    public string FailureActionText => FailureAdvice?.ActionText ?? string.Empty;
+
+    partial void OnFailureAdviceChanged(FailureAdvice? value)
+    {
+        OnPropertyChanged(nameof(HasFailureAdvice));
+        OnPropertyChanged(nameof(FailureCauseText));
+        OnPropertyChanged(nameof(FailureActionText));
+    }
+
+    private void ShowFailureAdvice(FailureKind kind)
+    {
+        FailureAdvice = FailureAdvisor.Get(kind);
+    }
+
+    [RelayCommand]
+    private void DismissFailureAdvice()
+    {
+        FailureAdvice = null;
+    }
+
+    /// <summary>
+    /// 一键改用原始链接：已应用加速时移除本程序的 Hosts 块；未应用时说明当前已是直连。
+    /// 不猜测、不假装"仍在加速"。
+    /// </summary>
+    [RelayCommand]
+    private async Task UseDirectConnection()
+    {
+        if (!IsHostsApplied)
+        {
+            StatusMessage = "当前未应用加速，已经是原始链接直连，无需改动";
+            HasAllSourcesFailure = false;
+            AllSourcesFailureText = string.Empty;
+            return;
+        }
+
+        await ClearAppliedHosts();
+        HasAllSourcesFailure = false;
+        AllSourcesFailureText = string.Empty;
+        StatusMessage = "已改用原始链接（已移除本程序的 Hosts 加速块）";
+    }
+
+    [RelayCommand]
+    private void DismissAllSourcesFailure()
+    {
+        HasAllSourcesFailure = false;
+        AllSourcesFailureText = string.Empty;
+    }
+
+    /// <summary>执行失败提示里的那一个按钮，不额外弹窗、不扩大操作范围。</summary>
+    [RelayCommand]
+    private async Task RunFailureAdviceAction()
+    {
+        var advice = FailureAdvice;
+        if (advice == null) return;
+        FailureAdvice = null;
+
+        switch (advice.Kind)
+        {
+            case FailureKind.ElevationDenied:
+            case FailureKind.HostsWriteDenied:
+                await RequestElevationAsync(LaunchIntent.ApplyHosts);
+                break;
+            case FailureKind.AllMirrorsUnreachable:
+                await UseDirectConnection();
+                break;
+            case FailureKind.NoNetwork:
+                await TestGitHubConnectionAsync(showNotification: true);
+                break;
+            case FailureKind.HostsRewrittenByThirdParty:
+                await ViewHostsContent();
+                break;
+            case FailureKind.GitConfigConflict:
+                ShowSettings();
+                break;
+        }
+    }
 
     public bool HasSelectedSources => Sources.Any(s => s.IsSelected);
 
@@ -433,6 +630,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public bool MinimizeToTray => _settings.MinimizeToTray;
 
+    /// <summary>主窗口读取托盘类设置的入口，保证"改了立即生效"。</summary>
+    internal SettingsViewModel Settings => _settings;
+
     public MainWindowViewModel()
     {
         Log.Information("MainWindowViewModel 初始化开始");
@@ -452,6 +652,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _hostsService = new GithubHostsService();
         _connectionService = new GithubConnectionService();
         _hostsFileService = new WindowsHostsFileService();
+        _backupService = new HostsBackupService(_hostsFileService);
         _dnsFlusher = PlatformServiceFactory.CreateDnsFlusher();
         _downloadAccelerationService = new DownloadAccelerationService();
 
@@ -474,11 +675,18 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _performanceMonitor.StartMonitoring();
         IsMonitoring = true;
 
-        // 启动定时更新（合并原 _updateTimer 和 _autoUpdateTimer：间隔取 TestInterval 与 60 秒的较小值）
-        var updateInterval = Math.Min(60, _settings.TestInterval) * 1000;
+        // 定时更新间隔直接取设置值（界面下限为 30 秒）；改设置后立即重设间隔。
+        var updateInterval = Math.Max(30, _settings.TestInterval) * 1000;
         _updateTimer = new System.Timers.Timer(updateInterval);
         _updateTimer.Elapsed += async (s, e) => await AutoUpdateAsync();
         _updateTimer.Start();
+        _settings.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(SettingsViewModel.TestInterval) && _updateTimer != null)
+            {
+                _updateTimer.Interval = Math.Max(30, _settings.TestInterval) * 1000;
+            }
+        };
 
         // 启动 GitHub 连通性定时检查（10 分钟一次）
         _githubConnectivityTimer = new System.Timers.Timer(600000);
@@ -500,8 +708,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         IsDarkMode = ThemeManager.IsDarkMode;
 
-        // 首次启动时自动显示快速指南
-        _ = ShowQuickGuideOnFirstLaunchAsync();
+        // 首次启动时显示单页引导（双击 + 一次点击即可用）
+        _ = ShowFirstRunGuideOnFirstLaunchAsync();
 
         // 启动时检查是否需要自动应用Hosts
         if (_settings.AutoApplyHosts)
@@ -832,53 +1040,114 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         try
         {
-            var window = App.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
-                ? desktop.MainWindow
-                : null;
-
-            if (window == null) return;
-
-            var dontShowAgain = await QuickGuideWindow.ShowAsync(window);
-            if (dontShowAgain)
-            {
-                _settings.ShowQuickGuideOnStartup = false;
-                SaveSettings();
-            }
+            await ShowFirstRunGuideAsync();
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "显示快速指南失败");
+            Log.Error(ex, "显示使用指南失败");
         }
     }
 
     /// <summary>
-    /// 首次启动时自动显示快速指南（延迟3秒，等UI加载完成）
+    /// 首次启动时自动显示单页引导（延迟 3 秒，等 UI 加载完成）。
+    /// 只在从未完成过引导时出现；跳过也算完成，之后可从左侧「使用指南」重新进入。
     /// </summary>
-    private async Task ShowQuickGuideOnFirstLaunchAsync()
+    private async Task ShowFirstRunGuideOnFirstLaunchAsync()
     {
+        if (_settings.HasCompletedFirstRunGuide) return;
         if (!_settings.ShowQuickGuideOnStartup) return;
 
         await Task.Delay(3000); // 等 UI 加载完成
 
         try
         {
-            var window = App.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
-                ? desktop.MainWindow
-                : null;
-
-            if (window == null) return;
-
-            var dontShowAgain = await QuickGuideWindow.ShowAsync(window);
-            if (dontShowAgain)
-            {
-                _settings.ShowQuickGuideOnStartup = false;
-                SaveSettings();
-            }
+            await ShowFirstRunGuideAsync();
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "首次启动显示快速指南失败");
+            Log.Error(ex, "首次启动显示引导失败");
         }
+        finally
+        {
+            // 关闭后清理提权结果，避免影响后续判断
+            _lastElevationResult = null;
+        }
+    }
+
+    /// <summary>
+    /// 打开首启引导并记录"已完成"。Started/Skipped 才写入设置；失败则下次启动仍会显示。
+    /// </summary>
+    private async Task ShowFirstRunGuideAsync()
+    {
+        var window = App.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+            ? desktop.MainWindow
+            : null;
+
+        if (window == null) return;
+
+        var viewModel = new FirstRunGuideViewModel(
+            ProbeFirstRunNetworkAsync,
+            StartAccelerationFromGuideAsync,
+            SaveFirstRunGuideOptions);
+
+        // 打开即检测一次网络，用户不用再点第二次
+        _ = viewModel.CheckNetworkAsync();
+
+        var result = await FirstRunGuideWindow.ShowAsync(window, viewModel);
+        if (result is FirstRunGuideResult.Started or FirstRunGuideResult.Skipped)
+        {
+            _settings.HasCompletedFirstRunGuide = true;
+            SaveSettings();
+        }
+    }
+
+    /// <summary>首启网络检测：只做可读结论，不把状态码暴露给用户。</summary>
+    private async Task<FirstRunNetworkResult> ProbeFirstRunNetworkAsync()
+    {
+        try
+        {
+            var (latency, _, success) = await _connectionService.TestGitHubLatencyAsync();
+            return success
+                ? new FirstRunNetworkResult(true, latency)
+                : new FirstRunNetworkResult(false, 0);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "首启网络检测失败");
+            return new FirstRunNetworkResult(false, 0);
+        }
+    }
+
+    /// <summary>引导里点击"开始加速"：复用既有写入流程，把结果翻译成引导可展示的原因。</summary>
+    private async Task<FirstRunStartResult> StartAccelerationFromGuideAsync()
+    {
+        _lastElevationResult = null;
+        _applyIssue = null;
+
+        await ApplyHosts();
+
+        if (_lastElevationResult == ElevationResult.Started)
+            return new FirstRunStartResult(FirstRunStartKind.Success);
+        if (_lastElevationResult == ElevationResult.Cancelled)
+            return new FirstRunStartResult(FirstRunStartKind.ElevationDenied);
+        if (_lastElevationResult == ElevationResult.Failed)
+            return new FirstRunStartResult(FirstRunStartKind.WriteFailed, ElevationService.LastError);
+
+        if (IsHostsApplied) return new FirstRunStartResult(FirstRunStartKind.Success);
+        if (_applyIssue == "所有数据源均不可用")
+            return new FirstRunStartResult(FirstRunStartKind.MirrorUnavailable, _applyIssue);
+        if (!string.IsNullOrEmpty(_applyIssue))
+            return new FirstRunStartResult(FirstRunStartKind.WriteFailed, _applyIssue);
+
+        return new FirstRunStartResult(FirstRunStartKind.Incomplete, StatusMessage);
+    }
+
+    /// <summary>引导里的两个勾选项（默认都关闭）落到设置里，并立即生效。</summary>
+    private void SaveFirstRunGuideOptions(bool autoStart, bool diagnosticsEnabled)
+    {
+        _settings.AutoStart = autoStart;
+        _settings.DiagnosticsEnabled = diagnosticsEnabled;
+        SaveSettings();
     }
 
     private void SaveSettings()
@@ -956,16 +1225,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     // ===== CanExecute 约束：高代价命令在执行期间禁用，避免重复触发 =====
 
-    private bool CanApplyHosts() => !IsApplyingHosts && IsAdmin;
+    private bool CanApplyHosts() => !IsApplyingHosts;
     private bool CanRunSpeedTest() => !IsApplyingHosts;
     private bool CanRefreshSources() => !IsLoading;
-    private bool CanClearHosts() => IsHostsApplied && IsAdmin;
-
-    partial void OnIsApplyingHostsChanged(bool value)
-    {
-        ApplyHostsCommand.NotifyCanExecuteChanged();
-        RunSpeedTestCommand.NotifyCanExecuteChanged();
-    }
+    private bool CanClearHosts() => IsHostsApplied && !IsApplyingHosts;
 
     partial void OnIsAdminChanged(bool value)
     {
@@ -975,49 +1238,94 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     partial void OnIsLoadingChanged(bool value) => RefreshSourcesCommand.NotifyCanExecuteChanged();
 
-    partial void OnIsHostsAppliedChanged(bool value) => ClearAppliedHostsCommand.NotifyCanExecuteChanged();
+    partial void OnIsHostsAppliedChanged(bool value)
+    {
+        _accelState.SyncFromFile(value);
+        RaiseAccelerationStateChanged();
+    }
 
     [RelayCommand(CanExecute = nameof(CanClearHosts))]
     private async Task ClearAppliedHosts()
     {
+        // 写系统 Hosts 需要管理员权限：按需提权，提权后由新实例接续本操作
+        if (!IsAdmin)
+        {
+            _accelState.BeginElevation();
+            RaiseAccelerationStateChanged();
+            await RequestElevationAsync(LaunchIntent.ClearHosts);
+            return;
+        }
+
         try
         {
             var currentContent = await _hostsFileService.ReadHostsFileAsync();
-            const string startMarker = "# === GitHub Accelerator Start ===";
-            const string endMarker = "# === GitHub Accelerator End ===";
-            
-            if (currentContent.Contains(startMarker))
+            if (!_hostsFileService.IsGithubHostsApplied(currentContent))
             {
-                await _hostsFileService.BackupHostsFileAsync();
-                
-                var startIndex = currentContent.IndexOf(startMarker, StringComparison.Ordinal);
-                var endIndex = currentContent.IndexOf(endMarker, startIndex, StringComparison.Ordinal);
-                
-                if (endIndex >= 0)
-                {
-                    endIndex += endMarker.Length;
-                    var cleanedContent = currentContent.Substring(0, startIndex) + currentContent.Substring(endIndex);
-                    
-                    var hostsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "drivers", "etc", "hosts");
-                    await File.WriteAllTextAsync(hostsPath, cleanedContent.Trim());
-                    
-                    IsHostsApplied = false;
-                    CurrentHostsSource = string.Empty;
-                    StatusMessage = "已清除我们添加的 Hosts 内容";
-                    _historyService.Record(OperationType.HostsApplied, "清除 Hosts 成功", true);
-                    _notificationService.Success("Hosts 清除", "已成功清除我们添加的 Hosts 内容");
-                    return;
-                }
+                IsHostsApplied = false;
+                StatusMessage = "当前没有我们添加的内容";
+                _notificationService.Info("Hosts 清除", "当前没有我们添加的内容");
+                return;
             }
-            
-            StatusMessage = "没有找到需要清除的内容";
-            _notificationService.Info("Hosts 清除", "当前没有我们添加的内容");
+
+            // 只删除本项目标记块：块外内容（含用户手工修改）保持原样；
+            // 若块内容与上次写入不一致，服务会返回"可能被手动修改"的说明。
+            var beforeModified = _hostsFileService.IsBlockModified(currentContent);
+            var success = await _hostsFileService.RestoreOriginalHostsAsync();
+
+            if (success)
+            {
+                IsHostsApplied = false;
+                CurrentHostsSource = string.Empty;
+                StatusMessage = beforeModified
+                    ? "已移除加速块（该块内容与上次写入不一致，可能被手动修改过；块外内容未改动）"
+                    : "已清除我们添加的 Hosts 内容";
+                _historyService.Record(OperationType.HostsApplied, "清除 Hosts 成功", true);
+                _notificationService.Success("Hosts 清除",
+                    beforeModified
+                        ? "已移除加速块。检测到块内容与上次写入不同，可能是手动修改过；块外内容保持原样。"
+                        : "已成功清除我们添加的 Hosts 内容");
+                return;
+            }
+
+            StatusMessage = "清除失败：Hosts 文件未能原子替换，原文件保持不变";
+            _notificationService.Error("Hosts 清除", StatusMessage);
         }
         catch (Exception ex)
         {
             StatusMessage = $"清除失败：{ex.Message}";
             _notificationService.Error("Hosts 清除", $"清除失败：{ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// 加速写入的统一入口：首次写入前保存"首启前完整快照"，供高级恢复使用。
+    /// </summary>
+    private async Task<bool> ApplyAcceleratedHostsAsync(string hostsContent)
+    {
+        try
+        {
+            await _backupService.EnsureFirstRunSnapshotAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "创建首启前 Hosts 快照失败，继续应用加速");
+        }
+
+        // 写入前识别"我们那段被第三方软件改过"的情况，给用户一个可执行的查看入口。
+        try
+        {
+            var current = await _hostsFileService.ReadHostsFileAsync();
+            if (_hostsFileService.IsGithubHostsApplied(current) && _hostsFileService.IsBlockModified(current))
+            {
+                ShowFailureAdvice(FailureKind.HostsRewrittenByThirdParty);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "写入前检查 Hosts 标记块失败");
+        }
+
+        return await _hostsFileService.ApplyGithubHostsAsync(hostsContent);
     }
 
     [RelayCommand]
@@ -1092,6 +1400,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     {
                         StatusMessage = "⚠️ GitHub 无法访问！请检查网络或使用代理";
                         _notificationService.Warning("GitHub 连接", "无法访问 GitHub，TCP 端口可能被封锁");
+                        ShowFailureAdvice(FailureKind.NoNetwork);
                     }
                 }
             });
@@ -1126,7 +1435,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         var hostsWasApplied = IsHostsApplied;
         string? originalHostsBlock = null;
         string? originalHostsContent = null;
-        var hostsPath = GetHostsPath();
 
         try
         {
@@ -1139,8 +1447,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             // 1. 测量"应用前"：如果我们的 hosts 已应用，先临时移除，测真实无加速状态
             if (hostsWasApplied && !string.IsNullOrEmpty(originalHostsBlock))
             {
-                var cleaned = RemoveGithubHostsBlock(originalHostsContent);
-                await File.WriteAllTextAsync(hostsPath, cleaned);
+                if (!await _hostsFileService.RestoreOriginalHostsAsync())
+                {
+                    StatusMessage = "测速中止：无法临时移除 Hosts 加速块（原文件保持不变）";
+                    return;
+                }
                 await _dnsFlusher.FlushDnsCacheAsync();
                 await Task.Delay(600);
                 IsHostsApplied = false;
@@ -1152,10 +1463,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             // 2. 测量"应用后"：恢复或应用 hosts
             if (hostsWasApplied && !string.IsNullOrEmpty(originalHostsBlock))
             {
-                var cleaned = await _hostsFileService.ReadHostsFileAsync();
-                var restored = RemoveGithubHostsBlock(cleaned);
-                restored = (restored + "\n" + originalHostsBlock).Trim() + "\n";
-                await File.WriteAllTextAsync(hostsPath, restored);
+                if (!await _hostsFileService.ApplyGithubHostsAsync(originalHostsBlock))
+                {
+                    StatusMessage = "测速完成，但恢复加速块失败：请重新点击加速";
+                }
                 IsHostsApplied = true;
             }
             else
@@ -1214,12 +1525,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             PostApplyLatency = "-- ms";
             LatencyImprovement = "--";
 
-            // 出现异常时尝试恢复原始 hosts
+            // 出现异常时尝试恢复原始 hosts（整体还原，不走标记块路径）
             if (!string.IsNullOrEmpty(originalHostsContent))
             {
                 try
                 {
-                    await File.WriteAllTextAsync(hostsPath, originalHostsContent);
+                    await _hostsFileService.ReplaceHostsFileAsync(originalHostsContent);
                     IsHostsApplied = _hostsFileService.IsGithubHostsApplied(originalHostsContent);
                 }
                 catch (Exception restoreEx)
@@ -1287,35 +1598,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _ => $"{ms / 1000.0:F1}s"
     };
 
-    private static string GetHostsPath()
-    {
-        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "drivers", "etc", "hosts");
-    }
-
-    private static string RemoveGithubHostsBlock(string content)
-    {
-        const string startMarker = "# === GitHub Accelerator Start ===";
-        const string endMarker = "# === GitHub Accelerator End ===";
-
-        var startIndex = content.IndexOf(startMarker, StringComparison.Ordinal);
-        while (startIndex >= 0)
-        {
-            var endIndex = content.IndexOf(endMarker, startIndex, StringComparison.Ordinal);
-            if (endIndex < 0)
-            {
-                content = content.Substring(0, startIndex);
-                break;
-            }
-
-            content = content.Substring(0, startIndex) + content.Substring(endIndex + endMarker.Length);
-            startIndex = content.IndexOf(startMarker, StringComparison.Ordinal);
-        }
-
-        content = System.Text.RegularExpressions.Regex.Replace(content, @"^\s*[\r\n]+", "", System.Text.RegularExpressions.RegexOptions.Multiline);
-        content = content.TrimStart('\r', '\n');
-        return content.Trim();
-    }
-
     private async Task ApplyBestHostsForSpeedTestAsync()
     {
         // 测速时也使用多源智能合并 + IP优选
@@ -1325,6 +1607,17 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanApplyHosts))]
     private async Task ApplyHosts()
     {
+        // 写系统 Hosts 需要管理员权限：按需提权，提权后由新实例接续本操作
+        if (!IsAdmin)
+        {
+            _accelState.BeginElevation();
+            RaiseAccelerationStateChanged();
+            await RequestElevationAsync(LaunchIntent.ApplyHosts);
+            return;
+        }
+
+        if (!BeginAcceleration()) return;
+
         try
         {
             await ApplyHostsFromAllSources();
@@ -1335,6 +1628,92 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             _historyService.Record(OperationType.HostsApplied, $"应用 Hosts 异常：{ex.Message}", false, ex.StackTrace);
             _notificationService.Error("Hosts 应用", $"应用失败：{ex.Message}");
         }
+        finally
+        {
+            FinishAcceleration();
+        }
+    }
+
+    /// <summary>
+    /// 需要管理员权限时按需提权：以管理员身份重启自身，并带上原操作意图。
+    /// 用户取消 UAC 时保持当前进程可用，并明确告知系统 Hosts 未被修改。
+    /// </summary>
+    private Task RequestElevationAsync(LaunchIntent intent)
+    {
+        StatusMessage = "需要管理员权限写入系统 Hosts，正在请求提权…";
+        Log.Information("[Elevation] 按需提权，intent={Intent}", intent);
+
+        var result = ElevationService.RelaunchElevated(intent);
+        _lastElevationResult = result;
+        switch (result)
+        {
+            case ElevationResult.Started:
+                _accelState.EndElevation(true);
+                RaiseAccelerationStateChanged();
+                Log.Information("[Elevation] 已启动管理员实例，当前实例退出");
+                // 释放单实例互斥体，交给提权后的实例接续执行
+                if (Avalonia.Application.Current?.ApplicationLifetime
+                    is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+                {
+                    desktop.Shutdown();
+                }
+                else
+                {
+                    Environment.Exit(0);
+                }
+                break;
+
+            case ElevationResult.Cancelled:
+                _accelState.EndElevation(false);
+                RaiseAccelerationStateChanged();
+                StatusMessage = "已取消提权，系统 Hosts 未被修改";
+                Log.Information("[Elevation] 用户取消 UAC，未修改 Hosts");
+                _notificationService.Info("已取消提权",
+                    "Hosts 未被修改。可以稍后重试，或右键以管理员身份运行本应用。");
+                ShowFailureAdvice(FailureKind.ElevationDenied);
+                break;
+
+            default:
+                _accelState.EndElevation(false);
+                RaiseAccelerationStateChanged();
+                StatusMessage = $"提权失败：{ElevationService.LastError}";
+                Log.Warning("[Elevation] 提权失败：{Error}", ElevationService.LastError);
+                _notificationService.Error("提权失败",
+                    $"无法以管理员身份重启：{ElevationService.LastError}");
+                ShowFailureAdvice(FailureKind.ElevationDenied);
+                break;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 提权重启后接续用户上次未完成的操作（由主窗口打开时调用）。
+    /// </summary>
+    public async Task RunPendingLaunchIntentAsync()
+    {
+        var intent = LaunchContext.ConsumeIntent();
+        if (intent == LaunchIntent.None) return;
+
+        if (!IsAdmin)
+        {
+            Log.Warning("[Elevation] 接续意图 {Intent} 失败：仍未获得管理员权限", intent);
+            _notificationService.Info("未获得管理员权限", "Hosts 未被修改，请稍后重试。");
+            return;
+        }
+
+        StatusMessage = "已获得管理员权限，正在继续上次操作…";
+        Log.Information("[Elevation] 接续提权前的操作：{Intent}", intent);
+
+        switch (intent)
+        {
+            case LaunchIntent.ApplyHosts:
+                await ApplyHosts();
+                break;
+            case LaunchIntent.ClearHosts:
+                await ClearAppliedHosts();
+                break;
+        }
     }
 
     /// <summary>
@@ -1343,13 +1722,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// </summary>
     private async Task ApplyHostsFromAllSources()
     {
-        if (IsApplyingHosts) return;
-        IsApplyingHosts = true;
-
         using var _trace = StardustMonitorService.Instance.BeginTrace("ApplyHosts", "AllSources");
 
         StatusMessage = "正在从全部数据源拉取 Hosts（并行）...";
         XTrace.WriteLine("[ApplyHosts/All] 开始从全部源拉取 Hosts");
+        var totalSteps = _settings.AutoFlushDns ? 5 : 4;
+        SetAccelerationProgress(0, totalSteps, "拉取数据源");
 
         // 1. 并行拉取所有源
         var sources = GithubHostsService.HostsSources;
@@ -1369,6 +1747,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         });
 
         var fetchResults = await Task.WhenAll(fetchTasks);
+
+        // 取消检查点：拉取完成后不再继续（不会写入 Hosts）
+        AbortIfCanceled();
+        if (!_accelState.IsBusy) return;
         var validContents = fetchResults
             .Where(r => !string.IsNullOrEmpty(r.Content))
             .Select(r => r.Content!)
@@ -1376,16 +1758,32 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         if (validContents.Count == 0)
         {
-            StatusMessage = "所有数据源均获取失败，请检查网络";
+            _applyIssue = "所有数据源均不可用";
+            StatusMessage = "所有数据源均获取失败，请检查网络或改用原始链接";
+            AllSourcesFailureText = AllSourcesFailureReport.Build(
+                DateTime.Now,
+                fetchResults.Select(r => (r.Name, r.Error)));
+            HasAllSourcesFailure = true;
             _notificationService.Error("Hosts 应用", "所有数据源均不可用");
+
+            // 已应用加速但全部源挂掉：不能继续显示"已加速"，改为"已加速但源不可用"。
+            if (IsHostsApplied)
+            {
+                _accelState.MarkSourceUnavailable("全部数据源不可达");
+                RaiseAccelerationStateChanged();
+            }
+
+            ShowFailureAdvice(FailureKind.AllMirrorsUnreachable);
             return;
         }
 
         XTrace.WriteLine($"[ApplyHosts/All] 成功拉取 {validContents.Count}/{sources.Length} 个源");
+        SetAccelerationProgress(1, totalSteps, $"拉取完成（{validContents.Count}/{sources.Length} 个源）");
         StatusMessage = $"已拉取 {validContents.Count} 个源，正在合并并优化 IP（实时探测中，请稍候）...";
 
         // 2. 合并所有 hosts 内容
         var mergedHosts = string.Join("\n", validContents);
+        SetAccelerationProgress(2, totalSteps, "合并完成");
         XTrace.WriteLine($"[ApplyHosts/All] 合并后内容长度={mergedHosts.Length}");
 
         // 3. IP 优化（DNS解析 + HTTPS探测 + 择优）
@@ -1401,11 +1799,17 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 StatusMessage = msg;
                 XTrace.WriteLine($"[ApplyHosts/Optimizer] {msg}");
             };
-            var optimizedContent = await optimizer.OptimizeAsync(mergedHosts);
+            var optimizedContent = await optimizer.OptimizeAsync(mergedHosts, _applyCts?.Token ?? default);
             XTrace.WriteLine($"[ApplyHosts/All] 优化完成，内容长度={optimizedContent.Length}");
+            SetAccelerationProgress(3, totalSteps, "IP 优选完成");
 
-            // 4. 写入 hosts 文件
-            var success = await _hostsFileService.ApplyGithubHostsAsync(optimizedContent);
+            // 取消检查点：优化完成后、写 Hosts 之前
+            AbortIfCanceled();
+            if (!_accelState.IsBusy) return;
+
+            // 4. 写入 hosts 文件（原子替换；取消只发生在写入前，不会留下半写状态）
+            var success = await ApplyAcceleratedHostsAsync(optimizedContent);
+            if (success) SetAccelerationProgress(4, totalSteps, "Hosts 写入完成");
 
             if (success)
             {
@@ -1420,6 +1824,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     if (_settings.AutoFlushDns)
                     {
                         await _dnsFlusher.FlushDnsCacheAsync();
+                        SetAccelerationProgress(totalSteps, totalSteps, "DNS 缓存已刷新");
                         StatusMessage = "Hosts 已成功应用（多源智能合并 + IP优选，DNS缓存已刷新）";
                     }
                     else
@@ -1430,6 +1835,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 catch (Exception ex)
                 {
                     Log.Warning(ex, "刷新DNS缓存失败");
+                    _applyIssue = "DNS 缓存刷新失败（Hosts 已写入，可手动 ipconfig /flushdns）";
                     StatusMessage = "Hosts 已成功应用（多源智能合并 + IP优选，建议手动刷新DNS缓存）";
                 }
 
@@ -1444,10 +1850,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             }
             else
             {
+                _applyIssue = "Hosts 写入失败（权限不足或文件被占用）";
                 StatusMessage = "Hosts 应用失败，请以管理员身份运行";
                 _historyService.Record(OperationType.HostsApplied, "应用 Hosts 失败：权限不足", false);
                 _notificationService.Error("Hosts 应用", "应用失败，请以管理员身份运行");
                 StardustMonitorService.Instance.ReportError("HostsApplyFailed", "权限不足或写入失败");
+                ShowFailureAdvice(FailureKind.HostsWriteDenied);
             }
         }
         catch (Exception ex)
@@ -1458,8 +1866,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             StardustMonitorService.Instance.ReportError("HostsOptimizeFailed", ex.Message, ex);
 
             // 优化失败，退化为直接应用合并后的原始内容
+            AbortIfCanceled();
+            if (!_accelState.IsBusy) return;
+
+            _applyIssue = "IP 优选未完成（已应用原始合并内容）";
             StatusMessage = "IP 优化失败，使用原始合并内容...";
-            var success = await _hostsFileService.ApplyGithubHostsAsync(mergedHosts);
+            var success = await ApplyAcceleratedHostsAsync(mergedHosts);
             if (success)
             {
                 IsHostsApplied = true;
@@ -1470,22 +1882,33 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 // 自动触发子域健康检查
                 _ = TriggerAutoHealthCheckAsync();
             }
-        }
-        finally
-        {
-            IsApplyingHosts = false;
+            else
+            {
+                _applyIssue = "Hosts 写入失败（权限不足或文件被占用）";
+                ShowFailureAdvice(FailureKind.HostsWriteDenied);
+            }
         }
     }
     
     private async Task ApplyHostsFromSource(string sourceName, string sourceUrl, string[]? mirrorUrls = null)
     {
+        if (!BeginAcceleration()) return;
+
         StatusMessage = $"正在从 {sourceName} 获取 Hosts...";
 
         using var _trace = StardustMonitorService.Instance.BeginTrace("ApplyHosts", sourceName);
 
+        var totalSteps = _settings.AutoFlushDns ? 4 : 3;
+        SetAccelerationProgress(0, totalSteps, $"拉取 {sourceName}");
+
         try
         {
             var (hostsContent, usedUrl, fetchError) = await FetchHostsContentAsync(sourceName, sourceUrl, mirrorUrls);
+
+            AbortIfCanceled();
+            if (!_accelState.IsBusy) return;
+
+            SetAccelerationProgress(1, totalSteps, "拉取完成");
 
             if (string.IsNullOrEmpty(hostsContent))
             {
@@ -1513,7 +1936,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                         StatusMessage = msg;
                         XTrace.WriteLine($"[ApplyHosts/Optimizer] {msg}");
                     };
-                    hostsContent = await optimizer.OptimizeAsync(hostsContent);
+                    hostsContent = await optimizer.OptimizeAsync(hostsContent, _applyCts?.Token ?? default);
+                    SetAccelerationProgress(2, totalSteps, "IP 优选完成");
                     XTrace.WriteLine($"[ApplyHosts] IP 优化完成，新内容长度={hostsContent.Length}");
                     StardustMonitorService.Instance.ReportInfo("HostsOptimized", $"source={sourceName}");
                 }
@@ -1524,6 +1948,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     Log.Warning(ex, "Hosts IP 优化失败，将使用原始内容");
                     StardustMonitorService.Instance.ReportError("HostsOptimizeFailed", ex.Message, ex);
                     // 优化失败不阻断，继续使用原始内容
+                    _applyIssue = "IP 优选未完成（已应用原始内容）";
                 }
             }
             else
@@ -1531,7 +1956,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 XTrace.WriteLine($"[ApplyHosts] 跳过 IP 优化（DNS 探测源），source={sourceName}");
             }
 
-            var success = await _hostsFileService.ApplyGithubHostsAsync(hostsContent);
+            AbortIfCanceled();
+            if (!_accelState.IsBusy) return;
+
+            var success = await ApplyAcceleratedHostsAsync(hostsContent);
+            if (success) SetAccelerationProgress(3, totalSteps, "Hosts 写入完成");
 
             if (success)
             {
@@ -1546,6 +1975,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     if (_settings.AutoFlushDns)
                     {
                         await _dnsFlusher.FlushDnsCacheAsync();
+                        SetAccelerationProgress(totalSteps, totalSteps, "DNS 缓存已刷新");
                         StatusMessage = $"Hosts 已成功应用，源：{sourceName}（DNS缓存已刷新）";
                     }
                     else
@@ -1556,6 +1986,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 catch (Exception ex)
                 {
                     Log.Warning(ex, "刷新DNS缓存失败");
+                    _applyIssue = "DNS 缓存刷新失败（Hosts 已写入）";
                     StatusMessage = $"Hosts 已成功应用，源：{sourceName}（建议手动刷新DNS缓存）";
                 }
 
@@ -1566,10 +1997,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             }
             else
             {
+                _applyIssue = "Hosts 写入失败（权限不足或文件被占用）";
                 StatusMessage = "Hosts 应用失败，请以管理员身份运行";
                 _historyService.Record(OperationType.HostsApplied, "应用 Hosts 失败：权限不足", false);
                 _notificationService.Error("Hosts 应用", "应用失败，请以管理员身份运行");
                 StardustMonitorService.Instance.ReportError("HostsApplyFailed", "权限不足或写入失败");
+                ShowFailureAdvice(FailureKind.HostsWriteDenied);
             }
         }
         catch (Exception ex)
@@ -1579,6 +2012,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             _historyService.Record(OperationType.HostsApplied, $"应用 Hosts 异常：{ex.Message}", false, ex.StackTrace);
             _statsService.RecordTimeout(sourceName, sourceUrl);
             _notificationService.Error("Hosts 应用", $"应用失败：{ex.Message}");
+        }
+        finally
+        {
+            FinishAcceleration();
         }
     }
 
@@ -1644,6 +2081,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
+        if (!BeginAcceleration()) return;
+
         try
         {
             var allHostsContent = new System.Text.StringBuilder();
@@ -1651,12 +2090,21 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             allHostsContent.AppendLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
             allHostsContent.AppendLine();
 
+            var totalSteps = selectedSources.Count + (_settings.AutoFlushDns ? 3 : 2);
+            var doneSteps = 0;
+            SetAccelerationProgress(0, totalSteps, "准备拉取数据源");
+
             foreach (var source in selectedSources)
             {
+                AbortIfCanceled();
+                if (!_accelState.IsBusy) return;
+
                 StatusMessage = $"正在从 {source.Name} 获取 Hosts...";
                 try
                 {
                     var (content, _, _) = await FetchHostsContentAsync(source.Name, source.Url, source.MirrorUrls);
+                    doneSteps++;
+                    SetAccelerationProgress(doneSteps, totalSteps, $"已拉取 {source.Name}");
 
                     if (!string.IsNullOrEmpty(content))
                     {
@@ -1687,15 +2135,22 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     StatusMessage = msg;
                     XTrace.WriteLine($"[ApplySel/Optimizer] {msg}");
                 };
-                mergedContent = await optimizer.OptimizeAsync(mergedContent);
+                mergedContent = await optimizer.OptimizeAsync(mergedContent, _applyCts?.Token ?? default);
+                SetAccelerationProgress(++doneSteps, totalSteps, "IP 优选完成");
             }
             catch (Exception ex)
             {
                 XTrace.WriteLine($"[ApplySel] 优化失败，使用原始内容：{ex.Message}");
+                _applyIssue = "IP 优选未完成（已应用原始内容）";
+                SetAccelerationProgress(++doneSteps, totalSteps, "IP 优选跳过");
             }
 
-            var success = await _hostsFileService.ApplyGithubHostsAsync(mergedContent);
-            
+            AbortIfCanceled();
+            if (!_accelState.IsBusy) return;
+
+            var success = await ApplyAcceleratedHostsAsync(mergedContent);
+            if (success) SetAccelerationProgress(++doneSteps, totalSteps, "Hosts 写入完成");
+
             if (success)
             {
                 IsHostsApplied = true;
@@ -1706,6 +2161,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     if (_settings.AutoFlushDns)
                     {
                         await _dnsFlusher.FlushDnsCacheAsync();
+                        SetAccelerationProgress(++doneSteps, totalSteps, "DNS 缓存已刷新");
                         StatusMessage = $"已成功应用 {selectedSources.Count} 个数据源（DNS缓存已刷新）";
                     }
                     else
@@ -1716,6 +2172,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 catch (Exception ex)
                 {
                     Log.Warning(ex, "刷新DNS缓存失败");
+                    _applyIssue = "DNS 缓存刷新失败（Hosts 已写入）";
                     StatusMessage = $"已成功应用 {selectedSources.Count} 个数据源（建议手动刷新DNS缓存）";
                 }
                 
@@ -1724,14 +2181,20 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             }
             else
             {
+                _applyIssue = "Hosts 写入失败（权限不足或文件被占用）";
                 StatusMessage = "Hosts 应用失败，请以管理员身份运行";
                 _notificationService.Error("Hosts 应用", "应用失败，请以管理员身份运行");
+                ShowFailureAdvice(FailureKind.HostsWriteDenied);
             }
         }
         catch (Exception ex)
         {
             StatusMessage = $"应用失败：{ex.Message}";
             _notificationService.Error("Hosts 应用", $"应用失败：{ex.Message}");
+        }
+        finally
+        {
+            FinishAcceleration();
         }
     }
 

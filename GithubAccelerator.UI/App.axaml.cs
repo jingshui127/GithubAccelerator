@@ -19,7 +19,9 @@ public partial class App : Application
 
         LogService.Instance.Initialize();
 
-        // 启动星尘监控，用于改进 APP（连接 http://47.113.219.65:6600）
+        // 诊断信息上报默认关闭，仅当用户在引导/设置页显式开启后才连接星尘监控
+        DiagnosticsSettings.Load();
+        StardustMonitorService.Instance.Enabled = DiagnosticsSettings.Enabled;
         StardustMonitorService.Instance.Initialize();
     }
 

@@ -25,9 +25,10 @@ public class AppSettingsData
     public bool AutoApplyHosts { get; set; }
     public bool AutoSwitchBestSource { get; set; }
     public bool MinimizeToTray { get; set; } = true;
-    public bool StartMinimized { get; set; }
     public bool AutoFlushDns { get; set; } = true;
     public bool ShowQuickGuideOnStartup { get; set; } = true;
+    public bool DiagnosticsEnabled { get; set; }
+    public bool HasCompletedFirstRunGuide { get; set; }
     public string LogLevel { get; set; } = "Information";
 }
 
@@ -55,7 +56,7 @@ public class DataExportImportService
             {
                 Version = "1.0",
                 ExportTime = DateTime.Now,
-                Groups = new List<HostsGroup>(HostsGroupService.Instance.Groups),
+                Groups = HostsGroupService.Instance.Snapshot(),
                 OperationHistory = new List<OperationRecord>(OperationHistoryService.Instance.Records),
                 Settings = settings != null ? new AppSettingsData
                 {
@@ -65,9 +66,10 @@ public class DataExportImportService
                     AutoApplyHosts = settings.AutoApplyHosts,
                     AutoSwitchBestSource = settings.AutoSwitchBestSource,
                     MinimizeToTray = settings.MinimizeToTray,
-                    StartMinimized = settings.StartMinimized,
                     AutoFlushDns = settings.AutoFlushDns,
                     ShowQuickGuideOnStartup = settings.ShowQuickGuideOnStartup,
+                    DiagnosticsEnabled = settings.DiagnosticsEnabled,
+                    HasCompletedFirstRunGuide = settings.HasCompletedFirstRunGuide,
                     LogLevel = settings.LogLevel
                 } : new AppSettingsData { IsDarkMode = ThemeManager.IsDarkMode }
             };
@@ -185,8 +187,7 @@ public class DataExportImportService
                     group.Id = Guid.NewGuid().ToString("N")[..8];
                     group.CreatedAt = DateTime.Now;
                     group.UpdatedAt = DateTime.Now;
-                    groupService.CreateGroup(group.Name, group.Description, group.Color);
-                    var newGroup = groupService.Groups[^1];
+                    var newGroup = groupService.CreateGroup(group.Name, group.Description, group.Color);
                     foreach (var entry in group.Entries)
                     {
                         groupService.AddEntry(newGroup.Id, new HostsEntry
@@ -212,9 +213,10 @@ public class DataExportImportService
                 settings.AutoApplyHosts = data.Settings.AutoApplyHosts;
                 settings.AutoSwitchBestSource = data.Settings.AutoSwitchBestSource;
                 settings.MinimizeToTray = data.Settings.MinimizeToTray;
-                settings.StartMinimized = data.Settings.StartMinimized;
                 settings.AutoFlushDns = data.Settings.AutoFlushDns;
                 settings.ShowQuickGuideOnStartup = data.Settings.ShowQuickGuideOnStartup;
+                settings.DiagnosticsEnabled = data.Settings.DiagnosticsEnabled;
+                settings.HasCompletedFirstRunGuide = data.Settings.HasCompletedFirstRunGuide;
                 settings.LogLevel = data.Settings.LogLevel;
                 
                 settings.Save();

@@ -1,0 +1,130 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:GithubAccelerator.UI.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="600"
+        x:Class="GithubAccelerator.UI.Views.FirstRunGuideWindow"
+        Title="开始使用"
+        Width="640" Height="600"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        CanResize="False"
+        Background="{DynamicResource BackgroundColor}"
+        x:DataType="vm:FirstRunGuideViewModel">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+        <!-- 标题 -->
+        <Border Grid.Row="0" Padding="28,22" Background="#0969DA">
+            <StackPanel Spacing="6">
+                <TextBlock Text="让 GitHub 快起来" FontSize="24" FontWeight="SemiBold" Foreground="White"/>
+                <TextBlock Text="把 GitHub 的部分访问路径换到更快的线路：git clone / 拉取、raw 文件、release 下载、公开仓库页面。这是部分路径加速，不是让 GitHub 全站都能打开。"
+                           FontSize="13" Foreground="#E6FFFFFF" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 内容 -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled" Padding="28,20">
+            <StackPanel Spacing="18">
+
+                <!-- 网络状态 -->
+                <Border CornerRadius="10" Padding="16"
+                        Background="{DynamicResource CardFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <TextBlock Grid.Column="0" Text="{Binding NetworkIcon}" FontSize="18"
+                                   VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <StackPanel Grid.Column="1" Spacing="4">
+                            <TextBlock Text="当前网络" FontSize="13" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding NetworkText}" FontSize="12" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"/>
+                        </StackPanel>
+                        <Button Grid.Column="2" Content="重新检测"
+                                Command="{Binding CheckNetworkCommand}"
+                                Padding="12,6" FontSize="12"
+                                VerticalAlignment="Center"
+                                IsEnabled="{Binding CanCheck}"/>
+                    </Grid>
+                </Border>
+
+                <!-- 失败提示（原因 + 下一步） -->
+                <Border CornerRadius="10" Padding="16"
+                        Background="#FDECEA" BorderBrush="#F5B7B1" BorderThickness="1"
+                        IsVisible="{Binding HasFailure}">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="⚠ 这次没有成功" FontSize="13" FontWeight="SemiBold" Foreground="#B03A2E"/>
+                        <TextBlock Text="{Binding FailureText}" FontSize="12" TextWrapping="Wrap" Foreground="#7B241C"/>
+                        <TextBlock Text="{Binding FailureActionText}" FontSize="12" TextWrapping="Wrap" Foreground="#7B241C"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- 边界说明：明确覆盖什么 / 不覆盖什么 -->
+                <Border CornerRadius="10" Padding="16"
+                        Background="{DynamicResource CardFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="这个工具能做什么、不能做什么" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="12"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="能做到：加速 git clone / fetch / pull、raw 文件、release 安装包下载、公开仓库页面（走第三方镜像站）。"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="12"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="不需要加速：api.github.com 接口、需要登录的操作（star / issue / 私有仓库）直连即可（实测可用）；页面里的脚本请求与容器镜像（ghcr.io）不在加速范围。工具不会把做不到的说成做到。"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="12"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="工具不会安装证书，也不会修改系统代理；开启 Git 加速只会改写 Git 的地址，随时可以停止。"/>
+                    </StackPanel>
+                </Border>
+                <StackPanel Spacing="10">
+                    <TextBlock Text="可选设置（默认关闭）" FontSize="13" FontWeight="SemiBold"/>
+
+                    <CheckBox IsChecked="{Binding AutoStart}" FontSize="13">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="开机自启" FontSize="13" FontWeight="SemiBold"/>
+                            <TextBlock Text="开机后在后台自动运行；随时可在「设置 → 启动设置」关闭。"
+                                       FontSize="11" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"/>
+                        </StackPanel>
+                    </CheckBox>
+
+                    <CheckBox IsChecked="{Binding DiagnosticsEnabled}" FontSize="13">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="匿名诊断信息" FontSize="13" FontWeight="SemiBold"/>
+                            <TextBlock Text="开启后会上报应用版本与运行指标，用于发现崩溃和卡顿；随时可在「设置 → 隐私与诊断」关闭。"
+                                       FontSize="11" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"/>
+                        </StackPanel>
+                    </CheckBox>
+                </StackPanel>
+
+                <!-- 权限说明 -->
+                <TextBlock Text="点击后会开始写入系统网络设置。若当前账号没有管理员权限，系统会弹出一次确认，允许即可；在你点击之前，不会修改任何系统文件。"
+                           FontSize="11" TextWrapping="Wrap"
+                           Foreground="{DynamicResource SecondaryTextBrush}"/>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- 底部操作 -->
+        <Border Grid.Row="2" Padding="28,16"
+                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <Button Grid.Column="0" Content="先跳过，稍后再说"
+                        Click="SkipButton_Click"
+                        Background="Transparent" BorderThickness="0" FontSize="12"
+                        Foreground="{DynamicResource SecondaryTextBrush}"
+                        Cursor="Hand" VerticalAlignment="Center"/>
+
+                <Button Grid.Column="2" Content="{Binding StartButtonText}"
+                        Command="{Binding StartCommand}"
+                        IsEnabled="{Binding CanStart}"
+                        Padding="40,12" FontSize="16" FontWeight="SemiBold"
+                        Background="#0969DA"
+                        Foreground="White" BorderThickness="0"
+                        CornerRadius="8" Cursor="Hand"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

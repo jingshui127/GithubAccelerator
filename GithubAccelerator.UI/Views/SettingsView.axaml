@@ -55,13 +55,6 @@
                                 </StackPanel>
                             </StackPanel>
 
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <ToggleSwitch IsChecked="{Binding StartMinimized}" HorizontalAlignment="Left"/>
-                                <StackPanel>
-                                    <TextBlock Text="启动时最小化" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="启动后自动最小化到托盘" FontSize="12" Classes="SecondaryText"/>
-                                </StackPanel>
-                            </StackPanel>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -111,41 +104,70 @@
                             BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                             BorderThickness="1">
                         <StackPanel Spacing="16">
-                            <Border IsVisible="{Binding !IsAdmin}"
-                                    Padding="12,8"
-                                    CornerRadius="6"
-                                    Background="#FFF3E0"
-                                    BorderBrush="#FF9800"
-                                    BorderThickness="1">
-                                <TextBlock Text="当前未以管理员身份运行，Git Proxy 设置/清除功能不可用。请右键以管理员身份运行本应用。"
-                                           FontSize="12"
-                                           Foreground="#E65100"
-                                           TextWrapping="Wrap"/>
-                            </Border>
                             <StackPanel>
-                                <TextBlock Text="当前 Git Proxy" FontSize="14" FontWeight="SemiBold"/>
-                                <TextBlock Text="{Binding GitProxyStatus}" FontSize="12" Classes="SecondaryText"/>
+                                <TextBlock Text="Git 加速状态" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding GitRewriteStatus}" FontSize="12" Classes="SecondaryText"
+                                           TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding GitRewriteAdvice}" FontSize="12"
+                                           Foreground="#E8A23D" TextWrapping="Wrap"
+                                           IsVisible="{Binding HasGitRewriteAdvice}"/>
+                                <TextBlock Text="{Binding GitRewriteProgressText}" FontSize="12" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource PrimaryColor}"
+                                           IsVisible="{Binding GitRewriteProgressText, Converter={StaticResource StringNotEmptyConverter}}"
+                                           ToolTip.Tip="确定进度：只报已完成项数，不猜百分比"/>
                             </StackPanel>
 
                             <StackPanel>
-                                <TextBlock Text="代理地址" FontSize="14" FontWeight="SemiBold"/>
-                                <TextBlock Text="设置 git 的 http/https 代理，加速 clone/push/pull" FontSize="12" Classes="SecondaryText"/>
-                                <TextBox Text="{Binding GitProxyUrl}"
+                                <TextBlock Text="镜像前缀" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock Text="用 url.&lt;镜像&gt;.insteadOf 改写 https://github.com/ 开头的地址，只影响 clone/fetch/pull；push 需要鉴权，仍直连 GitHub"
+                                           FontSize="12" Classes="SecondaryText" TextWrapping="Wrap"/>
+                                <TextBox Text="{Binding GitMirrorBaseUrl}"
                                          Margin="0,8,0,0"
                                          HorizontalAlignment="Stretch"/>
                             </StackPanel>
 
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button Content="设置代理" Command="{Binding SetGitProxyCommand}"
-                                        IsEnabled="{Binding IsAdmin}"
+                                <Button Content="开启 Git 加速" Command="{Binding EnableGitRewriteCommand}"
                                         Padding="16,6" FontSize="13"/>
-                                <Button Content="清除代理" Command="{Binding UnsetGitProxyCommand}"
-                                        IsEnabled="{Binding IsAdmin}"
+                                <Button Content="停止加速" Command="{Binding DisableGitRewriteCommand}"
                                         Padding="16,6" FontSize="13"/>
-                                <Button Content="使用推荐代理" Command="{Binding UseRecommendedGitProxyCommand}"
-                                        IsEnabled="{Binding IsAdmin}"
+                                <Button Content="使用推荐镜像" Command="{Binding UseRecommendedGitRewriteCommand}"
                                         Padding="16,6" FontSize="13"/>
                             </StackPanel>
+
+                            <Border Padding="12" CornerRadius="6"
+                                    Background="#FFF8E1" BorderBrush="#FFB74D" BorderThickness="1">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="加速范围（部分路径，不是全站）" FontSize="12" FontWeight="SemiBold" Foreground="#8D6E00"/>
+                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#6D5A00"
+                                               Text="覆盖：git clone/fetch/pull、raw.githubusercontent.com 文件、release 下载、公开仓库页面。不需要加速：api.github.com 接口与需要登录的操作（直连可用）；页面内脚本请求与 ghcr.io 容器镜像不在覆盖范围。镜像站不可用时工具会提示原因，不会假装已加速。"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Padding="12" CornerRadius="6"
+                                    Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                    BorderThickness="1">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="清理历史 Git Proxy 污染" FontSize="14" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding LegacyProxyStatus}" FontSize="12" Classes="SecondaryText"
+                                               TextWrapping="Wrap"/>
+                                    <ItemsControl ItemsSource="{Binding LegacyProxyEntryLines}"
+                                                  IsVisible="{Binding HasLegacyProxyEntries}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding}" FontSize="12" TextWrapping="Wrap"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <Button Content="清理以上条目" Command="{Binding CleanupLegacyGitProxyCommand}"
+                                            IsVisible="{Binding HasLegacyProxyEntries}"
+                                            Padding="16,6" FontSize="13"/>
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Text="容器与包拉取：ghcr.io 需在容器运行时侧配置可信镜像或代理；pkg.github.com 不是下载端点（GitHub Packages 私有包需 host 绑定的 token），无法自动加速。配置片段见 docs/Optimization_Plan_20261105.md 的 P1-2 小节。"
+                                       FontSize="12" Classes="SecondaryText" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -163,15 +185,7 @@
                                 <ToggleSwitch IsChecked="{Binding MinimizeToTray}" HorizontalAlignment="Left"/>
                                 <StackPanel>
                                     <TextBlock Text="最小化到托盘" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="最小化窗口时隐藏到系统托盘" FontSize="12" Classes="SecondaryText"/>
-                                </StackPanel>
-                            </StackPanel>
-
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <ToggleSwitch IsChecked="{Binding CloseToTray}" HorizontalAlignment="Left"/>
-                                <StackPanel>
-                                    <TextBlock Text="关闭到托盘" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="点击关闭按钮时隐藏到托盘而非退出程序" FontSize="12" Classes="SecondaryText"/>
+                                    <TextBlock Text="最小化窗口时隐藏到系统托盘（切换后立即生效）" FontSize="12" Classes="SecondaryText"/>
                                 </StackPanel>
                             </StackPanel>
 
@@ -182,6 +196,40 @@
                                     <TextBlock Text="Hosts 自动刷新或状态变化时显示托盘气泡提示" FontSize="12" Classes="SecondaryText"/>
                                 </StackPanel>
                             </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- 隐私与诊断 -->
+                <StackPanel Spacing="12">
+                    <TextBlock Text="隐私与诊断" FontSize="16" FontWeight="SemiBold"/>
+
+                    <Border Padding="16" CornerRadius="8"
+                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                            BorderThickness="1">
+                        <StackPanel Spacing="16">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <ToggleSwitch IsChecked="{Binding DiagnosticsEnabled}" HorizontalAlignment="Left"/>
+                                <StackPanel>
+                                    <TextBlock Text="诊断信息上报" FontSize="14" FontWeight="SemiBold"/>
+                                    <TextBlock Text="默认关闭。开启后会采集应用版本、CPU/内存/线程数与关键操作结果，发送到开发者自建的监控服务器（47.113.219.65:6600），用于发现崩溃和性能问题。关闭时不会发出任何上报请求，可随时在此关闭。"
+                                               FontSize="12" Classes="SecondaryText" TextWrapping="Wrap" MaxWidth="520"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- 故障排查：只生成本地诊断包，绝不自动上传 -->
+                            <Border BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                    BorderThickness="0,1,0,0" Padding="0,12,0,0">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="故障排查 · 诊断包" FontSize="14" FontWeight="SemiBold"/>
+                                    <TextBlock Text="收集日志、脱敏后的设置、本程序涉及的 Git 键、镜像健康结果、系统信息和自己的 Hosts 块。导出前先列出清单与被脱敏的字段；只保存到本地，不会自动上传或发送。"
+                                               FontSize="12" Classes="SecondaryText" TextWrapping="Wrap" MaxWidth="520"/>
+                                    <Button Content="生成诊断包（先预览）"
+                                            Command="{Binding OpenDiagnosticsBundleCommand}"
+                                            Padding="16,6" FontSize="13" HorizontalAlignment="Left"/>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </Border>
                 </StackPanel>

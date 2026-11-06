@@ -473,9 +473,15 @@ public static class Program
 
         try
         {
-            await _fileService.RestoreOriginalHostsAsync();
-            AnsiConsole.MarkupLine("\n[green]✓ Hosts 已恢复原始配置[/]");
-            return 0;
+            var success = await _fileService.RestoreOriginalHostsAsync();
+            if (success)
+            {
+                AnsiConsole.MarkupLine("\n[green]✓ 已移除本项目的加速块，Hosts 其余内容保持原样[/]");
+                return 0;
+            }
+
+            AnsiConsole.MarkupLine("\n[red]✗ 未移除：当前没有加速块，或 Hosts 文件无法写入[/]");
+            return 1;
         }
         catch (Exception ex)
         {

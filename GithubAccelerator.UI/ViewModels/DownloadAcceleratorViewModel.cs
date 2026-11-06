@@ -33,6 +33,16 @@ public partial class DownloadAcceleratorViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasResults;
 
+    /// <summary>必须常驻显示的定位说明：镜像是第三方页面，不是 github.com。</summary>
+    public string MirrorNotice => MirrorOpenPlanner.MirrorNotice;
+
+    /// <summary>源不可用或域名不支持时，显示"改用原始链接"回退区。</summary>
+    [ObservableProperty]
+    private bool _fallbackVisible;
+
+    [ObservableProperty]
+    private string _fallbackUrl = "";
+
     /// <summary>
     /// 转换后的镜像 URL 列表（用于 UI 绑定）
     /// </summary>
@@ -112,11 +122,20 @@ public partial class DownloadAcceleratorViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            // 在后台线程执行耗时转换，但 Result 赋值必须在 UI 线程
-            // （OnResultChanged 会更新 ObservableProperty，跨线程会触发 Avalonia 崩溃）
-            var result = await Task.Run(() => _mirrorService.ConvertUrl(InputUrl));
+            // 转换后按实测镜像健康度排序；探测本身是异步 IO，直接在后台等待，不阻塞 UI。
+            var result = await Task.Run(() => _mirrorService.ConvertUrlAsync(InputUrl));
             Result = result;
             HasResults = Result.HasResults;
+
+            if (Result.IsUnsupported)
+            {
+                FallbackVisible = true;
+                FallbackUrl = Result.OriginalUrl;
+                StatusMessage = Result.UnsupportedReason;
+                return;
+            }
+
+            FallbackVisible = false;
 
             if (HasResults)
             {
@@ -130,7 +149,10 @@ public partial class DownloadAcceleratorViewModel : ObservableObject
                 };
                 var typeName = Result.UrlType != GithubUrlType.Unknown && typeNames.ContainsKey(Result.UrlType)
                     ? typeNames[Result.UrlType] : "链接";
-                StatusMessage = $"检测到 {typeName}，已生成 {Result.MirrorUrls.Count + (Result.GitCloneCommands.Count > 0 ? 1 : 0) + (!string.IsNullOrEmpty(Result.JsDelivrUrl) ? 1 : 0)} 个加速方案";
+                var healthNote = string.IsNullOrWhiteSpace(Result.HealthMessage)
+                    ? string.Empty
+                    : $"；{Result.HealthMessage}";
+                StatusMessage = $"检测到 {typeName}，已生成 {Result.MirrorUrls.Count + (Result.GitCloneCommands.Count > 0 ? 1 : 0) + (!string.IsNullOrEmpty(Result.JsDelivrUrl) ? 1 : 0)} 个加速方案{healthNote}";
             }
             else
             {
@@ -182,6 +204,8 @@ public partial class DownloadAcceleratorViewModel : ObservableObject
         InputUrl = "";
         Result = null;
         HasResults = false;
+        FallbackVisible = false;
+        FallbackUrl = "";
         StatusMessage = "粘贴 GitHub 链接，一键生成加速链接";
     }
 
@@ -239,6 +263,67 @@ public partial class DownloadAcceleratorViewModel : ObservableObject
 
         var text = string.Join(Environment.NewLine, allLinks);
         await CopyToClipboardAsync(text);
+    }
+
+    /// <summary>
+    /// 打开镜像版页面：按实测健康度取最健康的镜像；全不可用时只给原因 + 原始链接回退，不硬开。
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenMirrorPageAsync()
+    {
+        if (string.IsNullOrWhiteSpace(InputUrl))
+        {
+            StatusMessage = "请先粘贴 GitHub 链接";
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            if (Result == null || !string.Equals(Result.OriginalUrl, InputUrl.Trim(), StringComparison.Ordinal))
+            {
+                await ConvertUrlAsync();
+            }
+
+            if (Result == null)
+            {
+                StatusMessage = "链接转换失败，无法打开镜像版页面";
+                return;
+            }
+
+            var plan = MirrorOpenPlanner.Plan(Result);
+            FallbackVisible = plan.OfferOriginalLink;
+            FallbackUrl = Result.OriginalUrl;
+
+            if (plan.CanOpen && plan.Url != null)
+            {
+                OpenInBrowser(plan.Url);
+                StatusMessage = plan.Message;
+            }
+            else
+            {
+                StatusMessage = plan.Message;
+            }
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>源不可用/域名不支持时，按用户明确动作打开原始链接（直连）。</summary>
+    [RelayCommand]
+    private void OpenOriginalLink()
+    {
+        var url = string.IsNullOrWhiteSpace(FallbackUrl) ? Result?.OriginalUrl ?? InputUrl : FallbackUrl;
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            StatusMessage = "没有可打开的原始链接";
+            return;
+        }
+
+        OpenInBrowser(url);
+        StatusMessage = "已尝试打开原始链接（未经镜像，能否打开取决于本机网络）";
     }
 
     /// <summary>

@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Security.Principal;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -24,7 +27,9 @@ public partial class SettingsViewModel : ObservableObject
         "settings.json");
 
     private readonly IStartupManager? _startupManager;
-    private readonly GitProxyService _gitProxyService = new();
+    private readonly GitUrlRewriteService _gitRewriteService = new();
+    private readonly ObservableCollection<string> _legacyProxyEntryLines = new();
+    private IReadOnlyList<LegacyGitProxyEntry> _legacyProxyEntries = Array.Empty<LegacyGitProxyEntry>();
     private bool _isLoading = false;
 
     public SettingsViewModel(IStartupManager? startupManager = null)
@@ -50,12 +55,12 @@ public partial class SettingsViewModel : ObservableObject
         public bool AutoApplyHosts { get; set; }
         public bool AutoSwitchBestSource { get; set; }
         public bool MinimizeToTray { get; set; } = true;
-        public bool CloseToTray { get; set; } = true;
-        public bool StartMinimized { get; set; }
         public bool ShowTrayNotifications { get; set; } = true;
         public bool AutoFlushDns { get; set; } = true;
         public bool ShowQuickGuideOnStartup { get; set; } = true;
-        public string GitProxyUrl { get; set; } = "https://ghproxy.net";
+        public bool DiagnosticsEnabled { get; set; }
+        public bool HasCompletedFirstRunGuide { get; set; }
+        public string? GitMirrorBaseUrl { get; set; }
         public string LogLevel { get; set; } = "Information";
     }
 
@@ -106,12 +111,6 @@ public partial class SettingsViewModel : ObservableObject
     private bool _minimizeToTray = true;
 
     [ObservableProperty]
-    private bool _closeToTray = true;
-
-    [ObservableProperty]
-    private bool _startMinimized = false;
-
-    [ObservableProperty]
     private bool _showTrayNotifications = true;
 
     [ObservableProperty]
@@ -120,11 +119,50 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _showQuickGuideOnStartup = true;
 
+    /// <summary>诊断信息上报（遥测），默认关闭；切换立即生效并落盘。</summary>
     [ObservableProperty]
-    private string _gitProxyUrl = "https://ghproxy.net";
+    private bool _diagnosticsEnabled = false;
+
+    partial void OnDiagnosticsEnabledChanged(bool value)
+    {
+        if (_isLoading) return;
+        DiagnosticsSettings.SetEnabled(value);
+        Save();
+    }
+
+    /// <summary>是否已完成首启引导，用于"只显示一次"。</summary>
+    [ObservableProperty]
+    private bool _hasCompletedFirstRunGuide = false;
 
     [ObservableProperty]
-    private string _gitProxyStatus = "检测中...";
+    private string _gitMirrorBaseUrl = GitUrlRewriteService.DefaultMirrorBaseUrl;
+
+    [ObservableProperty]
+    private string _gitRewriteStatus = "检测中...";
+
+    /// <summary>Git 改写项冲突时的人话提示（不覆盖用户已有配置）。</summary>
+    [ObservableProperty]
+    private string _gitRewriteAdvice = string.Empty;
+
+    /// <summary>写入/回滚 git 改写时的确定进度：已完成 X/共 N 项。</summary>
+    [ObservableProperty]
+    private string _gitRewriteProgressText = string.Empty;
+
+    public bool HasGitRewriteAdvice => !string.IsNullOrWhiteSpace(GitRewriteAdvice);
+
+    partial void OnGitRewriteAdviceChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasGitRewriteAdvice));
+    }
+
+    /// <summary>历史 http(s).proxy 条目，逐行展示给用户，清理前可核对。</summary>
+    public ObservableCollection<string> LegacyProxyEntryLines => _legacyProxyEntryLines;
+
+    [ObservableProperty]
+    private bool _hasLegacyProxyEntries;
+
+    [ObservableProperty]
+    private string _legacyProxyStatus = "正在检查历史配置...";
 
     [ObservableProperty]
     private bool _isAdmin;
@@ -160,12 +198,12 @@ public partial class SettingsViewModel : ObservableObject
                 AutoApplyHosts = AutoApplyHosts,
                 AutoSwitchBestSource = AutoSwitchBestSource,
                 MinimizeToTray = MinimizeToTray,
-                CloseToTray = CloseToTray,
-                StartMinimized = StartMinimized,
                 ShowTrayNotifications = ShowTrayNotifications,
                 AutoFlushDns = AutoFlushDns,
                 ShowQuickGuideOnStartup = ShowQuickGuideOnStartup,
-                GitProxyUrl = GitProxyUrl,
+                DiagnosticsEnabled = DiagnosticsEnabled,
+                HasCompletedFirstRunGuide = HasCompletedFirstRunGuide,
+                GitMirrorBaseUrl = GitMirrorBaseUrl,
                 LogLevel = LogLevel
             };
 
@@ -198,12 +236,14 @@ public partial class SettingsViewModel : ObservableObject
                     AutoApplyHosts = settings.AutoApplyHosts;
                     AutoSwitchBestSource = settings.AutoSwitchBestSource;
                     MinimizeToTray = settings.MinimizeToTray;
-                    CloseToTray = settings.CloseToTray;
-                    StartMinimized = settings.StartMinimized;
                     ShowTrayNotifications = settings.ShowTrayNotifications;
                     AutoFlushDns = settings.AutoFlushDns;
                     ShowQuickGuideOnStartup = settings.ShowQuickGuideOnStartup;
-                    GitProxyUrl = settings.GitProxyUrl;
+                    DiagnosticsEnabled = settings.DiagnosticsEnabled;
+                    HasCompletedFirstRunGuide = settings.HasCompletedFirstRunGuide;
+                    GitMirrorBaseUrl = string.IsNullOrWhiteSpace(settings.GitMirrorBaseUrl)
+                        ? GitUrlRewriteService.DefaultMirrorBaseUrl
+                        : settings.GitMirrorBaseUrl;
                     _logLevel = settings.LogLevel;
                     LogService.Instance.SetLogLevel(_logLevel);
                 }
@@ -217,7 +257,7 @@ public partial class SettingsViewModel : ObservableObject
         {
             _isLoading = false;
         }
-        _ = RefreshGitProxyStatus();
+        _ = RefreshGitRewriteStatus();
     }
 
     public static SettingsViewModel Create(IStartupManager? startupManager = null)
@@ -242,12 +282,12 @@ public partial class SettingsViewModel : ObservableObject
         AutoApplyHosts = false;
         AutoSwitchBestSource = false;
         MinimizeToTray = true;
-        CloseToTray = true;
-        StartMinimized = false;
         ShowTrayNotifications = true;
         AutoFlushDns = true;
         ShowQuickGuideOnStartup = true;
-        GitProxyUrl = "https://ghproxy.net";
+        DiagnosticsEnabled = false;
+        HasCompletedFirstRunGuide = false;
+        GitMirrorBaseUrl = GitUrlRewriteService.DefaultMirrorBaseUrl;
         LogLevel = "Information";
 
         Save();
@@ -317,112 +357,151 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task SetGitProxy()
+    private async Task EnableGitRewrite()
     {
         try
         {
-            if (!IsAdmin)
+            GitRewriteProgressText = "已完成 0 项，准备开始…";
+            // 写入用户目录下的 ~/.gitconfig，不需要管理员权限。
+            var result = await _gitRewriteService.EnableAsync(GitMirrorBaseUrl,
+                (done, total) => GitRewriteProgressText = $"已完成 {done}/共 {total} 项");
+            if (result.Success)
             {
-                ToastService.Instance.Error("需要管理员权限", "修改 Git 全局配置需要管理员权限，请右键以管理员身份运行本应用后再试");
-                return;
-            }
-
-            // 先检查 Git 可用性
-            var check = await _gitProxyService.CheckGitAvailabilityAsync();
-            if (!check.IsAvailable)
-            {
-                ToastService.Instance.Error("设置失败", check.ErrorMessage ?? "未找到 Git 安装，请先安装 Git");
-                GitProxyStatus = $"未检测到 Git: {check.ErrorMessage}";
-                return;
-            }
-
-            var success = await _gitProxyService.SetProxyAsync(GitProxyUrl);
-            if (success)
-            {
+                GitRewriteAdvice = string.Empty;
                 Save();
-                ToastService.Instance.Success("设置成功", $"Git Proxy 已设置为 {GitProxyUrl}");
-                await RefreshGitProxyStatus();
+                ToastService.Instance.Success("Git 加速已开启", result.Message);
             }
             else
             {
-                var error = _gitProxyService.LastError ?? "未知错误";
-                ToastService.Instance.Error("设置失败", error);
+                var advice = FailureAdvisor.Get(FailureKind.GitConfigConflict);
+                GitRewriteAdvice = advice.Cause + " " + advice.ActionText + "。";
+                ToastService.Instance.Error("未能开启 Git 加速", result.Message);
             }
+            await RefreshGitRewriteStatus();
         }
         catch (Exception ex)
         {
-            ToastService.Instance.Error("设置失败", ex.Message);
+            ToastService.Instance.Error("未能开启 Git 加速", ex.Message);
+            GitRewriteStatus = $"开启失败：{ex.Message}";
+        }
+        finally
+        {
+            GitRewriteProgressText = string.Empty;
         }
     }
 
     [RelayCommand]
-    private async Task UnsetGitProxy()
+    private async Task DisableGitRewrite()
     {
         try
         {
-            if (!IsAdmin)
+            GitRewriteProgressText = "已完成 0 项，准备开始…";
+            var result = await _gitRewriteService.DisableAsync(
+                (done, total) => GitRewriteProgressText = $"已完成 {done}/共 {total} 项");
+            if (result.Success)
             {
-                ToastService.Instance.Error("需要管理员权限", "修改 Git 全局配置需要管理员权限，请右键以管理员身份运行本应用后再试");
-                return;
-            }
-
-            var check = await _gitProxyService.CheckGitAvailabilityAsync();
-            if (!check.IsAvailable)
-            {
-                ToastService.Instance.Error("清除失败", check.ErrorMessage ?? "未找到 Git 安装");
-                return;
-            }
-
-            var success = await _gitProxyService.UnsetProxyAsync();
-            if (success)
-            {
-                Save();
-                ToastService.Instance.Success("清除成功", "Git Proxy 已清除");
-                await RefreshGitProxyStatus();
+                ToastService.Instance.Success("Git 加速已停止", result.Message);
             }
             else
             {
-                var error = _gitProxyService.LastError ?? "未知错误";
-                ToastService.Instance.Error("清除失败", error);
+                ToastService.Instance.Error("停止失败", result.Message);
             }
+            await RefreshGitRewriteStatus();
         }
         catch (Exception ex)
         {
-            ToastService.Instance.Error("清除失败", ex.Message);
+            ToastService.Instance.Error("停止失败", ex.Message);
+        }
+        finally
+        {
+            GitRewriteProgressText = string.Empty;
         }
     }
 
     [RelayCommand]
-    private async Task UseRecommendedGitProxy()
+    private async Task UseRecommendedGitRewrite()
     {
-        GitProxyUrl = "https://ghproxy.net";
-        await SetGitProxy();
+        GitMirrorBaseUrl = GitUrlRewriteService.DefaultMirrorBaseUrl;
+        await EnableGitRewrite();
     }
 
-    private async Task RefreshGitProxyStatus()
+    [RelayCommand]
+    private async Task CleanupLegacyGitProxy()
     {
+        var entries = _legacyProxyEntries;
+        if (entries.Count == 0)
+        {
+            ToastService.Instance.Success("无需清理", "没有发现本项目历史写入的 git proxy 条目");
+            return;
+        }
+
         try
         {
-            var check = await _gitProxyService.CheckGitAvailabilityAsync();
-            if (!check.IsAvailable)
+            // 清理前把将要删除的条目完整展示在界面列表中，此处只删除列表内的 key=value。
+            var result = await _gitRewriteService.CleanupLegacyProxyAsync(entries);
+            if (result.Success)
             {
-                GitProxyStatus = $"未检测到 Git: {check.ErrorMessage}";
-                return;
-            }
-
-            var proxy = await _gitProxyService.GetCurrentProxyAsync();
-            if (string.IsNullOrWhiteSpace(proxy))
-            {
-                GitProxyStatus = "未设置";
+                var detail = result.Removed.Count == 0
+                    ? result.Message
+                    : string.Join("；", result.Removed.Select(e => $"{e.Key}={e.Value}"));
+                ToastService.Instance.Success("历史配置已清理", detail);
             }
             else
             {
-                GitProxyStatus = proxy;
+                ToastService.Instance.Error("历史配置清理失败", result.Message);
             }
+            await InspectLegacyGitProxy();
         }
-        catch
+        catch (Exception ex)
         {
-            GitProxyStatus = "检测失败";
+            ToastService.Instance.Error("历史配置清理失败", ex.Message);
+        }
+    }
+
+    /// <summary>打开诊断包预览窗口：先生成清单，用户确认后才允许保存 zip。</summary>
+    [RelayCommand]
+    private void OpenDiagnosticsBundle()
+    {
+        var window = new Views.DiagnosticsPreviewWindow();
+        window.Show();
+    }
+
+    private async Task RefreshGitRewriteStatus()
+    {
+        try
+        {
+            var status = await _gitRewriteService.GetStatusAsync();
+            GitRewriteStatus = status.Message;
+        }
+        catch (Exception ex)
+        {
+            GitRewriteStatus = $"检测失败：{ex.Message}";
+        }
+        await InspectLegacyGitProxy();
+    }
+
+    private async Task InspectLegacyGitProxy()
+    {
+        try
+        {
+            var entries = await _gitRewriteService.InspectLegacyProxyAsync();
+            _legacyProxyEntries = entries;
+            LegacyProxyEntryLines.Clear();
+            foreach (var entry in entries)
+            {
+                LegacyProxyEntryLines.Add($"{entry.Key} = {entry.Value}    [{entry.Origin}]");
+            }
+            HasLegacyProxyEntries = entries.Count > 0;
+            LegacyProxyStatus = entries.Count == 0
+                ? "未发现本项目历史写入的 http(s).proxy 条目"
+                : $"发现 {entries.Count} 条疑似本项目历史写入，确认无误后可一键清理（只删除下列精确条目）";
+        }
+        catch (Exception ex)
+        {
+            _legacyProxyEntries = Array.Empty<LegacyGitProxyEntry>();
+            LegacyProxyEntryLines.Clear();
+            HasLegacyProxyEntries = false;
+            LegacyProxyStatus = $"历史配置检查失败：{ex.Message}";
         }
     }
 

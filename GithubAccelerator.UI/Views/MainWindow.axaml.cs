@@ -5,7 +5,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using GithubAccelerator.UI.Helpers;
 using GithubAccelerator.UI.ViewModels;
 using System;
-using System.IO;
+using System.Threading.Tasks;
 
 namespace GithubAccelerator.UI.Views;
 
@@ -13,6 +13,7 @@ public partial class MainWindow : Window
 {
     private TrayIconManager? _trayIconManager;
     private bool _minimizeToTray = true;
+    private bool _showTrayNotifications = true;
     private bool _isExiting = false;
 
     public MainWindow()
@@ -20,34 +21,26 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         PropertyChanged += MainWindow_PropertyChanged;
-
-        LoadMinimizeToTraySetting();
         InitializeTrayIcon();
     }
 
-    private void LoadMinimizeToTraySetting()
+    /// <summary>设置页改动后立即同步，不依赖重启。</summary>
+    private void BindTraySettings(SettingsViewModel settings)
     {
-        try
+        _minimizeToTray = settings.MinimizeToTray;
+        _showTrayNotifications = settings.ShowTrayNotifications;
+        settings.PropertyChanged += (_, e) =>
         {
-            var settingsPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "GithubAccelerator",
-                "settings.json");
-
-            if (File.Exists(settingsPath))
+            switch (e.PropertyName)
             {
-                var json = File.ReadAllText(settingsPath);
-                using var doc = System.Text.Json.JsonDocument.Parse(json);
-                if (doc.RootElement.TryGetProperty("MinimizeToTray", out var element))
-                {
-                    _minimizeToTray = element.GetBoolean();
-                }
+                case nameof(SettingsViewModel.MinimizeToTray):
+                    _minimizeToTray = settings.MinimizeToTray;
+                    break;
+                case nameof(SettingsViewModel.ShowTrayNotifications):
+                    _showTrayNotifications = settings.ShowTrayNotifications;
+                    break;
             }
-        }
-        catch
-        {
-            _minimizeToTray = true;
-        }
+        };
     }
 
     private void InitializeTrayIcon()
@@ -59,6 +52,19 @@ public partial class MainWindow : Window
         );
     }
 
+    protected override void OnOpened(EventArgs e)
+    {
+        base.OnOpened(e);
+
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            BindTraySettings(viewModel.Settings);
+
+            // 提权重启后接续用户上次未完成的操作
+            _ = viewModel.RunPendingLaunchIntentAsync();
+        }
+    }
+
     private void MainWindow_PropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
     {
         if (e.Property == WindowStateProperty)
@@ -67,7 +73,10 @@ public partial class MainWindow : Window
             {
                 this.Hide();
                 this.ShowInTaskbar = false;
-                _trayIconManager?.ShowBalloonTip("GitHub 加速器 Pro", "已最小化到系统托盘");
+                if (_showTrayNotifications)
+                {
+                    _trayIconManager?.ShowBalloonTip("GitHub 加速器 Pro", "已最小化到系统托盘");
+                }
             }
             else if (this.WindowState == WindowState.Normal)
             {

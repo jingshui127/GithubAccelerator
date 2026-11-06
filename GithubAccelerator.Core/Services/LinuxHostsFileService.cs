@@ -81,6 +81,22 @@ public class LinuxHostsFileService : IHostsFileService
         }
     }
 
+    public async Task<bool> ReplaceHostsFileAsync(string content)
+    {
+        try
+        {
+            await BackupHostsFileAsync();
+            await File.WriteAllTextAsync(HostsFilePath, content);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public bool IsBlockModified(string hostsContent) => false;
+
     public bool IsGithubHostsApplied(string hostsContent)
     {
         return hostsContent.Contains(GithubHostsStartMarker);

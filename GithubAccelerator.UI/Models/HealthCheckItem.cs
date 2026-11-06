@@ -41,24 +41,29 @@ public partial class HealthCheckItem : ObservableObject
     [ObservableProperty]
     private string _errorMessage = string.Empty;
 
-    public string LatencyText => LatencyMs switch
-    {
-        < 0 => Status == "TIMEOUT" ? "⏱ 超时" : "❌ 失败",
-        < 1000 => $"{LatencyMs} ms",
-        _ => $"{LatencyMs / 1000.0:F1} s"
-    };
+    public string LatencyText => IsCanceled
+        ? "已取消"
+        : LatencyMs switch
+        {
+            < 0 => Status == "TIMEOUT" ? "⏱ 超时" : "❌ 失败",
+            < 1000 => $"{LatencyMs} ms",
+            _ => $"{LatencyMs / 1000.0:F1} s"
+        };
 
     public bool IsOk => Status == "OK";
     public bool IsSlow => Status == "SLOW";
     public bool IsFail => Status == "TIMEOUT" || Status == "FAIL";
-    public bool IsPending => !IsOk && !IsSlow && !IsFail;
+    public bool IsCanceled => Status == "CANCELED";
+    public bool IsPending => !IsOk && !IsSlow && !IsFail && !IsCanceled;
 
     partial void OnStatusChanged(string value)
     {
         OnPropertyChanged(nameof(IsOk));
         OnPropertyChanged(nameof(IsSlow));
         OnPropertyChanged(nameof(IsFail));
+        OnPropertyChanged(nameof(IsCanceled));
         OnPropertyChanged(nameof(IsPending));
+        OnPropertyChanged(nameof(LatencyText));
     }
 
     partial void OnLatencyMsChanged(long value)

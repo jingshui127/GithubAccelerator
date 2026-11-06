@@ -23,10 +23,20 @@ public sealed class HealthCheckService
         Timeout = TimeSpan.FromSeconds(12)
     };
 
-    private HealthCheckService()
+    /// <summary>可注入探测器，便于测试取消语义；生产环境用 <see cref="ProbeAsync"/>。</summary>
+    private readonly Func<string, CancellationToken, Task<(long LatencyMs, string Status, string Error)>> _probe;
+
+    public HealthCheckService()
+        : this(null)
+    {
+    }
+
+    public HealthCheckService(
+        Func<string, CancellationToken, Task<(long LatencyMs, string Status, string Error)>>? probe)
     {
         // 禁止重定向（避免重定向后算成 200）
         _httpClient.DefaultRequestHeaders.Add("User-Agent", "GithubAccelerator/1.0");
+        _probe = probe ?? ProbeAsync;
     }
 
     /// <summary>
@@ -94,11 +104,23 @@ public sealed class HealthCheckService
 
     /// <summary>
     /// 探测全部 GitHub 关键子域。
+    /// 采用有界并发：取消后不再发起新的站点请求；已完成的项保留，未开始的项标记为 CANCELED。
     /// </summary>
-    public async Task<List<HealthCheckItem>> ProbeAllAsync(CancellationToken ct = default)
+    /// <param name="ct">取消令牌。</param>
+    /// <param name="onProgress">每完成一项回调一次 (已完成, 共 N 项)，不编造百分比。</param>
+    /// <param name="maxConcurrency">同时在途的请求数，避免一次把所有站点都发出去导致取消无法生效。</param>
+    public async Task<List<HealthCheckItem>> ProbeAllAsync(
+        CancellationToken ct = default,
+        Action<int, int>? onProgress = null,
+        int maxConcurrency = 3)
     {
-        var results = new List<HealthCheckItem>();
-        var tasks = GitHubSubDomains.Items.Select(async item =>
+        var items = GitHubSubDomains.Items;
+        var total = items.Count;
+        var results = new HealthCheckItem[total];
+        var completed = 0;
+        using var gate = new SemaphoreSlim(Math.Max(1, maxConcurrency));
+
+        var tasks = items.Select((item, index) => Task.Run(async () =>
         {
             var check = new HealthCheckItem
             {
@@ -108,13 +130,27 @@ public sealed class HealthCheckService
                 Description = item.Description,
                 LastCheckTime = DateTime.Now,
             };
+            results[index] = check;
+            var acquired = false;
 
             try
             {
-                var (latency, status, error) = await ProbeAsync(item.ProbeUrl, ct);
+                await gate.WaitAsync(ct).ConfigureAwait(false);
+                acquired = true;
+
+                // 拿到并发槽后再确认一次：取消后不再发起该站点的网络请求。
+                ct.ThrowIfCancellationRequested();
+
+                var (latency, status, error) = await _probe(item.ProbeUrl, ct).ConfigureAwait(false);
                 check.LatencyMs = latency;
                 check.Status = status;
                 check.ErrorMessage = error;
+            }
+            catch (OperationCanceledException)
+            {
+                check.LatencyMs = -1;
+                check.Status = "CANCELED";
+                check.ErrorMessage = "已取消，未完成探测";
             }
             catch (Exception ex)
             {
@@ -122,16 +158,16 @@ public sealed class HealthCheckService
                 check.Status = "FAIL";
                 check.ErrorMessage = ex.Message;
             }
-
-            check.LastCheckTime = DateTime.Now;
-            results.Add(check);
-        });
+            finally
+            {
+                if (acquired) gate.Release();
+                check.LastCheckTime = DateTime.Now;
+                onProgress?.Invoke(Interlocked.Increment(ref completed), total);
+            }
+        }));
 
         await Task.WhenAll(tasks);
-        // 按配置顺序返回
-        return GitHubSubDomains.Items
-            .Select((item, idx) => results.FirstOrDefault(r => r.Host == item.Host) ?? new HealthCheckItem { Name = item.Name, Host = item.Host })
-            .ToList();
+        return results.ToList();
     }
 
     /// <summary>
