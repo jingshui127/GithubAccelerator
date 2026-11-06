@@ -121,6 +121,19 @@
                             </StackPanel>
                         </Button>
 
+                        <Button Command="{Binding ShowOfficialSiteDiagnosticsCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10"
+                                CornerRadius="8"
+                                BorderThickness="0"
+                                Classes="NavButton">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="🔎" FontSize="16"/>
+                                <TextBlock Text="官网访问诊断" FontSize="13"/>
+                            </StackPanel>
+                        </Button>
+
                         <!-- Hosts管理 -->
                         <TextBlock Text="Hosts 管理" 
                                    FontSize="10" 

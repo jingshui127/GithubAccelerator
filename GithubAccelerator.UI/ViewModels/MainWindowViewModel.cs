@@ -283,6 +283,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private bool _isHealthCheckVisible;
 
     [ObservableProperty]
+    private OfficialSiteDiagnosticsViewModel? _officialSiteDiagnostics;
+
+    [ObservableProperty]
+    private bool _isOfficialSiteDiagnosticsVisible;
+
+    [ObservableProperty]
     private string _hostsContent = string.Empty;
 
     /// <summary>
@@ -366,6 +372,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private bool _isHealthCheckSelected;
+
+    [ObservableProperty]
+    private bool _isOfficialSiteDiagnosticsSelected;
 
     [ObservableProperty]
     private bool _isHostsContentSelected;
@@ -1002,6 +1011,30 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IsHealthCheckVisible = true;
     }
 
+    [RelayCommand]
+    private void ShowOfficialSiteDiagnostics()
+    {
+        if (OfficialSiteDiagnostics == null)
+        {
+            OfficialSiteDiagnostics = new OfficialSiteDiagnosticsViewModel();
+        }
+
+        var diagnosticsView = new GithubAccelerator.UI.Views.OfficialSiteDiagnosticsView();
+        diagnosticsView.DataContext = OfficialSiteDiagnostics;
+        CurrentView = diagnosticsView;
+        CurrentPageTitle = "官网访问诊断";
+        ResetNavigationSelection();
+        IsOfficialSiteDiagnosticsSelected = true;
+        IsDashboardVisible = false;
+        IsSettingsVisible = false;
+        IsLogViewerVisible = false;
+        IsHostsGroupVisible = false;
+        IsNetworkMonitorVisible = false;
+        IsDownloadAcceleratorVisible = false;
+        IsHealthCheckVisible = false;
+        IsOfficialSiteDiagnosticsVisible = true;
+    }
+
     private void ResetNavigationSelection()
     {
         IsDashboardSelected = false;
@@ -1013,6 +1046,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IsLogViewerSelected = false;
         IsDownloadAcceleratorSelected = false;
         IsHealthCheckSelected = false;
+        IsOfficialSiteDiagnosticsSelected = false;
     }
 
     [RelayCommand]
