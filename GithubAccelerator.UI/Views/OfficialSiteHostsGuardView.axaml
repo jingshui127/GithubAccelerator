@@ -56,6 +56,17 @@
                 </StackPanel>
             </Border>
 
+            <!-- 交错配对表：准入依据 -->
+            <Border Padding="10" CornerRadius="8"
+                    IsVisible="{Binding HasPairingText}"
+                    Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="交错配对（候选 vs 直连，准入依据）" FontSize="10" Classes="SecondaryText"/>
+                    <TextBlock Text="{Binding PreviewPairingText}" FontSize="10.5"
+                               FontFamily="Consolas" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
             <!-- 操作按钮 -->
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button Content="🔎 预览整页实测" Command="{Binding PreviewCommand}"

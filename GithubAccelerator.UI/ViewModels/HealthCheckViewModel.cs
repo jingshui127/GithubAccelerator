@@ -54,6 +54,30 @@ public partial class HealthCheckViewModel : ObservableObject
     [ObservableProperty]
     private bool _isProgressVisible = false;
 
+    /// <summary>是否已经完成过至少一次检测：未检测时计数与时间一律显示“—”。</summary>
+    public bool HasAnyResult => LastCheckTime != default;
+
+    public string LastCheckTimeText => HasAnyResult
+        ? LastCheckTime.ToString("yyyy-MM-dd HH:mm:ss")
+        : "— 未检测";
+
+    public string OkCountText => HasAnyResult ? OkCount.ToString() : "—";
+    public string SlowCountText => HasAnyResult ? SlowCount.ToString() : "—";
+    public string FailCountText => HasAnyResult ? FailCount.ToString() : "—";
+
+    partial void OnLastCheckTimeChanged(DateTime value)
+    {
+        OnPropertyChanged(nameof(HasAnyResult));
+        OnPropertyChanged(nameof(LastCheckTimeText));
+        OnPropertyChanged(nameof(OkCountText));
+        OnPropertyChanged(nameof(SlowCountText));
+        OnPropertyChanged(nameof(FailCountText));
+    }
+
+    partial void OnOkCountChanged(int value) => OnPropertyChanged(nameof(OkCountText));
+    partial void OnSlowCountChanged(int value) => OnPropertyChanged(nameof(SlowCountText));
+    partial void OnFailCountChanged(int value) => OnPropertyChanged(nameof(FailCountText));
+
     public HealthCheckViewModel()
     {
         // 初始化空白条目（避免首次空白）

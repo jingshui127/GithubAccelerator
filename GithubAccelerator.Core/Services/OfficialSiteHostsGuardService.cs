@@ -481,6 +481,9 @@ public sealed class OfficialSiteCandidateSelector
     public TimeSpan ProbeTimeout => _probeTimeout;
     public TimeSpan PageTimeout => _pageTimeout;
 
+    /// <summary>供交错配对复用同一个整页度量器（口径必须一致）。</summary>
+    public IOfficialSitePageLoader PageLoader => _pageLoader;
+
     public async Task<OfficialSiteSelection> SelectAsync(
         IEnumerable<OfficialSiteSeedEntry> entries,
         string domain,
@@ -577,6 +580,189 @@ public sealed class OfficialSiteCandidateSelector
     }
 }
 
+/// <summary>
+/// 交错配对中的一组：候选与直连在数秒内相邻完成（A/B/A/B 交替），
+/// 目的是让两条数据处在同一网络波动窗口里，避免“顺序测”的时段差被误当成性能差。
+/// </summary>
+public sealed record OfficialSitePairRound(
+    int Group,
+    int? CandidatePageMs,
+    int? BaselinePageMs,
+    bool CandidateSuccess,
+    bool BaselineSuccess,
+    string? Note)
+{
+    /// <summary>候选 − 直连（负值表示候选更快）；两侧都成功才有意义。</summary>
+    public int? DiffMs => CandidateSuccess && BaselineSuccess
+                          && CandidatePageMs.HasValue && BaselinePageMs.HasValue
+        ? CandidatePageMs.Value - BaselinePageMs.Value
+        : null;
+}
+
+/// <summary>
+/// 一次交错配对对比的结果。准入只用 <see cref="MedianDiffMs"/>（配对差值的中位数），
+/// 不用两条独立统计量的差；符号在组间反复翻转时标记为不稳定，不作准入依据。
+/// </summary>
+public sealed record OfficialSitePairComparison(
+    string CandidateIp,
+    string? BaselineIp,
+    int Groups,
+    IReadOnlyList<OfficialSitePairRound> Rounds,
+    int ValidPairs,
+    int? MedianCandidateMs,
+    int? MedianBaselineMs,
+    int? MedianDiffMs,
+    int BaselineSuccessCount,
+    bool Stable,
+    string? UnstableReason,
+    DateTimeOffset MeasuredAt)
+{
+    public bool HasValidPairs => ValidPairs > 0 && MedianDiffMs.HasValue;
+
+    /// <summary>直连在配对窗口里是否基本可用（≥ 半数成功才认为能与候选比快慢）。</summary>
+    public bool BaselineUsable => BaselineIp != null && BaselineSuccessCount > Groups / 2;
+
+    /// <summary>20% 准入：配对差值中位数 ≤ −20% × 直连中位。</summary>
+    public bool MeetsThreshold => HasValidPairs && MedianBaselineMs.HasValue
+                                  && MedianBaselineMs.Value > 0
+                                  && MedianDiffMs!.Value * 5 <= -(MedianBaselineMs.Value * 1.0);
+
+    public string MedianText
+    {
+        get
+        {
+            if (!HasValidPairs)
+                return $"配对中位：无效配对（有效 {ValidPairs}/{Groups} 组）";
+
+            var diff = MedianDiffMs!.Value;
+            var percent = MedianBaselineMs is > 0
+                ? (double)diff / MedianBaselineMs.Value * 100
+                : 0;
+            var direction = diff < 0 ? $"候选快 {Math.Abs(percent):0.#}%" : diff > 0 ? $"候选慢 {percent:0.#}%" : "持平";
+            return $"配对中位：候选 {MedianCandidateMs}ms / 直连 {MedianBaselineMs}ms / 差值 {diff:+#;-#;0}ms（{direction}）";
+        }
+    }
+
+    public string TableText
+    {
+        get
+        {
+            var lines = new List<string>
+            {
+                $"交错配对（候选 vs 直连，共 {Groups} 组，每组 A/B 相邻完成；检测 {MeasuredAt:yyyy-MM-dd HH:mm:ss}）："
+            };
+            foreach (var round in Rounds)
+            {
+                var candidate = round.CandidateSuccess ? $"{round.CandidatePageMs}ms" : "失败";
+                var baseline = round.BaselineSuccess ? $"{round.BaselinePageMs}ms" : "失败";
+                var diff = round.DiffMs.HasValue ? $"{round.DiffMs.Value:+#;-#;0}ms" : "—";
+                var note = string.IsNullOrEmpty(round.Note) ? string.Empty : $"（{round.Note}）";
+                lines.Add($"#{round.Group} 候选 {candidate} / 直连 {baseline} / 差值 {diff}{note}");
+            }
+            lines.Add(MedianText);
+            lines.Add(Stable ? "稳定性：组间符号未反复翻转" : $"稳定性：{UnstableReason}");
+            return string.Join(Environment.NewLine, lines);
+        }
+    }
+}
+
+/// <summary>
+/// 交错配对度量器：每组的候选与直连紧邻执行（A/B/A/B），
+/// 用配对差值的中位数做 20% 判定。原顺序测法仍保留为诊断信息，但不作准入依据。
+/// </summary>
+public sealed class OfficialSitePairedComparer
+{
+    public const int DefaultGroups = 6;
+    private const int MinValidPairs = 4;
+
+    private readonly IOfficialSitePageLoader _pageLoader;
+    private readonly int _groups;
+    private readonly TimeSpan _pageTimeout;
+
+    public OfficialSitePairedComparer(
+        IOfficialSitePageLoader pageLoader,
+        int groups = DefaultGroups,
+        TimeSpan? pageTimeout = null)
+    {
+        _pageLoader = pageLoader;
+        _groups = Math.Max(1, groups);
+        _pageTimeout = pageTimeout ?? TimeSpan.FromSeconds(10);
+    }
+
+    public int Groups => _groups;
+
+    public async Task<OfficialSitePairComparison> CompareAsync(
+        string candidateIp,
+        string? baselineIp,
+        string domain,
+        DateTimeOffset measuredAt,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(baselineIp))
+        {
+            return new OfficialSitePairComparison(candidateIp, null, _groups, Array.Empty<OfficialSitePairRound>(),
+                0, null, null, null, 0, false, "没有直连 IP，无法配对", measuredAt);
+        }
+
+        var rounds = new List<OfficialSitePairRound>();
+        for (var group = 1; group <= _groups; group++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var candidate = await _pageLoader.MeasureAsync(domain, candidateIp, _pageTimeout, cancellationToken);
+            // 紧接着测直连（数秒内相邻完成），两侧在同一个网络波动窗口里
+            var baseline = await _pageLoader.MeasureAsync(domain, baselineIp, _pageTimeout, cancellationToken);
+
+            rounds.Add(new OfficialSitePairRound(
+                group,
+                candidate.TotalMs,
+                baseline.TotalMs,
+                candidate.Success,
+                baseline.Success,
+                candidate.Success && baseline.Success ? null : "有一侧失败，本组不计入差值"));
+        }
+
+        var valid = rounds.Where(r => r.DiffMs.HasValue).ToList();
+        var candidateMs = OfficialSiteDiagnosticsService.ComputeMedian(
+            rounds.Where(r => r.CandidateSuccess).Select(r => (int?)r.CandidatePageMs));
+        var baselineMs = OfficialSiteDiagnosticsService.ComputeMedian(
+            rounds.Where(r => r.BaselineSuccess).Select(r => (int?)r.BaselinePageMs));
+        var diffMs = OfficialSiteDiagnosticsService.ComputeMedian(valid.Select(r => r.DiffMs));
+        var baselineSuccess = rounds.Count(r => r.BaselineSuccess);
+
+        var (stable, reason) = EvaluateStability(valid.Select(r => r.DiffMs!.Value).ToList());
+
+        return new OfficialSitePairComparison(
+            candidateIp, baselineIp, _groups, rounds, valid.Count,
+            candidateMs, baselineMs, diffMs, baselineSuccess,
+            stable, reason, measuredAt);
+    }
+
+    /// <summary>
+    /// 稳定性：有效配对不足 4 组，或差值符号在组间翻转 ≥2 次，都视为“波动过大”，不作准入依据。
+    /// </summary>
+    private static (bool Stable, string? Reason) EvaluateStability(IReadOnlyList<int> diffs)
+    {
+        if (diffs.Count < MinValidPairs)
+            return (false, $"有效配对仅 {diffs.Count} 组（< {MinValidPairs}），样本不足，不作准入依据");
+
+        var flips = 0;
+        var previousSign = 0;
+        foreach (var diff in diffs)
+        {
+            var sign = Math.Sign(diff);
+            if (sign == 0) continue;
+            if (previousSign != 0 && sign != previousSign) flips++;
+            previousSign = sign;
+        }
+
+        if (flips >= 2)
+            return (false, $"配对差值符号在组间反复翻转 {flips} 次，结果不稳定，不作准入依据");
+
+        return (true, null);
+    }
+}
+
 /// <summary>防护版状态（本地 JSON，缺省即关闭）。</summary>
 public sealed class OfficialSiteGuardState
 {
@@ -654,6 +840,7 @@ public sealed record OfficialSiteGuardPlan(
     int BaselinePageSuccessCount,
     int BaselinePageRounds,
     bool BaselineUsable,
+    OfficialSitePairComparison? Pairs,
     bool AdmissionAllowed,
     string DecisionText,
     string ExpectedBenefitText,
@@ -662,11 +849,14 @@ public sealed record OfficialSiteGuardPlan(
     public bool CanApply => Selection.HasSelection && AdmissionAllowed;
 
     /// <summary>直连整页不可用时的故障转移场景：不要求 20% 更快，只要求候选可达。</summary>
-    public bool IsFailureTransfer => !BaselineUsable && AdmissionAllowed;
+    public bool IsFailureTransfer => AdmissionAllowed && Pairs != null && !Pairs.BaselineUsable;
 
     public string SelectedIp => Selection.Selected?.Entry.Ip ?? string.Empty;
 
     public string SelectedSource => Selection.Selected?.Entry.Source ?? string.Empty;
+
+    /// <summary>交错配对表（6 组两侧数值 + 配对差值 + 中位差值 + 稳定性）。</summary>
+    public string PairingText => Pairs?.TableText ?? "未做交错配对（无直连 IP 或没有可达候选）";
 }
 
 public sealed record OfficialSiteGuardApplyResult(
@@ -836,9 +1026,32 @@ public sealed class OfficialSiteHostsGuardService
             baselineFailure = ex.Message;
         }
 
+        // 交错配对（A/B/A/B，6 组）：只在同一时间窗内比较候选与直连，准入以配对差值中位数为准。
+        OfficialSitePairComparison? pairs = null;
+        if (selection.Selected != null && baselineIp != null)
+        {
+            try
+            {
+                var comparer = new OfficialSitePairedComparer(
+                    _selector.PageLoader, OfficialSitePairedComparer.DefaultGroups, _selector.PageTimeout);
+                pairs = await comparer.CompareAsync(
+                    selection.Selected.Entry.Ip, baselineIp, Domain, _clock(), cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                pairs = new OfficialSitePairComparison(
+                    selection.Selected.Entry.Ip, baselineIp, 0, Array.Empty<OfficialSitePairRound>(),
+                    0, null, null, null, 0, false, "配对实测异常：" + ex.Message, _clock());
+            }
+        }
+
         var decision = BuildAdmission(
-            selection, baselineIp, baselinePageMs, baselineSuccess, baselineRounds, baselineUsable,
-            baselineFailure, checkedAt);
+            selection, baselineIp, baselinePageMs, baselineSuccess, baselineRounds,
+            pairs, baselineFailure, checkedAt);
 
         return new OfficialSiteGuardPlan(
             checkedAt,
@@ -850,6 +1063,7 @@ public sealed class OfficialSiteHostsGuardService
             baselineSuccess,
             baselineRounds,
             baselineUsable,
+            pairs,
             decision.Allowed,
             decision.Text,
             BuildBenefitText(decision.Text),
@@ -951,7 +1165,7 @@ public sealed class OfficialSiteHostsGuardService
                     $"检测时间 {_clock():yyyy-MM-dd HH:mm:ss}。";
                 var plan = new OfficialSiteGuardPlan(
                     _clock(), OfficialSiteHostsPolicy.WriteDomains, selection,
-                    null, null, null, 0, selection.Rounds, false, true,
+                    null, null, null, 0, selection.Rounds, false, null, true,
                     decisionText, BuildBenefitText(decisionText), BuildScopeWarning());
 
                 var apply = await ApplySelectedAsync(selection.Selected, plan, keepEnabled: true, cancellationToken);
@@ -1152,9 +1366,10 @@ public sealed class OfficialSiteHostsGuardService
     }
 
     /// <summary>
-    /// 应用前强制对比：候选整页中位必须比直连快 ≥20% 才准入。
-    /// 若直连整页本身不可用（成功率 &lt;90% 或全部失败），则走故障转移例外：
-    /// 只要求候选整页可达（2xx + 内容校验通过），不因“算不出 20%”而拒绝。
+    /// 应用前强制对比（交错配对）：用 6 组 A/B 相邻实测的配对差值中位数判定，
+    /// 候选必须比直连快 ≥20%；直连在配对窗口内基本不可用（≤ 半数成功）时走故障转移例外，
+    /// 只要候选整页可达即可应用；配对符号反复翻转时明确标注“结果不稳定，不作准入依据”。
+    /// 原顺序测法（3 轮）只作为诊断列展示，不参与准入。
     /// </summary>
     private static (bool Allowed, string Text) BuildAdmission(
         OfficialSiteSelection selection,
@@ -1162,7 +1377,7 @@ public sealed class OfficialSiteHostsGuardService
         int? baselinePageMs,
         int baselineSuccess,
         int baselineRounds,
-        bool baselineUsable,
+        OfficialSitePairComparison? pairs,
         string? baselineFailure,
         DateTimeOffset checkedAt)
     {
@@ -1174,34 +1389,43 @@ public sealed class OfficialSiteHostsGuardService
                 $"拒绝应用：没有整页可达的候选（成功率需 ≥90% 且 2xx+内容校验通过）；检测时间 {time}。");
         }
 
-        var candidateMs = candidate.MedianPageMs.Value;
-        if (!baselineUsable || !baselinePageMs.HasValue)
+        if (pairs == null)
+        {
+            return (false,
+                $"拒绝应用：没有得到交错配对数据（{baselineFailure ?? "未知原因"}）；" +
+                $"顺序测法只作诊断，不能作为准入依据；检测时间 {time}。");
+        }
+
+        var sequentialNote =
+            $"（顺序诊断：直连 {baselineSuccess}/{baselineRounds} 成功" +
+            (baselinePageMs.HasValue ? $"，整页中位 {baselinePageMs}ms" : string.Empty) +
+            "；仅参考，不作准入依据）";
+
+        if (!pairs.BaselineUsable)
         {
             var reason = baselineIp == null
                 ? $"系统 DNS 未给出可用直连 IP（{baselineFailure}）"
-                : $"直连整页不可用（{baselineSuccess}/{baselineRounds} 成功；{baselineFailure ?? "内容校验未通过"}）";
+                : $"直连整页不可用（配对 {pairs.BaselineSuccessCount}/{pairs.Groups} 组成功，≤ 半数）";
             return (true,
-                $"准入例外（故障转移）：{reason}；候选 {candidate.Entry.Ip} 整页中位 {candidateMs}ms 且 2xx+内容校验通过，" +
-                $"允许应用；检测时间 {time}。");
+                $"准入例外（故障转移）：{reason}；候选 {candidate.Entry.Ip} 整页中位 {candidate.MedianPageMs}ms 且 2xx+内容校验通过，" +
+                $"允许应用{sequentialNote}；检测时间 {time}。");
         }
 
-        var baselineMs = baselinePageMs.Value;
-        var candidateFasterBy20Percent = (long)candidateMs * 5 <= (long)baselineMs * 4;
-        var improvement = (1 - (double)candidateMs / baselineMs) * 100;
-        var compareText = candidateMs <= baselineMs
-            ? $"快 {improvement:0.#}%"
-            : $"慢 {Math.Abs(improvement):0.#}%";
+        if (!pairs.Stable)
+        {
+            return (false,
+                $"拒绝应用：交错配对结果不稳定（{pairs.UnstableReason}）；" +
+                $"{pairs.MedianText}；检测时间 {time}。");
+        }
 
-        if (candidateFasterBy20Percent)
+        if (pairs.MeetsThreshold)
         {
             return (true,
-                $"准入通过：候选 {candidate.Entry.Ip} 整页中位 {candidateMs}ms，直连 {baselineMs}ms，" +
-                $"快 {improvement:0.#}%（要求 ≥20%）；检测时间 {time}。");
+                $"准入通过（交错配对）：{pairs.MedianText}；候选比直连快 ≥20%，允许应用{sequentialNote}；检测时间 {time}。");
         }
 
         return (false,
-            $"拒绝应用：候选 {candidate.Entry.Ip} 整页中位 {candidateMs}ms，直连 {baselineMs}ms，" +
-            $"{compareText}（要求候选快 ≥20%）；检测时间 {time}。");
+            $"拒绝应用：{pairs.MedianText}；未达到“候选比直连快 ≥20%”的要求{sequentialNote}；检测时间 {time}。");
     }
 
     private static string BuildBenefitText(string decisionText) =>

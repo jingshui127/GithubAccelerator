@@ -46,21 +46,21 @@
                             Background="{DynamicResource ControlFillColorSecondaryBrush}">
                         <StackPanel>
                             <TextBlock Text="✅ 正常" FontSize="11" Classes="SecondaryText"/>
-                            <TextBlock Text="{Binding OkCount}" FontSize="20" FontWeight="Bold" Foreground="#4CAF50"/>
+                            <TextBlock Text="{Binding OkCountText}" FontSize="20" FontWeight="Bold" Foreground="#4CAF50"/>
                         </StackPanel>
                     </Border>
                     <Border Grid.Column="1" Padding="12,8" CornerRadius="8" Margin="4,0"
                             Background="{DynamicResource ControlFillColorSecondaryBrush}">
                         <StackPanel>
                             <TextBlock Text="⚠️ 较慢" FontSize="11" Classes="SecondaryText"/>
-                            <TextBlock Text="{Binding SlowCount}" FontSize="20" FontWeight="Bold" Foreground="#FFC107"/>
+                            <TextBlock Text="{Binding SlowCountText}" FontSize="20" FontWeight="Bold" Foreground="#FFC107"/>
                         </StackPanel>
                     </Border>
                     <Border Grid.Column="2" Padding="12,8" CornerRadius="8" Margin="4,0"
                             Background="{DynamicResource ControlFillColorSecondaryBrush}">
                         <StackPanel>
                             <TextBlock Text="❌ 失败" FontSize="11" Classes="SecondaryText"/>
-                            <TextBlock Text="{Binding FailCount}" FontSize="20" FontWeight="Bold" Foreground="#FF5722"/>
+                            <TextBlock Text="{Binding FailCountText}" FontSize="20" FontWeight="Bold" Foreground="#FF5722"/>
                         </StackPanel>
                     </Border>
                     <Border Grid.Column="3" Padding="12,8" CornerRadius="8" Margin="4,0,0,0"
@@ -128,6 +128,7 @@
                                     <!-- 延迟数字 -->
                                     <TextBlock Grid.Column="2" Grid.Row="0" Grid.RowSpan="2"
                                                Text="{Binding LatencyText}" FontSize="16" FontWeight="Bold"
+                                               Foreground="{Binding LatencyBrush}"
                                                VerticalAlignment="Center" HorizontalAlignment="Right"/>
                                 </Grid>
 
@@ -148,7 +149,7 @@
         <!-- 底部时间 -->
         <TextBlock Grid.Row="2" FontSize="11" Classes="SecondaryText" HorizontalAlignment="Right">
             <Run Text="最近检测：" />
-            <Run Text="{Binding LastCheckTime, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}" />
+            <Run Text="{Binding LastCheckTimeText}" />
         </TextBlock>
     </Grid>
 </UserControl>

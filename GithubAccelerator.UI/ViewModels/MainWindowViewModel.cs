@@ -618,6 +618,49 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public int HealthySourcesCount => Sources.Count(s => s.IsHealthy);
 
+    /// <summary>刷新进行中：计数类指标一律显示“—”，不用 0 冒充“没有数据源”。</summary>
+    [ObservableProperty]
+    private bool _isRefreshingSources;
+
+    public string TotalSourcesText => FormatSourceCountText(IsRefreshingSources, Sources.Count);
+
+    public string HealthySourcesText => FormatSourceCountText(IsRefreshingSources, Sources.Count(s => s.IsHealthy));
+
+    public string SourcesCountText => IsRefreshingSources ? "—" : $"共 {Sources.Count} 个";
+
+    /// <summary>仪表盘计数口径：刷新中一律“—”，避免 0 与“已刷新 N 个”自相矛盾。</summary>
+    public static string FormatSourceCountText(bool refreshing, int count) => refreshing ? "—" : count.ToString();
+
+    /// <summary>
+    /// 推荐卡唯一来源：从同一个 Sources 集合里挑“健康且评分 &gt; 0”的最高分项；
+    /// 没有就返回 null（卡片显示“—”），不允许出现“列表 0 条却有推荐分”的矛盾。
+    /// </summary>
+    public static SourceStatusViewModel? SelectRecommendedSource(IEnumerable<SourceStatusViewModel> sources)
+        => sources.Where(s => s.IsHealthy && s.Score > 0)
+                  .OrderByDescending(s => s.Score)
+                  .FirstOrDefault();
+
+    public string BestSourceResponseText => string.IsNullOrEmpty(BestSourceName) ? "—" : $"{BestSourceResponseTime} ms";
+
+    public string BestSourceScoreText => string.IsNullOrEmpty(BestSourceName) ? "—" : BestSourceScore.ToString("F1");
+
+    partial void OnIsRefreshingSourcesChanged(bool value)
+    {
+        OnPropertyChanged(nameof(TotalSourcesText));
+        OnPropertyChanged(nameof(HealthySourcesText));
+        OnPropertyChanged(nameof(SourcesCountText));
+    }
+
+    partial void OnBestSourceNameChanged(string value)
+    {
+        OnPropertyChanged(nameof(BestSourceResponseText));
+        OnPropertyChanged(nameof(BestSourceScoreText));
+    }
+
+    partial void OnBestSourceResponseTimeChanged(long value) => OnPropertyChanged(nameof(BestSourceResponseText));
+
+    partial void OnBestSourceScoreChanged(double value) => OnPropertyChanged(nameof(BestSourceScoreText));
+
     public bool HasFilteredSources => FilteredSources.Count > 0;
     private void CheckAdminPrivileges()
     {
@@ -673,6 +716,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         Log.Information("正在加载仪表盘");
         ShowDashboard();
+
+        // 先订阅集合变化，确保初始化期间加入的数据源也能触发计数刷新
+        Sources.CollectionChanged += OnSourcesCollectionChanged;
 
         Log.Information("正在初始化数据源");
         InitializeSourcesFromConfig();
@@ -745,7 +791,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         };
 
         // 监听 Sources 集合变化，自动更新数据源卡片计数
-        Sources.CollectionChanged += OnSourcesCollectionChanged;
+        // （订阅已提前到初始化之前，见构造函数前半段）
 
         Log.Information("MainWindowViewModel 初始化完成");
     }
@@ -755,6 +801,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(TotalSourcesCount));
         OnPropertyChanged(nameof(HealthySourcesCount));
         OnPropertyChanged(nameof(HasFilteredSources));
+        OnPropertyChanged(nameof(TotalSourcesText));
+        OnPropertyChanged(nameof(HealthySourcesText));
+        OnPropertyChanged(nameof(SourcesCountText));
 
         if (e.NewItems != null)
         {
@@ -776,11 +825,17 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private void OnSourceItemPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(SourceStatusViewModel.IsHealthy) ||
-            e.PropertyName == nameof(SourceStatusViewModel.IsSelected))
+            e.PropertyName == nameof(SourceStatusViewModel.IsSelected) ||
+            e.PropertyName == nameof(SourceStatusViewModel.Score) ||
+            e.PropertyName == nameof(SourceStatusViewModel.ResponseTime))
         {
             OnPropertyChanged(nameof(HealthySourcesCount));
+            OnPropertyChanged(nameof(HealthySourcesText));
             OnPropertyChanged(nameof(HasSelectedSources));
             OnPropertyChanged(nameof(SelectedSourcesCount));
+
+            // 推荐卡也直接取自同一个 Sources 集合，保证列表/计数/推荐三者口径一致
+            UpdateBestSource();
         }
     }
 
@@ -1390,18 +1445,35 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanRefreshSources))]
     private async Task RefreshSources()
     {
+        IsRefreshingSources = true;
         StatusMessage = "正在刷新数据源状态...";
-        var metrics = await _performanceMonitor.TestAllSourcesAsync();
-        
-        for (int i = 0; i < metrics.Length && i < Sources.Count; i++)
+        try
         {
-            Sources[i].UpdateFromMetrics(metrics[i]);
+            var metrics = await _performanceMonitor.TestAllSourcesAsync();
+            ApplyMetrics(metrics);
+            UpdateBestSource();
+            await TestGitHubConnection();
+            StatusMessage = $"已刷新 {Sources.Count} 个数据源状态";
+            _historyService.Record(OperationType.SourcesRefreshed, $"刷新了 {Sources.Count} 个数据源");
         }
-        
-        UpdateBestSource();
-        await TestGitHubConnection();
-        StatusMessage = $"已刷新 {metrics.Length} 个数据源状态";
-        _historyService.Record(OperationType.SourcesRefreshed, $"刷新了 {metrics.Length} 个数据源");
+        finally
+        {
+            IsRefreshingSources = false;
+        }
+    }
+
+    /// <summary>
+    /// 把检测结果按 URL 写回唯一的 Sources 集合（不再按索引对齐：
+    /// 监控结果按评分排序，而 Sources 按配置顺序，按索引会张冠李戴）。
+    /// </summary>
+    private void ApplyMetrics(IEnumerable<SourcePerformanceMetrics> metrics)
+    {
+        foreach (var metric in metrics)
+        {
+            var target = Sources.FirstOrDefault(s =>
+                string.Equals(s.Url, metric.Url, StringComparison.OrdinalIgnoreCase));
+            target?.UpdateFromMetrics(metric);
+        }
     }
 
     [RelayCommand]
@@ -2256,12 +2328,20 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void UpdateBestSource()
     {
-        var best = _performanceMonitor.GetBestSource();
-        if (best != null && best.AverageResponseTimeMs > 0)
+        // 推荐卡与列表、计数使用同一个集合：只推荐列表里确实存在且评分 > 0 的数据源
+        var best = SelectRecommendedSource(Sources);
+
+        if (best != null)
         {
             BestSourceName = best.Name;
-            BestSourceResponseTime = (long)best.AverageResponseTimeMs;
-            BestSourceScore = best.OverallScore;
+            BestSourceResponseTime = best.ResponseTime;
+            BestSourceScore = best.Score;
+        }
+        else
+        {
+            BestSourceName = string.Empty;
+            BestSourceResponseTime = 0;
+            BestSourceScore = 0;
         }
     }
 
@@ -2301,10 +2381,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             var metrics = _performanceMonitor.GetCurrentMetrics();
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                for (int i = 0; i < metrics.Length && i < Sources.Count; i++)
-                {
-                    Sources[i].UpdateFromMetrics(metrics[i]);
-                }
+                ApplyMetrics(metrics);
                 UpdateBestSource();
             });
 
