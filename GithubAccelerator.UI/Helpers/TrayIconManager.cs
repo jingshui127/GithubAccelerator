@@ -17,6 +17,9 @@ public class TrayIconManager : IDisposable
     {
         try
         {
+            // 只允许一个托盘图标实例存在，避免重复创建后只有一个绑定了事件。
+            if (_trayIcon != null) return;
+
             _onShowWindow = onShowWindow;
             _onExit = onExit;
 
@@ -49,13 +52,7 @@ public class TrayIconManager : IDisposable
             var contextMenu = new ContextMenuStrip();
 
             var showItem = new ToolStripMenuItem("显示窗口");
-            showItem.Click += (s, e) =>
-            {
-                Dispatcher.UIThread.Post(() =>
-                {
-                    _onShowWindow?.Invoke();
-                });
-            };
+            showItem.Click += (s, e) => PostShowWindow();
 
             var exitItem = new ToolStripMenuItem("退出");
             exitItem.Click += (s, e) =>
@@ -72,14 +69,22 @@ public class TrayIconManager : IDisposable
 
             _trayIcon.ContextMenuStrip = contextMenu;
 
+            // 左键单击、左键双击都恢复窗口。
+            // 注意：WinForms NotifyIcon 的双击通过 MouseDoubleClick 事件送达，
+            // 不会以 MouseClick(Clicks==2) 触发；只判断 MouseClick.Clicks==2 会让双击永远没反应。
             _trayIcon.MouseClick += (s, e) =>
             {
-                if (e.Button == MouseButtons.Left && e.Clicks == 2)
+                if (TrayClickRouter.ShouldRestoreOnClick(e.Button == MouseButtons.Left, e.Clicks))
                 {
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        _onShowWindow?.Invoke();
-                    });
+                    PostShowWindow();
+                }
+            };
+
+            _trayIcon.MouseDoubleClick += (s, e) =>
+            {
+                if (TrayClickRouter.ShouldRestoreOnClick(e.Button == MouseButtons.Left, e.Clicks))
+                {
+                    PostShowWindow();
                 }
             };
         }
@@ -87,6 +92,14 @@ public class TrayIconManager : IDisposable
         {
             Console.WriteLine($"初始化托盘图标失败: {ex.Message}");
         }
+    }
+
+    private void PostShowWindow()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            _onShowWindow?.Invoke();
+        });
     }
 
     public void ShowBalloonTip(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)

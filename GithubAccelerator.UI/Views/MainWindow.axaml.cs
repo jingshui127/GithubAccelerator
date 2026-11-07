@@ -3,13 +3,14 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Controls.ApplicationLifetimes;
 using GithubAccelerator.UI.Helpers;
+using GithubAccelerator.UI.Services;
 using GithubAccelerator.UI.ViewModels;
 using System;
 using System.Threading.Tasks;
 
 namespace GithubAccelerator.UI.Views;
 
-public partial class MainWindow : Window
+public partial class MainWindow : Window, IRestorableWindow
 {
     private TrayIconManager? _trayIconManager;
     private bool _minimizeToTray = true;
@@ -47,7 +48,7 @@ public partial class MainWindow : Window
     {
         _trayIconManager = new TrayIconManager();
         _trayIconManager.Initialize(
-            onShowWindow: ShowWindow,
+            onShowWindow: RestoreWindow,
             onExit: ExitApplication
         );
     }
@@ -55,6 +56,9 @@ public partial class MainWindow : Window
     protected override void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
+
+        // 第二个实例启动时通过命名事件请求"把窗口找回来"，走与托盘同一套恢复逻辑。
+        SingleInstanceGuard.EnableActivationSignal(RestoreWindow);
 
         if (DataContext is MainWindowViewModel viewModel)
         {
@@ -93,13 +97,25 @@ public partial class MainWindow : Window
         _trayIconManager?.Dispose();
     }
 
-    private void ShowWindow()
+    /// <summary>
+    /// 所有"让窗口回来"的入口共用：托盘左键单击/双击、托盘右键菜单、第二个实例启动。
+    /// </summary>
+    private void RestoreWindow()
     {
-        this.Show();
-        this.ShowInTaskbar = true;
-        this.WindowState = WindowState.Normal;
-        this.Activate();
+        WindowRestorer.Restore(this);
     }
+
+    bool IRestorableWindow.IsVisible => IsVisible;
+
+    WindowState IRestorableWindow.WindowState
+    {
+        get => WindowState;
+        set => WindowState = value;
+    }
+
+    void IRestorableWindow.ShowWindow() => Show();
+
+    void IRestorableWindow.ActivateWindow() => Activate();
 
     private void ExitApplication()
     {
@@ -119,6 +135,7 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         base.OnClosed(e);
+        SingleInstanceGuard.DisableActivationSignal();
         _trayIconManager?.Dispose();
     }
 }

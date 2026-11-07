@@ -25,8 +25,12 @@ sealed class Program
         var wait = LaunchContext.IsElevatedRelaunch ? TimeSpan.FromSeconds(10) : TimeSpan.Zero;
         if (!SingleInstanceGuard.TryAcquire(wait))
         {
-            // 已有实例：前置其窗口后退出，不启动第二份后台逻辑
-            SingleInstanceGuard.ActivateExistingWindow();
+            // 已有实例：请求它恢复窗口后退出，不启动第二份后台逻辑。
+            if (!SingleInstanceGuard.SignalExistingInstance())
+            {
+                // 对方是没有事件通道的旧实例时，退回 Win32 激活。
+                SingleInstanceGuard.ActivateExistingWindow();
+            }
             return;
         }
 
