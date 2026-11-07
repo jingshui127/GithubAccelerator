@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
+using Avalonia.Threading;
 
 namespace GithubAccelerator.UI.Services;
 
@@ -13,9 +14,12 @@ namespace GithubAccelerator.UI.Services;
 public static class SingleInstanceGuard
 {
     private const string MutexName = @"Local\GithubAccelerator.Pro.SingleInstance";
+    private const string ActivateEventName = @"Local\GithubAccelerator.Pro.ActivateWindow";
     private const int SwRestore = 9;
 
     private static Mutex? _mutex;
+    private static EventWaitHandle? _activateEvent;
+    private static RegisteredWaitHandle? _activateWait;
 
     /// <summary>
     /// 尝试获取单实例互斥体。timeout 为零时表示"已有实例则立即返回 false"。
@@ -54,6 +58,7 @@ public static class SingleInstanceGuard
 
     public static void Release()
     {
+        DisableActivationSignal();
         try
         {
             _mutex?.ReleaseMutex();
@@ -66,6 +71,69 @@ public static class SingleInstanceGuard
         {
             _mutex?.Dispose();
             _mutex = null;
+        }
+    }
+
+    /// <summary>
+    /// 第一个实例开启"被激活"事件通道：第二个实例启动时置位，本实例在 UI 线程执行 onActivate。
+    /// 这样二次启动与托盘点击共用同一套恢复逻辑，而不是靠 MainWindowHandle（隐藏窗口时为 0）。
+    /// </summary>
+    public static void EnableActivationSignal(Action onActivate)
+    {
+        try
+        {
+            if (_activateEvent != null) return;
+
+            _activateEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ActivateEventName);
+            _activateWait = ThreadPool.RegisterWaitForSingleObject(
+                _activateEvent,
+                (_, timedOut) =>
+                {
+                    if (!timedOut)
+                    {
+                        Dispatcher.UIThread.Post(onActivate);
+                    }
+                },
+                null,
+                Timeout.Infinite,
+                executeOnlyOnce: false);
+        }
+        catch
+        {
+            // 事件通道创建失败时不影响主流程；二次启动会退回 Win32 激活路径。
+        }
+    }
+
+    public static void DisableActivationSignal()
+    {
+        try
+        {
+            _activateWait?.Unregister(null);
+        }
+        catch
+        {
+            // 已注销时忽略
+        }
+        finally
+        {
+            _activateWait = null;
+            _activateEvent?.Dispose();
+            _activateEvent = null;
+        }
+    }
+
+    /// <summary>第二个实例请求已有实例把窗口找回来。返回 false 表示对方没有事件通道（旧版本）。</summary>
+    public static bool SignalExistingInstance()
+    {
+        try
+        {
+            using var activationEvent = EventWaitHandle.OpenExisting(ActivateEventName);
+            activationEvent.Set();
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 
