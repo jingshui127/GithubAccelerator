@@ -80,9 +80,6 @@
                 <Button Content="{Binding UndoButtonText}" Command="{Binding UndoCommand}"
                         Padding="12,6" FontSize="11" IsVisible="{Binding IsUndoVisible}"
                         IsEnabled="{Binding IsApplied}"/>
-                <Button Content="{Binding RestoreButtonText}" Command="{Binding RestoreFirstRunSnapshotCommand}"
-                        Padding="12,6" FontSize="11" IsVisible="{Binding IsRestoreVisible}"
-                        IsEnabled="{Binding !IsBusy}"/>
                 <Button Content="取消确认" Command="{Binding CancelConfirmCommand}"
                         Padding="10,6" FontSize="10" Classes="SecondaryText"
                         IsEnabled="{Binding !IsBusy}"/>

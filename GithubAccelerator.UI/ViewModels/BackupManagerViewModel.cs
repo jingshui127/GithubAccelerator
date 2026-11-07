@@ -246,34 +246,6 @@ public partial class BackupManagerViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private async Task RestoreFirstRunSnapshot()
-    {
-        var snapshot = await _backupService.GetFirstRunSnapshotAsync();
-        if (snapshot == null)
-        {
-            StatusMessage = "没有首启前快照（首次加速时才自动创建）";
-            return;
-        }
-
-        if (ConfirmAsync == null)
-        {
-            StatusMessage = "当前界面未提供确认框，已取消恢复";
-            return;
-        }
-
-        var summary = await BuildRestoreSummaryAsync(snapshot);
-        var confirmed = await ConfirmAsync("恢复到首启前完整快照",
-            "这将把当前 Hosts 整体替换为首次加速前的快照。\n\n" + summary);
-        if (!confirmed)
-        {
-            StatusMessage = "已取消恢复";
-            return;
-        }
-
-        await RestoreSnapshotCoreAsync(snapshot);
-    }
-
     /// <summary>已由上层统一确认框确认后的恢复；供「回到原始状态」入口调用，避免二次确认。</summary>
     internal async Task<bool> RestoreFirstRunSnapshotConfirmedAsync()
     {

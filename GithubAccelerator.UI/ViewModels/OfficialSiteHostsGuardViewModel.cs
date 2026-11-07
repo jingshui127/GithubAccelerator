@@ -16,13 +16,11 @@ namespace GithubAccelerator.UI.ViewModels;
 public partial class OfficialSiteHostsGuardViewModel : ObservableObject
 {
     private readonly OfficialSiteHostsGuardService _service;
-    private readonly IHostsBackupService _backupService;
 
     private bool _initialized;
     private bool _suppressToggle;
     private bool _applyArmed;
     private bool _undoArmed;
-    private bool _restoreArmed;
     private OfficialSiteGuardPlan? _lastPlan;
 
     public OfficialSiteHostsGuardViewModel()
@@ -34,10 +32,8 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
         OfficialSiteHostsGuardService service, IHostsBackupService? backupService = null)
     {
         _service = service;
-        _backupService = backupService ?? new HostsBackupService(new WindowsHostsFileService());
         ApplyButtonText = "确认写入 Hosts";
         UndoButtonText = "恢复原始状态";
-        RestoreButtonText = "恢复到首启前快照";
     }
 
     [ObservableProperty]
@@ -103,13 +99,7 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
     private string _undoButtonText;
 
     [ObservableProperty]
-    private string _restoreButtonText;
-
-    [ObservableProperty]
     private bool _isUndoVisible;
-
-    [ObservableProperty]
-    private bool _isRestoreVisible;
 
     public string ScopeWarning =>
         "只写 github.com；不写 githubassets/avatars/camo 等 CDN 域；不改 DNS/代理/证书；" +
@@ -273,10 +263,8 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
     {
         _applyArmed = false;
         _undoArmed = false;
-        _restoreArmed = false;
         ApplyButtonText = "确认写入 Hosts";
         UndoButtonText = "恢复原始状态";
-        RestoreButtonText = "恢复到首启前快照";
         StatusText = "已取消确认。";
     }
 
@@ -349,59 +337,6 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private async Task RestoreFirstRunSnapshot()
-    {
-        if (IsBusy) return;
-
-        if (!_restoreArmed)
-        {
-            _restoreArmed = true;
-            RestoreButtonText = "再次点击确认恢复到首启前快照";
-            StatusText = "将用「首启快照」整体还原 Hosts（需要管理员权限，且会覆盖当前全部内容）。再次点击确认。";
-            return;
-        }
-
-        IsBusy = true;
-        _restoreArmed = false;
-        RestoreButtonText = "恢复到首启前快照";
-        try
-        {
-            var snapshot = await _backupService.GetFirstRunSnapshotAsync();
-            if (snapshot == null)
-            {
-                StatusText = "没有找到首启快照，无法恢复。";
-                return;
-            }
-
-            var ok = await _backupService.RestoreBackupAsync(snapshot.BackupPath);
-            if (ok)
-            {
-                // 快照可能已包含或不包含本程序块；统一清一次状态，避免界面显示“仍已应用”
-                await _service.UndoAsync();
-                IsApplied = false;
-                SetToggleSilently(false);
-                ApplyStateToUi(_service.GetState());
-                StatusText = $"已按首启快照恢复 Hosts（{snapshot.BackupTime:yyyy-MM-dd HH:mm:ss}）。";
-            }
-            else
-            {
-                NeedsElevation = !_service.HasWriteAccess();
-                StatusText = NeedsElevation
-                    ? "恢复失败：当前不是管理员，无法写入 Hosts；本程序不会静默提权。"
-                    : "恢复失败：请检查 Hosts 权限或文件是否被占用。";
-            }
-        }
-        catch (Exception ex)
-        {
-            StatusText = "恢复失败：" + ex.Message;
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
     private void ApplyStateToUi(OfficialSiteGuardState state)
     {
         AppliedIpText = string.IsNullOrEmpty(state.AppliedIp) ? "未应用" : state.AppliedIp!;
@@ -412,7 +347,6 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
                        (rounds > 0 ? $"（共 {rounds} 轮）" : string.Empty) +
                        $"；复测累计成功 {state.VerifySuccessCount} / 失败 {state.VerifyFailureCount}";
         IsUndoVisible = IsApplied;
-        IsRestoreVisible = true;
         SetToggleSilently(IsApplied && state.Enabled);
     }
 
