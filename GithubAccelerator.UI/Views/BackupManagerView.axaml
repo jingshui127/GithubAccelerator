@@ -25,9 +25,6 @@
             </StackPanel>
 
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
-                <Button Content="恢复到首启前快照" Command="{Binding RestoreFirstRunSnapshotCommand}"
-                        Theme="{DynamicResource SecondaryButton}"
-                        Padding="12,4"/>
                 <Button Content="创建备份" Command="{Binding CreateBackupCommand}"
                         Theme="{DynamicResource SuccessButton}"
                         Padding="12,4"/>

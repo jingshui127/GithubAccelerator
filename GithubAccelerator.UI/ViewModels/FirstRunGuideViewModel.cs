@@ -239,7 +239,7 @@ public partial class FirstRunGuideViewModel : ObservableObject
                 break;
             case FirstRunStartKind.MirrorUnavailable:
                 FailureText = "加速节点暂时不可达，可能被网络限制，或节点正在维护。";
-                FailureActionText = "点「重新检测」确认网络后重试；仍不行就到主界面手动选择数据源。";
+                FailureActionText = "点「重新检测」确认网络后重试；仍不行就到主界面「我的加速 · 线路详情」里换一条线路试试。";
                 break;
             case FirstRunStartKind.WriteFailed:
                 FailureText = "写入系统设置时出了问题，文件没有被修改。";

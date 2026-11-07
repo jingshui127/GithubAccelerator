@@ -165,7 +165,7 @@ public partial class SourceStatusViewModel : ObservableObject
             await SourcePreviewWindow.ShowLoadingAsync(
                 topLevel,
                 $"📄 预览 - {Name}",
-                $"远程数据源 Hosts 内容",
+                $"远程加速线路的 Hosts 内容",
                 async () =>
                 {
                     var response = await _httpClient.GetStringAsync(Url);
@@ -786,7 +786,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         // 启动后台定时 Hosts 优化（每30分钟静默刷新）
         StartPeriodicHostsRefresh();
 
-        StatusMessage = "已启动自动检测，正在测试所有数据源...";
+        StatusMessage = "已启动自动检测，正在测试所有加速线路...";
 
         IsDarkMode = ThemeManager.IsDarkMode;
 
@@ -1189,7 +1189,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return new FirstRunStartResult(FirstRunStartKind.WriteFailed, ElevationService.LastError);
 
         if (IsHostsApplied) return new FirstRunStartResult(FirstRunStartKind.Success);
-        if (_applyIssue == "所有数据源均不可用")
+        if (_applyIssue == "所有加速线路均不可用")
             return new FirstRunStartResult(FirstRunStartKind.MirrorUnavailable, _applyIssue);
         if (!string.IsNullOrEmpty(_applyIssue))
             return new FirstRunStartResult(FirstRunStartKind.WriteFailed, _applyIssue);
@@ -1404,9 +1404,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             {
                 _updateTimer?.Start();
             }
-            StatusMessage = "监控已启动，正在测试所有数据源...";
+            StatusMessage = "监控已启动，正在测试所有加速线路...";
             _historyService.Record(OperationType.MonitoringStarted, "启动监控");
-            _notificationService.Info("监控", "监控已启动，正在测试所有数据源");
+            _notificationService.Info("监控", "监控已启动，正在测试所有加速线路");
         }
     }
 
@@ -1414,15 +1414,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private async Task RefreshSources()
     {
         IsRefreshingSources = true;
-        StatusMessage = "正在刷新数据源状态...";
+        StatusMessage = "正在刷新加速线路状态...";
         try
         {
             var metrics = await _performanceMonitor.TestAllSourcesAsync();
             ApplyMetrics(metrics);
             UpdateBestSource();
             await TestGitHubConnection();
-            StatusMessage = $"已刷新 {Sources.Count} 个数据源状态";
-            _historyService.Record(OperationType.SourcesRefreshed, $"刷新了 {Sources.Count} 个数据源");
+            StatusMessage = $"已刷新 {Sources.Count} 条加速线路状态";
+            _historyService.Record(OperationType.SourcesRefreshed, $"刷新了 {Sources.Count} 条加速线路");
         }
         finally
         {
@@ -1832,13 +1832,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         if (validContents.Count == 0)
         {
-            _applyIssue = "所有数据源均不可用";
+            _applyIssue = "所有加速线路均不可用";
             StatusMessage = "所有加速线路都获取失败，请检查网络或恢复原始访问";
             AllSourcesFailureText = AllSourcesFailureReport.Build(
                 DateTime.Now,
                 fetchResults.Select(r => (r.Name, r.Error)));
             HasAllSourcesFailure = true;
-            _notificationService.Error("Hosts 应用", "所有数据源均不可用");
+            _notificationService.Error("Hosts 应用", "所有加速线路均不可用");
 
             // 已应用加速但全部源挂掉：不能继续显示"已加速"，改为"已加速但源不可用"。
             if (IsHostsApplied)
@@ -2150,8 +2150,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         var selectedSources = Sources.Where(s => s.IsSelected).ToList();
         if (selectedSources.Count == 0)
         {
-            StatusMessage = "请先选择要应用的数据源";
-            _notificationService.Warning("数据源选择", "请先选择要应用的数据源");
+            StatusMessage = "请先选择要应用的加速线路";
+            _notificationService.Warning("线路选择", "请先选择要应用的加速线路");
             return;
         }
 
