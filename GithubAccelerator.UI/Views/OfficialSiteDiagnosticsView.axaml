@@ -127,7 +127,8 @@
                             <TextBlock Grid.Column="0" Text="域名" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"/>
                             <TextBlock Grid.Column="1" Text="IP" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"/>
                             <TextBlock Grid.Column="2" Text="来源" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"/>
-                            <TextBlock Grid.Column="3" Text="握手中位耗时" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"/>
+                            <TextBlock Grid.Column="3" Text="建立连接耗时（中位数）" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"
+                                       ToolTip.Tip="TLS 握手耗时，不含页面内容；每个 IP 采样 3 次取中位数"/>
                             <TextBlock Grid.Column="4" Text="可用性" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"/>
                             <TextBlock Grid.Column="5" Text="与基线对比" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"/>
                         </Grid>
@@ -182,7 +183,7 @@
         <Border Grid.Row="2" Padding="14,10" CornerRadius="8"
                 Background="{DynamicResource ControlFillColorSecondaryBrush}">
             <TextBlock FontSize="11" TextWrapping="Wrap" Classes="SecondaryText"
-                       Text="上方诊断仅只读观测：不写 Hosts、不请求管理员权限。下方「防护版 Hosts 加速」默认关闭，只有用户预览并二次确认后才写入 github.com，且不写 CDN 域；不改 DNS/代理/证书，不做后台常驻轮询。"/>
+                       Text="上方诊断仅只读观测：不写 Hosts、不请求管理员权限。下方「固定 GitHub 地址（可撤销）」默认关闭，只有用户预览并二次确认后才写入 github.com，且不写 CDN 域；不改 DNS/代理/证书，不做后台常驻轮询。"/>
         </Border>
     </Grid>
 </UserControl>

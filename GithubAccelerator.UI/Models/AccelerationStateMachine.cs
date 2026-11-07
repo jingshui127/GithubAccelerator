@@ -54,7 +54,7 @@ public sealed class AccelerationStateMachine
         AccelerationState.NotAccelerated => "未加速",
         AccelerationState.Starting => "进行中（可取消）",
         AccelerationState.Accelerated => "已加速",
-        AccelerationState.AcceleratedUnavailable => $"已加速，但当前数据源不可用：{_reason ?? "全部数据源不可达"}（可改用原始链接）",
+        AccelerationState.AcceleratedUnavailable => $"已加速，但当前加速线路不可用：{_reason ?? "全部加速线路不可达"}（可恢复原始访问）",
         AccelerationState.PartiallyFailed => $"部分失败：{_reason ?? "有步骤未完成"}",
         AccelerationState.WaitingForElevation => "等待用户确认（提权）",
         _ => "未知"
@@ -108,7 +108,7 @@ public sealed class AccelerationStateMachine
     {
         if (_state == AccelerationState.WaitingForElevation) return;
         EnterStable(AccelerationState.AcceleratedUnavailable,
-            string.IsNullOrWhiteSpace(reason) ? "全部数据源不可达" : reason);
+            string.IsNullOrWhiteSpace(reason) ? "全部加速线路不可达" : reason);
     }
 
     /// <summary>稳定状态 → 等待提权确认。</summary>
@@ -170,7 +170,7 @@ public sealed class AccelerationStateMachine
 /// </summary>
 public static class AllSourcesFailureReport
 {
-    public const string DirectActionText = "改用原始链接（关闭加速）";
+    public const string DirectActionText = "恢复原始访问（关闭加速）";
 
     public static string Build(
         DateTime checkedAt,
@@ -183,7 +183,7 @@ public static class AllSourcesFailureReport
         return string.Join(Environment.NewLine, new[]
         {
             $"检测时间：{checkedAt:yyyy-MM-dd HH:mm:ss}",
-            $"结果：共 {lines.Count} 个数据源全部不可用。",
+            $"结果：共 {lines.Count} 条加速线路全部不可用。",
             string.Join(Environment.NewLine, lines),
             $"建议动作：点击“{DirectActionText}”。若当前已应用加速，会移除本程序的 Hosts 块，让 GitHub 回到原始链接直连。"
         });

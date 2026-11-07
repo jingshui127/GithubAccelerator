@@ -79,8 +79,8 @@
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <ToggleSwitch IsChecked="{Binding AutoSwitchBestSource}" HorizontalAlignment="Left"/>
                                 <StackPanel>
-                                    <TextBlock Text="自动切换最佳源" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="当发现更快的源时自动切换（比当前快 20ms 以上）" FontSize="12" Classes="SecondaryText"/>
+                                    <TextBlock Text="自动切换最快线路" FontSize="14" FontWeight="SemiBold"/>
+                                    <TextBlock Text="当发现更快的线路时自动切换（单次请求比当前快 20 ms 以上）" FontSize="12" Classes="SecondaryText"/>
                                 </StackPanel>
                             </StackPanel>
 
@@ -105,7 +105,7 @@
                             BorderThickness="1">
                         <StackPanel Spacing="16">
                             <StackPanel>
-                                <TextBlock Text="Git 加速状态" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock Text="Git 加速（改写 clone 地址）" FontSize="14" FontWeight="SemiBold"/>
                                 <TextBlock Text="{Binding GitRewriteStatus}" FontSize="12" Classes="SecondaryText"
                                            TextWrapping="Wrap"/>
                                 <TextBlock Text="{Binding GitRewriteAdvice}" FontSize="12"
@@ -118,7 +118,7 @@
                             </StackPanel>
 
                             <StackPanel>
-                                <TextBlock Text="镜像前缀" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock Text="Git 加速地址" FontSize="14" FontWeight="SemiBold"/>
                                 <TextBlock Text="用 url.&lt;镜像&gt;.insteadOf 改写 https://github.com/ 开头的地址，只影响 clone/fetch/pull；push 需要鉴权，仍直连 GitHub"
                                            FontSize="12" Classes="SecondaryText" TextWrapping="Wrap"/>
                                 <TextBlock Text="加速只作用于下载与克隆（clone/fetch/raw/release）；push 仍直连 github.com，不走镜像。若 push 失败，请重试或更换网络，加速器无法改善 push。"
@@ -132,9 +132,10 @@
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Button Content="开启 Git 加速" Command="{Binding EnableGitRewriteCommand}"
                                         Padding="16,6" FontSize="13"/>
-                                <Button Content="停止加速" Command="{Binding DisableGitRewriteCommand}"
-                                        Padding="16,6" FontSize="13"/>
-                                <Button Content="使用推荐镜像" Command="{Binding UseRecommendedGitRewriteCommand}"
+                                <Button Content="恢复原始 Git 地址" Command="{Binding DisableGitRewriteCommand}"
+                                        Padding="16,6" FontSize="13"
+                                        ToolTip.Tip="只撤销本程序的 Git 地址改写，不动 Hosts"/>
+                                <Button Content="使用推荐加速地址" Command="{Binding UseRecommendedGitRewriteCommand}"
                                         Padding="16,6" FontSize="13"/>
                             </StackPanel>
 

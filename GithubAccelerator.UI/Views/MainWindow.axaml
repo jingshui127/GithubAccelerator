@@ -117,7 +117,7 @@
                                 Classes="NavButton">
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <TextBlock Text="🩺" FontSize="16"/>
-                                <TextBlock Text="子域健康检查" FontSize="13"/>
+                                <TextBlock Text="依赖站点检查" FontSize="13"/>
                             </StackPanel>
                         </Button>
 
@@ -242,7 +242,7 @@
                                 <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
                                     <TextBlock Text="{Binding IsMonitoring, Converter={StaticResource BoolToStringConverter}, ConverterParameter='●|○'}" 
                                               FontSize="10" Foreground="White"/>
-                                    <TextBlock Text="{Binding IsMonitoring, Converter={StaticResource BoolToStringConverter}, ConverterParameter='监控中|已停止'}" 
+                                    <TextBlock Text="{Binding IsMonitoring, Converter={StaticResource BoolToStringConverter}, ConverterParameter='测速中|已停止'}" 
                                               FontSize="10" Foreground="White"/>
                                 </StackPanel>
                             </Border>

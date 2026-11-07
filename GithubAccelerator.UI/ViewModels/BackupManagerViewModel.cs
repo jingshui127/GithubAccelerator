@@ -320,7 +320,7 @@ public partial class BackupManagerViewModel : ObservableObject
             : "当前 Hosts 不含本项目加速块");
         builder.AppendLine();
         builder.AppendLine("恢复会用快照整体替换当前 Hosts（包含块外的手工修改）。");
-        builder.Append("只想移除加速块而不动其他内容时，请用主界面的“停止加速”。");
+        builder.Append("只想移除加速块而不动其他内容时，请用主界面的「恢复原始访问」。");
         return builder.ToString();
     }
 

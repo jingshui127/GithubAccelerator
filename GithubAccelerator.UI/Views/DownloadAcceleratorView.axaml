@@ -90,7 +90,7 @@
                                 Padding="16,10" FontSize="13"
                                 IsEnabled="{Binding CanClickMirrorPage}"
                                 ToolTip.Tip="用实测通过页面校验的镜像打开该链接；页面路径不可用时入口禁用并给出原因，同时保留原始链接"/>
-                        <Button Content="⚡ 生成加速链接"
+                        <Button Content="⚡ 生成下载加速链接"
                                 Command="{Binding ConvertUrlCommand}"
                                 Padding="20,10" FontSize="13"
                                 IsEnabled="{Binding !IsBusy}"
@@ -377,7 +377,7 @@
                             <TextBlock Grid.Column="0" Text="2️⃣" FontSize="16" Margin="0,0,12,0"
                                        VerticalAlignment="Top"/>
                             <StackPanel Grid.Column="1" Spacing="4">
-                                <TextBlock Text="点击生成加速链接" FontSize="13" FontWeight="Medium"/>
+                                <TextBlock Text="点击生成下载加速链接" FontSize="13" FontWeight="Medium"/>
                                 <TextBlock Text="系统会自动识别链接类型并生成对应的加速镜像地址"
                                            FontSize="12" Classes="SecondaryText" TextWrapping="Wrap"/>
                             </StackPanel>

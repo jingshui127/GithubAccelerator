@@ -92,7 +92,7 @@ public partial class FirstRunGuideViewModel : ObservableObject
 
     public bool CanCheck => !IsChecking;
 
-    public string StartButtonText => IsStarting ? "正在开启…" : "开始加速";
+    public string StartButtonText => IsStarting ? "正在开启…" : "开启网页加速";
 
     public bool IsNetworkHealthy => NetworkState is FirstRunNetworkState.Reachable or FirstRunNetworkState.Slow;
 

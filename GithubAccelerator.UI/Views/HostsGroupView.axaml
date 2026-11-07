@@ -138,7 +138,8 @@
                     <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding SelectedGroup, Converter={x:Static ObjectConverters.IsNotNull}}">
                         <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" FontSize="12"
                                    VerticalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}"/>
-                        <Button Grid.Column="1" Content="🚀 应用分组规则" Command="{Binding ApplyGroupsCommand}"
+                        <Button Grid.Column="1" Content="🚀 用此分组加速" Command="{Binding ApplyGroupsCommand}"
+                                ToolTip.Tip="把这个分组里的规则写入 Hosts；可随时恢复原始访问"
                                 Padding="20,10" FontSize="14" FontWeight="Medium"/>
                     </Grid>
 
