@@ -36,8 +36,8 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
         _service = service;
         _backupService = backupService ?? new HostsBackupService(new WindowsHostsFileService());
         ApplyButtonText = "确认写入 Hosts";
-        UndoButtonText = "一键撤销（恢复原值）";
-        RestoreButtonText = "恢复首启快照";
+        UndoButtonText = "恢复原始状态";
+        RestoreButtonText = "恢复到首启前快照";
     }
 
     [ObservableProperty]
@@ -151,7 +151,7 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
         else
         {
             StatusText = IsApplied
-                ? "已关闭启用开关，但 Hosts 仍保留当前映射；请点击「一键撤销」确认移除。"
+                ? "已关闭启用开关，但 Hosts 仍保留当前映射；请点击「恢复原始状态」确认移除。"
                 : "已关闭启用开关；未写 Hosts。";
         }
     }
@@ -275,8 +275,8 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
         _undoArmed = false;
         _restoreArmed = false;
         ApplyButtonText = "确认写入 Hosts";
-        UndoButtonText = "一键撤销（恢复原值）";
-        RestoreButtonText = "恢复首启快照";
+        UndoButtonText = "恢复原始状态";
+        RestoreButtonText = "恢复到首启前快照";
         StatusText = "已取消确认。";
     }
 
@@ -315,14 +315,14 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
         if (!_undoArmed)
         {
             _undoArmed = true;
-            UndoButtonText = "再次点击确认撤销";
+            UndoButtonText = "再次点击确认恢复";
             StatusText = "撤销只会删除本程序的标记块，块外内容不动；点击第二次确认。";
             return;
         }
 
         IsBusy = true;
         _undoArmed = false;
-        UndoButtonText = "一键撤销（恢复原值）";
+        UndoButtonText = "恢复原始状态";
         try
         {
             var result = await _service.UndoAsync();
@@ -349,14 +349,14 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
         if (!_restoreArmed)
         {
             _restoreArmed = true;
-            RestoreButtonText = "再次点击确认恢复";
+            RestoreButtonText = "再次点击确认恢复到首启前快照";
             StatusText = "将用「首启快照」整体还原 Hosts（需要管理员权限，且会覆盖当前全部内容）。再次点击确认。";
             return;
         }
 
         IsBusy = true;
         _restoreArmed = false;
-        RestoreButtonText = "恢复首启快照";
+        RestoreButtonText = "恢复到首启前快照";
         try
         {
             var snapshot = await _backupService.GetFirstRunSnapshotAsync();

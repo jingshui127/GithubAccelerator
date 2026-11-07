@@ -32,15 +32,18 @@
                     </Border>
                 </StackPanel>
 
-                <Button Grid.Column="2" Content="Start" Command="{Binding StartMonitoringCommand}"
+                <Button Grid.Column="2" Content="▶ 开始测速" Command="{Binding StartMonitoringCommand}"
                         Padding="10,4" FontSize="12" Margin="0,0,8,0"
-                        IsVisible="{Binding !IsMonitoring}"/>
-                <Button Grid.Column="2" Content="Stop" Command="{Binding StopMonitoringCommand}"
+                        IsVisible="{Binding !IsMonitoring}"
+                        ToolTip.Tip="每 10 秒做一次单次请求采样，不改系统设置"/>
+                <Button Grid.Column="2" Content="⏸ 暂停测速" Command="{Binding StopMonitoringCommand}"
                         Padding="10,4" FontSize="12" Margin="0,0,8,0"
-                        IsVisible="{Binding IsMonitoring}"/>
+                        IsVisible="{Binding IsMonitoring}"
+                        ToolTip.Tip="只暂停采样，不改 Hosts"/>
                 
-                <Button Grid.Column="3" Content="Clear" Command="{Binding ClearDataCommand}"
-                        Padding="10,4" FontSize="12"/>
+                <Button Grid.Column="3" Content="清除数据" Command="{Binding ClearDataCommand}"
+                        Padding="10,4" FontSize="12"
+                        ToolTip.Tip="只清空本页的采样记录"/>
             </Grid>
 
             <!-- 图表区域 - 使用自绘图表 -->
@@ -70,7 +73,7 @@
                         Background="{DynamicResource ControlFillColorSecondaryBrush}"
                         BorderThickness="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
                     <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="当前" FontSize="11"
+                        <TextBlock Text="当前（单次请求）" FontSize="11"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    HorizontalAlignment="Center"/>
                         <TextBlock FontSize="18" FontWeight="Bold"
@@ -85,7 +88,7 @@
                         Background="{DynamicResource ControlFillColorSecondaryBrush}"
                         BorderThickness="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
                     <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="平均" FontSize="11"
+                        <TextBlock Text="平均（单次请求）" FontSize="11"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    HorizontalAlignment="Center"/>
                         <TextBlock FontSize="18" FontWeight="Bold"
@@ -100,7 +103,7 @@
                         Background="{DynamicResource ControlFillColorSecondaryBrush}"
                         BorderThickness="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
                     <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="最快" FontSize="11"
+                        <TextBlock Text="最快（单次请求）" FontSize="11"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    HorizontalAlignment="Center"/>
                         <TextBlock FontSize="18" FontWeight="Bold"
@@ -115,7 +118,7 @@
                         Background="{DynamicResource ControlFillColorSecondaryBrush}"
                         BorderThickness="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
                     <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="最慢" FontSize="11"
+                        <TextBlock Text="最慢（单次请求）" FontSize="11"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    HorizontalAlignment="Center"/>
                         <TextBlock FontSize="18" FontWeight="Bold"

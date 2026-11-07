@@ -22,10 +22,12 @@
                 <StackPanel Grid.Column="0" Grid.Row="0" Spacing="4">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <TextBlock Text="🩺" FontSize="22"/>
-                        <TextBlock Text="GitHub 子域健康检查" FontSize="18" FontWeight="SemiBold"/>
+                        <TextBlock Text="GitHub 依赖站点检查" FontSize="18" FontWeight="SemiBold"/>
                     </StackPanel>
-                    <TextBlock Text="并行探测 GitHub 关键子域，定位为何浏览器有时打不开"
+                    <TextBlock Text="并行探测 GitHub 页面依赖的站点，定位为何浏览器有时打不开"
                                FontSize="12" Classes="SecondaryText" Margin="32,0,0,0"/>
+                    <TextBlock Text="表中毫秒为单次请求耗时（不含页面加载）；只代表一次请求，不代表整页打开速度。"
+                               FontSize="11" Classes="SecondaryText" Margin="32,2,0,0" TextWrapping="Wrap"/>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Grid.Row="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">

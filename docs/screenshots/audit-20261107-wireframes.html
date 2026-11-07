@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>GitHub 加速器 Pro · 仪表盘改造前后线框图（2026-11-07）</title>
+<style>
+  :root{
+    --bg:#141414; --panel:#1d1d1f; --card:#262629; --stroke:#3a3a3e;
+    --text:#f2f2f2; --muted:#9a9aa2; --accent:#0969da; --ok:#107c10;
+    --warn:#ff8c00; --bad:#d13438; --mark:#ff5c5c; --good:#3fb950;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;font-size:13px;line-height:1.55}
+  .page{max-width:1180px;margin:0 auto;padding:28px 20px 60px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:12px;margin-bottom:24px}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--stroke);
+          border-radius:8px;padding:10px 14px;margin-bottom:24px;font-size:12px;color:var(--muted)}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .dot.red{background:var(--mark)} .dot.green{background:var(--good)}
+  h2{font-size:16px;margin:28px 0 12px;padding-left:10px;border-left:3px solid var(--accent)}
+  .frame{display:grid;grid-template-columns:170px 1fr;border:1px solid var(--stroke);border-radius:10px;
+         overflow:hidden;background:#1a1a1c}
+  .frame.before{box-shadow:0 0 0 1px rgba(255,92,92,.25)}
+  .frame.after{box-shadow:0 0 0 1px rgba(63,185,80,.25)}
+  .side{background:var(--panel);border-right:1px solid var(--stroke);padding:10px;font-size:11px;color:var(--muted)}
+  .side .logo{color:var(--text);font-weight:600;font-size:12px;margin-bottom:10px}
+  .nav{padding:5px 8px;border-radius:5px;margin-bottom:3px}
+  .nav.on{background:#2f3b52;color:#fff}
+  .sec{margin:10px 0 4px;font-size:10px;opacity:.7}
+  .main{display:flex;flex-direction:column}
+  .top{display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--stroke);
+       padding:8px 12px;background:var(--panel);font-size:12px}
+  .top .title{font-weight:600;font-size:13px}
+  .top .status{color:var(--muted);margin-left:auto}
+  .top .btns{display:flex;gap:6px}
+  .mock-body{padding:14px}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .kpi{border-radius:8px;padding:10px;min-height:62px;position:relative}
+  .kpi .k{font-size:10px;opacity:.85}
+  .kpi .v{font-size:17px;font-weight:700;margin-top:4px}
+  .k-green{background:var(--ok)} .k-blue{background:#1f6feb} .k-green2{background:#2da44e} .k-orange{background:#b35900}
+  .mark{position:absolute;top:-7px;left:-7px;width:18px;height:18px;border-radius:50%;
+        background:var(--mark);color:#fff;font-size:10px;font-weight:700;display:flex;
+        align-items:center;justify-content:center}
+  .mark.ok{background:var(--good)}
+  .row{display:flex;align-items:center;gap:8px;border:1px solid var(--stroke);background:var(--card);
+       border-radius:8px;padding:8px 10px;margin-top:8px;font-size:11px}
+  .row .muted{color:var(--muted)}
+  .big{font-size:16px;font-weight:700}
+  .btn{background:#333;border:1px solid var(--stroke);border-radius:6px;padding:4px 8px;font-size:11px;color:var(--text)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.danger{background:var(--bad);border-color:var(--bad);color:#fff}
+  .fail{border:1px solid #8b2c2c;background:#2a1a1a;border-radius:8px;padding:8px 10px;margin-top:8px;font-size:11px}
+  .fail b{color:#ff8f8f}
+  .layer{border:1px solid var(--stroke);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--card)}
+  .layer-tag{font-size:10px;color:var(--accent);letter-spacing:.5px;margin-bottom:6px}
+  .concl{display:flex;align-items:center;gap:14px}
+  .pill{display:inline-block;border-radius:99px;padding:3px 9px;font-size:11px}
+  .pill.good{background:#12351a;color:#6fdd8b;border:1px solid #2ea043}
+  .pill.warn{background:#3a2a12;color:#ffc069;border:1px solid #9e6a03}
+  .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .metric{border:1px solid var(--stroke);border-radius:8px;padding:10px;background:#202023}
+  .metric .big{font-size:20px}
+  .scope{color:var(--muted);font-size:10px;margin-top:3px}
+  .fold{border:1px dashed var(--stroke);border-radius:8px;padding:8px 10px;color:var(--muted);font-size:11px;margin-top:4px}
+  .notes{border:1px solid var(--stroke);border-radius:10px;background:var(--panel);padding:14px;margin:10px 0 26px}
+  .notes h3{font-size:13px;margin:0 0 8px}
+  .notes ul{margin:0;padding-left:18px}
+  .notes li{margin:5px 0;color:#d6d6da}
+  .notes li b{color:#fff}
+  .bad{color:#ff8f8f} .goodT{color:#6fdd8b}
+  .foot{color:var(--muted);font-size:11px;margin-top:30px;border-top:1px solid var(--stroke);padding-top:12px}
+  @media (max-width:900px){.frame{grid-template-columns:1fr}.side{display:none}.kpis{grid-template-columns:repeat(2,1fr)}.metrics{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>仪表盘信息架构 · 改造前后线框图</h1>
+  <div class="sub">GitHub 加速器 Pro · 2026-11-07 · 线框仅表达信息层级与文案，颜色/字号沿用现有深色主题，不是最终视觉稿</div>
+
+  <div class="legend">
+    <span><span class="dot red"></span>改造前：误读点</span>
+    <span><span class="dot green"></span>改造后：对应修正</span>
+    <span>等比缩放不代表真实尺寸</span>
+    <span>完整分析见 docs/App-Audit-20261107.md</span>
+  </div>
+
+  <h2>改造前（现状）</h2>
+  <div class="frame before">
+    <div class="side">
+      <div class="logo">GitHub 加速器 Pro</div>
+      <div class="sec">主要功能</div>
+      <div class="nav on">📊 仪表盘</div>
+      <div class="nav">📈 网络监控</div>
+      <div class="nav">⚡ 下载加速器</div>
+      <div class="nav">🩺 子域健康检查</div>
+      <div class="nav">🔎 官网访问诊断</div>
+      <div class="sec">Hosts 管理</div>
+      <div class="nav">📄 Hosts 内容</div>
+      <div class="nav">📁 分组管理</div>
+      <div class="nav">💾 备份管理</div>
+      <div class="sec">系统工具</div>
+      <div class="nav">⚙️ 设置</div>
+      <div class="nav">❓ 使用指南</div>
+      <div class="nav">📝 日志查看</div>
+    </div>
+    <div class="main">
+      <div class="top">
+        <span class="title">仪表盘</span>
+        <span class="status">就绪</span>
+        <span class="btns"><span class="btn">📤 导出</span><span class="btn">📥 导入</span><span class="btn">🔄 刷新DNS</span></span>
+      </div>
+      <div class="mock-body">
+        <div class="kpis">
+          <div class="kpi k-green"><span class="mark">1</span><div class="k">🌐 监控状态</div><div class="v">监控中</div></div>
+          <div class="kpi k-blue"><span class="mark">2</span><div class="k">⚡ 最佳响应</div><div class="v">86 ms</div></div>
+          <div class="kpi k-green2"><span class="mark">3</span><div class="k">📊 综合评分</div><div class="v">92.5</div></div>
+          <div class="kpi k-orange"><span class="mark">4</span><div class="k">📡 数据源</div><div class="v">12 个 · 可用 8</div></div>
+        </div>
+
+        <div class="row">
+          <span class="muted">⏱️ 应用前延迟</span><span class="big">-- ms</span>
+          <span>→</span>
+          <span class="muted">⚡ 应用后延迟</span><span class="big">-- ms</span>
+          <span>=</span>
+          <span class="muted">📈 提升</span><span class="big">--</span>
+          <span class="btn" style="margin-left:auto">🔄 重新测速</span>
+        </div>
+
+        <div class="row">
+          <span class="btn">⏹ 停止</span><span class="btn">🔄 刷新</span>
+          <span class="muted">GitHub 未测试</span>
+          <span class="muted" style="margin-left:auto">加速状态：未应用</span>
+          <span class="btn">✅</span><span class="btn">🗑️</span>
+        </div>
+
+        <div class="fail"><span class="mark">5</span><b>所有数据源都不可用</b> · 检测时间 12:04 · 12/12 超时　
+          <span class="btn">改用原始链接</span><span class="btn">重新检测</span><span class="btn">✕</span></div>
+
+        <div class="row" style="background:#12305c">
+          <span>⭐</span><span><b>推荐数据源</b><br><span class="muted">多源 DNS 探测</span></span>
+          <span style="margin-left:auto">响应 86 ms</span><span>评分 92.5</span>
+          <span class="btn primary">🚀 智能优选</span>
+        </div>
+
+        <div class="row" style="margin-top:12px">
+          <b>📊 数据源列表</b><span class="muted">共 12 个</span>
+          <span style="margin-left:auto" class="muted">搜索数据源…</span><span class="btn">评分最高 ▾</span>
+          <span class="btn">全选</span><span class="btn">取消</span><span class="muted">已选 3 个</span>
+        </div>
+        <div class="row"><span>☐ 🌐 多源 DNS 探测</span><span class="muted">https://…</span><span style="margin-left:auto">响应 86 ms</span><span>评分 92.5</span><span class="btn">预览</span><span class="btn">应用</span></div>
+        <div class="row"><span>☐ 🌐 镜像线路 A</span><span class="muted">https://…</span><span style="margin-left:auto">超时</span><span>-</span><span class="btn">预览</span><span class="btn">应用</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3>改造前的 5 处误读（对应图中红点）</h3>
+    <ul>
+      <li><b>① 绿色「监控中」</b>被读成“GitHub 可用 / 加速已生效”。它只表示“数据源自动测速在跑”，与 GitHub 能否打开无关；同一屏下方可以出现“所有数据源都不可用”。</li>
+      <li><b>②③ 最佳响应 / 综合评分</b>没有单位、口径和含义。用户会把 86 ms 当成“网页打开耗时”，把 92.5 当成“速度得分”；两者其实只描述某条镜像线路本身。</li>
+      <li><b>④ 数据源 12 个 / 可用 8</b>被读成“12 个 GitHub 入口，8 个能用”。它统计的是本程序配置的镜像源，不代表 github.com 的可达性。</li>
+      <li><b>⑤「重新检测」实际执行应用加速（写 Hosts）</b>：按钮文字说检测，命令是 ApplyHosts。“我只是想再看一眼”会变成一次系统写入。</li>
+      <li><b>同屏两个「取消」</b>：快捷栏的取消是“中止加速”，列表里的取消是“取消全选”。用户点错会得到完全不同的结果。</li>
+    </ul>
+  </div>
+
+  <h2>改造后（建议）</h2>
+  <div class="frame after">
+    <div class="side">
+      <div class="logo">GitHub 加速器 Pro</div>
+      <div class="sec">现在</div>
+      <div class="nav on">✅ 能不能用</div>
+      <div class="nav">📁 我的加速</div>
+      <div class="nav">🩺 检查与修复</div>
+      <div class="sec">工具</div>
+      <div class="nav">⚡ 下载加速器</div>
+      <div class="nav">📄 Hosts 与备份</div>
+      <div class="sec">其他</div>
+      <div class="nav">⚙️ 设置</div>
+      <div class="nav">❓ 帮助</div>
+    </div>
+    <div class="main">
+      <div class="top">
+        <span class="title">现在能用吗</span>
+        <span class="status">最近检查 12:04 · 手动刷新</span>
+        <span class="btns"><span class="btn">🔄 重新检查</span></span>
+      </div>
+      <div class="mock-body">
+        <div class="layer">
+          <div class="layer-tag">第一层 · 回答“我现在能用吗”</div>
+          <div class="concl">
+            <div><span class="mark ok">A</span><span class="pill good">可用</span>
+              <div class="big" style="margin-top:6px">GitHub 网页可以打开，当前未开启加速</div>
+              <div class="scope">依据：关键站点可达 + 整页实测；不是单次 ping 的推测</div>
+            </div>
+            <span class="btn primary" style="margin-left:auto;padding:9px 16px">开启加速</span>
+            <span class="btn">查看详情</span>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <span class="muted">加速状态：</span><b>未开启</b>
+            <span class="muted">当前线路：</span><b>直连 github.com</b>
+            <span class="muted">可撤销：</span><b>是（随时恢复原始 Hosts）</b>
+          </div>
+        </div>
+
+        <div class="layer">
+          <div class="layer-tag">第二层 · 回答“快不快 / 哪里慢”</div>
+          <div class="metrics">
+            <div class="metric"><span class="mark ok">B</span><div class="muted">页面加载（主指标）</div><div class="big">2.4 s</div>
+              <div class="scope">口径：首页 + 首屏资源；6 组交错配对；不执行 JS，不等同浏览器</div></div>
+            <div class="metric"><div class="muted">单次请求</div><div class="big">86 ms</div>
+              <div class="scope">口径：1 次请求首字节；每 10 秒采样；不含页面加载</div></div>
+            <div class="metric"><div class="muted">下载速度</div><div class="big">1.2 MB/s</div>
+              <div class="scope">口径：最多 2 MB / 5 秒窗口；仅测镜像链接</div></div>
+          </div>
+          <div class="fold">▸ 高级详情：12 条加速线路的响应/评分、各域名连接耗时（术语在人话标签后）</div>
+        </div>
+
+        <div class="layer">
+          <div class="layer-tag">第三层 · 只在出问题时出现：回答“我该怎么办”</div>
+          <div class="fail" style="background:#231d15;border-color:#9e6a03">
+            <span class="mark ok">C</span><b style="color:#ffc069">加速没有生效：线路全部不可达</b>
+            <div style="margin-top:4px;color:#e8d7b5">你的网络当前连不上这 12 条加速线路；直连 github.com 仍可尝试。</div>
+            <div style="margin-top:6px"><span class="btn primary">改用直连（移除加速）</span><span class="btn">查看每条线路原因</span><span class="btn">打开原始链接</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3>改造后的对应关系</h3>
+    <ul>
+      <li><b>A 一句话结论 + 一个动作</b>：把“监控中/最佳响应/评分/数据源计数”四个内部指标移出首屏；首屏只留“可用/部分可用/不可用 + 是否已开启加速 + 一个开关按钮”。</li>
+      <li><b>B 三个口径，一个主指标</b>：整页耗时做主指标（回答“网页快不快”），单次请求与下载速度作为辅助并强制标注口径；评分不再作为首屏指标。</li>
+      <li><b>C 失败区只有一个原因句 + 一个主动作</b>：403 配额/线路不可达/本机断网分别给不同人话与动作，不再把“线路不可达”说成“网络错误”，也不再出现“重新检测”实际去写 Hosts 的错位。</li>
+      <li><b>折叠层</b>：数据源列表、评分、域名明细保留但不抢占主路径；命名统一为“加速线路 / 依赖站点 / 连接耗时”。</li>
+      <li><b>导航按问题分组</b>：能不能用 / 我的加速 / 检查与修复 / 下载 / Hosts 与备份 / 设置 / 帮助；原“网络监控”“子域健康检查”“官网访问诊断”合并进“检查与修复”。</li>
+    </ul>
+  </div>
+
+  <div class="foot">
+    说明：本文件是线框图，不是实现稿；不含用户名、路径、token。现有视觉风格（深色背景、卡片圆角、蓝/绿/橙状态色）保持不变，只调整信息优先级与文案。
+  </div>
+</div>
+</body>
+</html>

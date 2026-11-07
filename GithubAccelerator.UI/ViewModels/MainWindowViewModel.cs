@@ -211,7 +211,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private bool _isGitHubAccessible;
 
     [ObservableProperty]
-    private string _gitHubStatusText = "未测试";
+    private string _gitHubStatusText = "直连：未测试";
 
     [ObservableProperty]
     private ObservableCollection<SourceStatusViewModel> _sources = new();
@@ -571,7 +571,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         await ClearAppliedHosts();
         HasAllSourcesFailure = false;
         AllSourcesFailureText = string.Empty;
-        StatusMessage = "已改用原始链接（已移除本程序的 Hosts 加速块）";
+        StatusMessage = "已恢复原始访问（已移除本程序的 Hosts 加速块）";
     }
 
     [RelayCommand]
@@ -626,7 +626,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public string HealthySourcesText => FormatSourceCountText(IsRefreshingSources, Sources.Count(s => s.IsHealthy));
 
-    public string SourcesCountText => IsRefreshingSources ? "—" : $"共 {Sources.Count} 个";
+    public string SourcesCountText => IsRefreshingSources ? "—" : $"共 {Sources.Count} 条";
 
     /// <summary>仪表盘计数口径：刷新中一律“—”，避免 0 与“已刷新 N 个”自相矛盾。</summary>
     public static string FormatSourceCountText(bool refreshing, int count) => refreshing ? "—" : count.ToString();
@@ -1054,7 +1054,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         var healthCheckView = new GithubAccelerator.UI.Views.HealthCheckView();
         healthCheckView.DataContext = HealthCheck;
         CurrentView = healthCheckView;
-        CurrentPageTitle = "子域健康检查";
+        CurrentPageTitle = "依赖站点检查";
         ResetNavigationSelection();
         IsHealthCheckSelected = true;
         IsDashboardVisible = false;
@@ -1497,11 +1497,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 if (IsGitHubAccessible)
                 {
                     var avgLatency = results.Where(r => r.IsSuccess).Average(r => r.LatencyMs);
-                    GitHubStatusText = $"可访问 ({avgLatency:F0}ms)";
+                    GitHubStatusText = $"直连：可访问 · 平均 {avgLatency:F0} ms";
                 }
                 else
                 {
-                    GitHubStatusText = "无法访问";
+                    GitHubStatusText = "直连：无法访问";
                     if (showNotification)
                     {
                         StatusMessage = "⚠️ GitHub 无法访问！请检查网络或使用代理";
@@ -1515,7 +1515,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                GitHubStatusText = "测试失败";
+                GitHubStatusText = "直连：测试失败";
                 if (showNotification)
                 {
                     StatusMessage = $"⚠️ GitHub 连接测试失败: {ex.Message}";
@@ -1616,8 +1616,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             }
 
             StatusMessage = hostsWasApplied
-                ? $"测速完成：应用前 {PreApplyLatency} → 应用后 {PostApplyLatency}"
-                : $"测速完成并已应用最佳 Hosts：应用前 {PreApplyLatency} → 应用后 {PostApplyLatency}";
+                ? $"测速完成（单次请求）：加速前 {PreApplyLatency} → 加速后 {PostApplyLatency}"
+                : $"测速完成并已开启网页加速（单次请求）：加速前 {PreApplyLatency} → 加速后 {PostApplyLatency}";
             _historyService.Record(OperationType.SettingsChanged, $"测速对比：{PreApplyLatency} → {PostApplyLatency}");
 
             StardustMonitorService.Instance.ReportInfo("SpeedTestResult",
@@ -1865,7 +1865,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         if (validContents.Count == 0)
         {
             _applyIssue = "所有数据源均不可用";
-            StatusMessage = "所有数据源均获取失败，请检查网络或改用原始链接";
+            StatusMessage = "所有加速线路都获取失败，请检查网络或恢复原始访问";
             AllSourcesFailureText = AllSourcesFailureReport.Build(
                 DateTime.Now,
                 fetchResults.Select(r => (r.Name, r.Error)));
@@ -1875,7 +1875,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             // 已应用加速但全部源挂掉：不能继续显示"已加速"，改为"已加速但源不可用"。
             if (IsHostsApplied)
             {
-                _accelState.MarkSourceUnavailable("全部数据源不可达");
+                _accelState.MarkSourceUnavailable("全部加速线路不可达");
                 RaiseAccelerationStateChanged();
             }
 

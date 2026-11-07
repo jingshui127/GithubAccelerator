@@ -56,10 +56,12 @@
                     <Border Grid.Column="0" Grid.Row="0" Padding="20" Margin="0,0,8,8" CornerRadius="12"
                             Background="{Binding IsMonitoring, Converter={StaticResource BoolToColorConverter}, ConverterParameter='#107C10|#FF8C00'}"
                             BoxShadow="0 2 8 0 #20000000">
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="🌐 监控状态" FontSize="12" Foreground="#AAFFFFFF"/>
-                            <TextBlock Text="{Binding IsMonitoring, Converter={StaticResource BoolToStringConverter}, ConverterParameter='监控中|已停止'}"
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="🌐 自动测速" FontSize="12" Foreground="#AAFFFFFF"
+                                       ToolTip.Tip="只表示后台在定时测加速线路；不代表 GitHub 能不能打开。"/>
+                            <TextBlock Text="{Binding IsMonitoring, Converter={StaticResource BoolToStringConverter}, ConverterParameter='测速中|已停止'}"
                                        FontSize="20" FontWeight="Bold" Foreground="White"/>
+                            <TextBlock Text="后台定时探测，不代表可用" FontSize="10" Foreground="#AAFFFFFF"/>
                         </StackPanel>
                     </Border>
 
@@ -67,9 +69,11 @@
                     <Border Grid.Column="1" Grid.Row="0" Padding="20" Margin="4,0,4,8" CornerRadius="12"
                             Background="{DynamicResource PrimaryColor}"
                             BoxShadow="0 2 8 0 #20000000">
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="⚡ 最佳响应" FontSize="12" Foreground="#AAFFFFFF"/>
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="⚡ 最快线路响应" FontSize="12" Foreground="#AAFFFFFF"
+                                       ToolTip.Tip="某条加速线路最近探测的平均响应，不等于网页打开耗时。"/>
                             <TextBlock Text="{Binding BestSourceResponseText}" FontSize="24" FontWeight="Bold" Foreground="White"/>
+                            <TextBlock Text="单次请求 · 平均" FontSize="10" Foreground="#AAFFFFFF"/>
                         </StackPanel>
                     </Border>
 
@@ -77,9 +81,11 @@
                     <Border Grid.Column="2" Grid.Row="0" Padding="20" Margin="4,0,4,8" CornerRadius="12"
                             Background="{DynamicResource SuccessColor}"
                             BoxShadow="0 2 8 0 #20000000">
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="📊 综合评分" FontSize="12" Foreground="#AAFFFFFF"/>
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="📊 线路评分" FontSize="12" Foreground="#AAFFFFFF"
+                                       ToolTip.Tip="按成功率和响应算的内部加权分，只用于线路间比较，不作为“能不能用”的结论。"/>
                             <TextBlock Text="{Binding BestSourceScoreText}" FontSize="24" FontWeight="Bold" Foreground="White"/>
+                            <TextBlock Text="内部参考 0-100" FontSize="10" Foreground="#AAFFFFFF"/>
                         </StackPanel>
                     </Border>
 
@@ -88,46 +94,52 @@
                             Background="{DynamicResource WarningColor}"
                             BoxShadow="0 2 8 0 #20000000">
                         <StackPanel Spacing="4">
-                            <TextBlock Text="📡 数据源" FontSize="12" Foreground="#AAFFFFFF"/>
+                            <TextBlock Text="📡 加速线路" FontSize="12" Foreground="#AAFFFFFF"
+                                       ToolTip.Tip="“可用”指最近成功率 > 50% 的线路数，不等于 GitHub 能打开。"/>
                             <StackPanel Orientation="Horizontal" Spacing="4">
                                 <TextBlock Text="{Binding TotalSourcesText}" FontSize="24" FontWeight="Bold" Foreground="White"/>
-                                <TextBlock Text="个" FontSize="14" Foreground="#AAFFFFFF" VerticalAlignment="Bottom" Margin="0,0,0,4"/>
+                                <TextBlock Text="条" FontSize="14" Foreground="#AAFFFFFF" VerticalAlignment="Bottom" Margin="0,0,0,4"/>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="4">
-                                <TextBlock Text="可用: " FontSize="11" Foreground="#AAFFFFFF"/>
+                                <TextBlock Text="探测可用: " FontSize="11" Foreground="#AAFFFFFF"/>
                                 <TextBlock Text="{Binding HealthySourcesText}" FontSize="11" FontWeight="SemiBold" Foreground="White"/>
-                                <TextBlock Text="个" FontSize="11" Foreground="#AAFFFFFF"/>
+                                <TextBlock Text="条" FontSize="11" Foreground="#AAFFFFFF"/>
                             </StackPanel>
                         </StackPanel>
                     </Border>
                 </Grid>
 
-                <!-- 测速对比 -->
+                <!-- 测速对比：口径写在同一张卡里，避免把单次请求当成整页耗时 -->
                 <Border Padding="20" Margin="4,0,0,8" CornerRadius="12"
                         Background="{DynamicResource ControlFillColorDefaultBrush}"
                         BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                         BorderThickness="1">
-                    <StackPanel Orientation="Horizontal" Spacing="24">
-                        <StackPanel>
-                            <TextBlock Text="⏱️ 应用前延迟" FontSize="12" Classes="SecondaryText"/>
-                            <TextBlock Text="{Binding PreApplyLatency}" FontSize="20" FontWeight="Bold"/>
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="响应耗时对比（单次请求 · 3 次取中位数 · 需管理员 · 测速期间临时移除加速）"
+                                   FontSize="11" Classes="SecondaryText" TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" Spacing="24">
+                            <StackPanel>
+                                <TextBlock Text="⏱️ 加速前" FontSize="12" Classes="SecondaryText"/>
+                                <TextBlock Text="{Binding PreApplyLatency}" FontSize="20" FontWeight="Bold"/>
+                            </StackPanel>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="→" FontSize="24" FontWeight="Bold" Foreground="Green"/>
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Text="⚡ 加速后" FontSize="12" Classes="SecondaryText"/>
+                                <TextBlock Text="{Binding PostApplyLatency}" FontSize="20" FontWeight="Bold" Foreground="{Binding ImprovementColor}"/>
+                            </StackPanel>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="=" FontSize="24" FontWeight="Bold"/>
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Text="📈 变化" FontSize="12" Classes="SecondaryText"/>
+                                <TextBlock Text="{Binding LatencyImprovement}" FontSize="20" FontWeight="Bold" Foreground="{Binding ImprovementColor}"/>
+                            </StackPanel>
+                            <Button Content="🔄 重新测速" Command="{Binding RunSpeedTestCommand}"
+                                    Margin="0,0,0,8" Padding="12,6" VerticalAlignment="Bottom"
+                                    ToolTip.Tip="会临时移除加速再测，测速期间打开的网页不是加速后结果"/>
                         </StackPanel>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="→" FontSize="24" FontWeight="Bold" Foreground="Green"/>
-                        </StackPanel>
-                        <StackPanel>
-                            <TextBlock Text="⚡ 应用后延迟" FontSize="12" Classes="SecondaryText"/>
-                            <TextBlock Text="{Binding PostApplyLatency}" FontSize="20" FontWeight="Bold" Foreground="{Binding ImprovementColor}"/>
-                        </StackPanel>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="=" FontSize="24" FontWeight="Bold"/>
-                        </StackPanel>
-                        <StackPanel>
-                            <TextBlock Text="📈 提升" FontSize="12" Classes="SecondaryText"/>
-                            <TextBlock Text="{Binding LatencyImprovement}" FontSize="20" FontWeight="Bold" Foreground="{Binding ImprovementColor}"/>
-                        </StackPanel>
-                        <Button Content="🔄 重新测速" Command="{Binding RunSpeedTestCommand}" 
-                                Margin="0,0,0,8" Padding="12,6" VerticalAlignment="Bottom"/>
                     </StackPanel>
                 </Border>
 
@@ -138,16 +150,19 @@
                         BorderThickness="1">
                     <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
                         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
-                            <Button Content="{Binding IsMonitoring, Converter={StaticResource BoolToStringConverter}, ConverterParameter='⏹ 停止|▶ 开始'}"
+                            <Button Content="{Binding IsMonitoring, Converter={StaticResource BoolToStringConverter}, ConverterParameter='⏸ 暂停测速|▶ 开始测速'}"
                                     Command="{Binding ToggleMonitoringCommand}"
-                                    Padding="12,6" FontSize="12"/>
-                            <Button Content="🔄 刷新" Command="{Binding RefreshSourcesCommand}"
-                                    Padding="12,6" FontSize="12"/>
+                                    Padding="12,6" FontSize="12"
+                                    ToolTip.Tip="只控制后台定时测速，不改 Hosts"/>
+                            <Button Content="🔄 重新探测" Command="{Binding RefreshSourcesCommand}"
+                                    Padding="12,6" FontSize="12"
+                                    ToolTip.Tip="重新探测全部加速线路（只读，不写系统文件）"/>
                         </StackPanel>
                         
                         <Border Grid.Column="1" Padding="8,4" CornerRadius="4" Margin="8,0,0,0"
                                 Background="{Binding IsGitHubAccessible, Converter={StaticResource BoolToColorConverter}, ConverterParameter='#4CAF50|#FF5722'}"
-                                VerticalAlignment="Center">
+                                VerticalAlignment="Center"
+                                ToolTip.Tip="GitHub 直连探测结果，与加速状态无关；未测试不代表加速失败">
                             <TextBlock Text="{Binding GitHubStatusText}" FontSize="10" Foreground="White"/>
                         </Border>
                         
@@ -169,21 +184,70 @@
                                            Classes="SecondaryText" TextTrimming="CharacterEllipsis" MaxWidth="220"
                                            ToolTip.Tip="当前加速状态（唯一状态，不会同时出现两个）"/>
                             </Border>
-                            <Button Content="取消" 
+                            <Button Content="中止本次加速"
                                     Command="{Binding CancelApplyCommand}"
                                     IsVisible="{Binding CanCancelApply}"
-                                    Padding="10,6" FontSize="12" ToolTip.Tip="取消进行中的加速（不会写入 Hosts）"/>
-                            <Button Content="✅" 
+                                    Padding="10,6" FontSize="12" ToolTip.Tip="只中止进行中的任务，不会写入 Hosts"/>
+                            <Button Content="用选中线路加速"
                                     Command="{Binding ApplySelectedSourcesCommand}"
-                                    Padding="12,6" FontSize="12" ToolTip.Tip="应用选中源"
+                                    Padding="12,6" FontSize="12" ToolTip.Tip="只把勾选的线路写入 Hosts，不合并其他线路"
                                     IsEnabled="{Binding HasSelectedSources}"/>
-                            <Button Content="🗑️" 
+                            <Button Content="恢复原始访问"
                                     Command="{Binding ClearAppliedHostsCommand}"
-                                    Padding="8,6" FontSize="12" ToolTip.Tip="清除Hosts"
+                                    Padding="8,6" FontSize="12" ToolTip.Tip="移除本程序的 Hosts 加速块，GitHub 回到原始直连"
                                     IsVisible="{Binding IsHostsApplied}"/>
                         </StackPanel>
                     </Grid>
                 </Border>
+
+                <!-- 加速方式（详情）：一个总概念下的三种机制，默认折叠，不抢主操作 -->
+                <Expander Header="加速方式（详情）：网页 / Git / 下载" IsExpanded="False"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Border Padding="16,12" CornerRadius="12"
+                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                            BorderThickness="1">
+                        <StackPanel Spacing="14">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <TextBlock Grid.Column="0" Text="🌐" FontSize="18" Margin="0,0,10,0"/>
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <TextBlock Text="网页加速（本页主开关）" FontSize="13" FontWeight="SemiBold"/>
+                                    <TextBlock FontSize="11" Classes="SecondaryText" TextWrapping="Wrap"
+                                               Text="改写本机域名指向表（Hosts），让 GitHub 页面、CSS/图片、raw 文件、release 下载走更快的 IP；push、登录、issue 不走这里。"/>
+                                </StackPanel>
+                                <TextBlock Grid.Column="2" Text="{Binding AccelerationStateText}" FontSize="11"
+                                           Classes="SecondaryText" MaxWidth="220" TextWrapping="Wrap"
+                                           VerticalAlignment="Center" Margin="12,0,0,0"/>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource ControlStrokeColorDefaultBrush}"/>
+
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <TextBlock Grid.Column="0" Text="🔧" FontSize="18" Margin="0,0,10,0"/>
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <TextBlock Text="Git 加速（改写 clone 地址）" FontSize="13" FontWeight="SemiBold"/>
+                                    <TextBlock FontSize="11" Classes="SecondaryText" TextWrapping="Wrap"
+                                               Text="只把 clone/fetch/pull 的地址换成加速地址，不影响网页；push 仍直连 GitHub。"/>
+                                </StackPanel>
+                                <Button Grid.Column="2" Content="去设置 ›" Command="{Binding ShowSettingsCommand}"
+                                        Padding="10,6" FontSize="11" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource ControlStrokeColorDefaultBrush}"/>
+
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <TextBlock Grid.Column="0" Text="⬇️" FontSize="18" Margin="0,0,10,0"/>
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <TextBlock Text="下载加速（换第三方镜像链接）" FontSize="13" FontWeight="SemiBold"/>
+                                    <TextBlock FontSize="11" Classes="SecondaryText" TextWrapping="Wrap"
+                                               Text="把下载/文件链接换成第三方镜像地址，不改系统设置；只覆盖部分路径，不是让 GitHub 全站可访问。"/>
+                                </StackPanel>
+                                <Button Grid.Column="2" Content="去下载加速器 ›" Command="{Binding ShowDownloadAcceleratorCommand}"
+                                        Padding="10,6" FontSize="11" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </Expander>
 
                 <!-- 全部数据源失败详情：检测时间 + 每个源的原因 + 一键改用原始链接 -->
                 <Border Padding="16,12" Margin="0,8,0,0" CornerRadius="12"
@@ -192,18 +256,21 @@
                         BorderBrush="#F44336" BorderThickness="1">
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel Grid.Column="0" Spacing="4">
-                            <TextBlock Text="所有数据源都不可用" FontSize="13" FontWeight="SemiBold"
+                            <TextBlock Text="所有加速线路都不可用" FontSize="13" FontWeight="SemiBold"
                                        Foreground="#F44336"/>
+                            <TextBlock Text="只说明这些线路探测失败，不代表 github.com 直连打不开。"
+                                       FontSize="11" Classes="SecondaryText" TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding AllSourcesFailureText}" FontSize="11"
                                        TextWrapping="Wrap" Classes="SecondaryText"/>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Center" Margin="12,0,0,0">
-                            <Button Content="改用原始链接（关闭加速）"
+                            <Button Content="恢复原始访问（关闭加速）"
                                     Command="{Binding UseDirectConnectionCommand}"
                                     Padding="12,6" FontSize="12"
                                     ToolTip.Tip="移除本程序的 Hosts 加速块，让 GitHub 回到原始链接直连"/>
-                            <Button Content="重新检测" Command="{Binding ApplyHostsCommand}"
-                                    Padding="12,6" FontSize="12"/>
+                            <Button Content="重新开启加速" Command="{Binding ApplyHostsCommand}"
+                                    Padding="12,6" FontSize="12"
+                                    ToolTip.Tip="会重新探测并写入 Hosts，需要管理员权限"/>
                             <Button Content="✕ 关闭" Command="{Binding DismissAllSourcesFailureCommand}"
                                     Padding="12,4" FontSize="11"
                                     Background="Transparent" BorderThickness="0"/>
@@ -223,24 +290,24 @@
                         </Border>
                         
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
-                            <TextBlock Text="推荐数据源" FontSize="11" Foreground="#AAFFFFFF"/>
+                            <TextBlock Text="当前最快线路" FontSize="11" Foreground="#AAFFFFFF"/>
                             <TextBlock Text="{Binding BestSourceName}" FontSize="18" FontWeight="Bold" Foreground="White"/>
                         </StackPanel>
                         
                         <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="24,0" MinWidth="80">
-                            <TextBlock Text="响应" FontSize="10" Foreground="#AAFFFFFF" HorizontalAlignment="Center"/>
+                            <TextBlock Text="单次请求" FontSize="10" Foreground="#AAFFFFFF" HorizontalAlignment="Center"/>
                             <TextBlock Text="{Binding BestSourceResponseText}"
                                        FontSize="16" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                         </StackPanel>
                         
                         <StackPanel Grid.Column="3" VerticalAlignment="Center" Margin="24,0" MinWidth="60">
-                            <TextBlock Text="评分" FontSize="10" Foreground="#AAFFFFFF" HorizontalAlignment="Center"/>
+                            <TextBlock Text="内部评分" FontSize="10" Foreground="#AAFFFFFF" HorizontalAlignment="Center"/>
                             <TextBlock Text="{Binding BestSourceScoreText}"
                                        FontSize="16" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                         </StackPanel>
                         
-                        <Button Grid.Column="4" Content="🚀 智能优选" Command="{Binding ApplyHostsCommand}"
-                                ToolTip.Tip="自动拉取全部数据源，DNS解析+HTTPS探测，为每个域名选择最优IP"
+                        <Button Grid.Column="4" Content="🚀 开启网页加速" Command="{Binding ApplyHostsCommand}"
+                                ToolTip.Tip="按域名挑选最快 IP 写入 Hosts；覆盖公开仓库页面、CSS/图片、raw、release 下载；不改 DNS/代理/证书，可随时恢复原始访问"
                                 IsEnabled="{Binding !IsApplyingHosts}"
                                 Padding="16,8" FontSize="13" 
                                 Background="#20FFFFFF" 
@@ -261,26 +328,26 @@
                 <!-- 数据源列表 -->
                 <StackPanel Spacing="12">
                     <DockPanel Margin="0,8,0,0">
-                        <TextBlock Text="📊 数据源列表" FontSize="16" FontWeight="SemiBold"/>
+                        <TextBlock Text="📡 加速线路列表" FontSize="16" FontWeight="SemiBold"/>
                         <TextBlock Text="{Binding SourcesCountText}" FontSize="12" Classes="SecondaryText"
                                    VerticalAlignment="Center" Margin="8,0,0,0"/>
                         <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                             <!-- 搜索框 -->
-                            <TextBox Text="{Binding SearchText}" Watermark="🔍 搜索数据源..."
+                            <TextBox Text="{Binding SearchText}" Watermark="🔍 搜索加速线路..."
                                      Width="180" Padding="8,6"/>
                             <!-- 排序下拉框 -->
-                            <ComboBox SelectedIndex="{Binding SortOption}" Width="120" Padding="8,6">
-                                <ComboBoxItem Content="评分最高"/>
-                                <ComboBoxItem Content="响应最快"/>
-                                <ComboBoxItem Content="响应最慢"/>
-                                <ComboBoxItem Content="评分最低"/>
+                            <ComboBox SelectedIndex="{Binding SortOption}" Width="140" Padding="8,6">
+                                <ComboBoxItem Content="内部评分最高"/>
+                                <ComboBoxItem Content="单次请求最快"/>
+                                <ComboBoxItem Content="单次请求最慢"/>
+                                <ComboBoxItem Content="内部评分最低"/>
                                 <ComboBoxItem Content="名称排序"/>
                             </ComboBox>
                             <Button Content="全选" Command="{Binding SelectAllSourcesCommand}"
                                     Padding="8,4" FontSize="11"/>
-                            <Button Content="取消" Command="{Binding DeselectAllSourcesCommand}"
+                            <Button Content="取消全选" Command="{Binding DeselectAllSourcesCommand}"
                                     Padding="8,4" FontSize="11"/>
-                            <TextBlock Text="{Binding SelectedSourcesCount, StringFormat='已选 {0} 个'}"
+                            <TextBlock Text="{Binding SelectedSourcesCount, StringFormat='已选 {0} 条'}"
                                        FontSize="12" Classes="SecondaryText" VerticalAlignment="Center"/>
                         </StackPanel>
                     </DockPanel>
@@ -322,14 +389,16 @@
 
                                         <!-- 响应时间 -->
                                         <StackPanel Grid.Column="4" VerticalAlignment="Center" Margin="16,0" MinWidth="70">
-                                            <TextBlock Text="响应" FontSize="9" Classes="SecondaryText" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="单次请求" FontSize="9" Classes="SecondaryText" HorizontalAlignment="Center"
+                                                       ToolTip.Tip="该线路最近探测的平均响应，不含页面加载"/>
                                             <TextBlock Text="{Binding ResponseTimeText}" FontSize="14" FontWeight="SemiBold"
                                                        Foreground="{Binding ResponseTimeColor}" HorizontalAlignment="Center"/>
                                         </StackPanel>
 
                                         <!-- 评分 -->
                                         <StackPanel Grid.Column="5" VerticalAlignment="Center" Margin="16,0" MinWidth="50">
-                                            <TextBlock Text="评分" FontSize="9" Classes="SecondaryText" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="内部评分" FontSize="9" Classes="SecondaryText" HorizontalAlignment="Center"
+                                                       ToolTip.Tip="内部加权分，只用于线路间比较"/>
                                             <TextBlock Text="{Binding ScoreText}" FontSize="14" FontWeight="SemiBold"
                                                        Foreground="{Binding ScoreColor}" HorizontalAlignment="Center"/>
                                         </StackPanel>
@@ -341,11 +410,11 @@
                                                 Padding="8,6" FontSize="11"
                                                 VerticalAlignment="Center"
                                                 Margin="8,0,0,0"
-                                                ToolTip.Tip="预览数据源内容"/>
-                                        <Button Grid.Column="7" Content="应用"
+                                                ToolTip.Tip="预览将写入 Hosts 的内容（不写文件）"/>
+                                        <Button Grid.Column="7" Content="仅用此线路"
                                                 Command="{Binding ApplySingleSourceCommand}"
                                                 IsEnabled="{Binding IsHealthy}"
-                                                ToolTip.Tip="仅应用此数据源（不合并其他源）"
+                                                ToolTip.Tip="只把这条线路写入 Hosts，不合并其他线路"
                                                 Padding="12,6" FontSize="11"
                                                 VerticalAlignment="Center"
                                                 Margin="4,0,0,0"/>
@@ -359,11 +428,11 @@
                     <Grid IsVisible="{Binding !HasFilteredSources}" Margin="0,40,0,0">
                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
                             <TextBlock Text="🔍" FontSize="64" HorizontalAlignment="Center"/>
-                            <TextBlock Text="未找到匹配的数据源" FontSize="18" FontWeight="SemiBold" 
+                            <TextBlock Text="未找到匹配的加速线路" FontSize="18" FontWeight="SemiBold" 
                                       HorizontalAlignment="Center"/>
-                            <TextBlock Text="请尝试修改搜索条件或刷新数据源列表" FontSize="13" 
+                            <TextBlock Text="请尝试修改搜索条件或重新探测线路" FontSize="13" 
                                       HorizontalAlignment="Center" Foreground="#666666"/>
-                            <Button Content="刷新数据源" Command="{Binding RefreshSourcesCommand}"
+                            <Button Content="重新探测线路" Command="{Binding RefreshSourcesCommand}"
                                    Padding="16,8" Margin="0,8,0,0" HorizontalAlignment="Center"
                                    CornerRadius="6"/>
                         </StackPanel>

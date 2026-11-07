@@ -39,7 +39,7 @@ public partial class HealthCheckViewModel : ObservableObject
     private int _failCount;
 
     [ObservableProperty]
-    private string _statusMessage = "点击「开始检测」诊断 GitHub 关键子域可达性";
+    private string _statusMessage = "点击「开始检测」诊断 GitHub 依赖站点可达性";
 
     [ObservableProperty]
     private string _overallStatus = "未知";
@@ -106,7 +106,7 @@ public partial class HealthCheckViewModel : ObservableObject
         var snapshotCanCopy = CanCopy;
 
         IsRunning = true;
-        StatusMessage = "正在探测全部子域...";
+        StatusMessage = "正在探测全部依赖站点…（单次请求，不含页面加载）";
         ProgressText = $"已完成 0/共 {GitHubSubDomains.Items.Count} 项";
         IsProgressVisible = true;
         _cts = new CancellationTokenSource();
@@ -137,18 +137,18 @@ public partial class HealthCheckViewModel : ObservableObject
             if (FailCount == 0 && SlowCount == 0)
             {
                 OverallStatus = "✅ 全部正常";
-                StatusMessage = "所有关键子域访问正常";
+                StatusMessage = "所有依赖站点访问正常（单次请求）";
             }
             else if (FailCount > 0)
             {
-                OverallStatus = $"❌ {FailCount} 个子域不可达";
-                StatusMessage = $"以下子域访问失败：{string.Join("、", failedHosts)}。建议切换 Hosts 源或重新应用。";
+                OverallStatus = $"❌ {FailCount} 个依赖站点不可达";
+                StatusMessage = $"以下站点访问失败：{string.Join("、", failedHosts)}。建议切换加速线路或重新开启加速。";
                 StardustMonitorService.Instance.ReportError("GitHubHealthCheckFailed", _service.Summarize(Items));
             }
             else
             {
-                OverallStatus = $"⚠️ {SlowCount} 个子域较慢";
-                StatusMessage = "部分子域响应较慢，但可达。";
+                OverallStatus = $"⚠️ {SlowCount} 个依赖站点较慢";
+                StatusMessage = "部分站点单次请求响应较慢，但可达。";
                 StardustMonitorService.Instance.ReportInfo("GitHubHealthCheckSlow", _service.Summarize(Items));
             }
 
@@ -234,7 +234,7 @@ public partial class HealthCheckViewModel : ObservableObject
     private string GenerateReport()
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"GitHub 子域健康检查报告");
+        sb.AppendLine($"GitHub 依赖站点检查报告");
         sb.AppendLine($"检测时间：{DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         sb.AppendLine($"总评：{OverallStatus}");
         sb.AppendLine();

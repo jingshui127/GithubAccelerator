@@ -74,7 +74,7 @@ public class Batch6CancelAndFailureTests
 
         Assert.Equal(AccelerationState.AcceleratedUnavailable, sm.State);
         Assert.False(sm.IsBusy);
-        Assert.Contains("数据源不可用", sm.StateText);
+        Assert.Contains("加速线路不可用", sm.StateText);
     }
 
     [Fact]
@@ -119,7 +119,7 @@ public class Batch6CancelAndFailureTests
         Assert.Contains("2026-11-05 10:30:00", report);
         Assert.Contains("SourceA：连接超时", report);
         Assert.Contains("SourceB：无响应", report);
-        Assert.Contains("2 个数据源全部不可用", report);
+        Assert.Contains("2 条加速线路全部不可用", report);
         Assert.Contains(AllSourcesFailureReport.DirectActionText, report);
     }
 

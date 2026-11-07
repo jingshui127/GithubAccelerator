@@ -17,7 +17,8 @@
                 <StackPanel Grid.Column="0" Spacing="3">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <TextBlock Text="🛡" FontSize="18"/>
-                        <TextBlock Text="防护版 Hosts 加速" FontSize="15" FontWeight="SemiBold"/>
+                        <TextBlock Text="固定 GitHub 地址（可撤销）" FontSize="15" FontWeight="SemiBold"
+                                   ToolTip.Tip="只写 github.com 一条域名指向；不写 CDN 域，不改 DNS/代理/证书"/>
                         <Border Padding="6,1" CornerRadius="4"
                                 Background="{DynamicResource ControlFillColorDisabledBrush}"
                                 VerticalAlignment="Center">
@@ -36,7 +37,7 @@
                     Background="{DynamicResource ControlFillColorSecondaryBrush}">
                 <StackPanel Spacing="6">
                     <Grid ColumnDefinitions="80,*" ColumnSpacing="6">
-                        <TextBlock Grid.Column="0" Text="选中 IP（整页）" FontSize="10" Classes="SecondaryText"/>
+                        <TextBlock Grid.Column="0" Text="选中 IP（整页实测）" FontSize="10" Classes="SecondaryText"/>
                         <TextBlock Grid.Column="1" Text="{Binding PreviewIpText}" FontSize="12" FontWeight="SemiBold"
                                    TextWrapping="Wrap"/>
                     </Grid>
@@ -61,7 +62,7 @@
                     IsVisible="{Binding HasPairingText}"
                     Background="{DynamicResource ControlFillColorSecondaryBrush}">
                 <StackPanel Spacing="4">
-                    <TextBlock Text="交错配对（候选 vs 直连，准入依据）" FontSize="10" Classes="SecondaryText"/>
+                    <TextBlock Text="整页加载耗时对比（候选 vs 直连，不执行 JS）" FontSize="10" Classes="SecondaryText"/>
                     <TextBlock Text="{Binding PreviewPairingText}" FontSize="10.5"
                                FontFamily="Consolas" TextWrapping="Wrap"/>
                 </StackPanel>
