@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GithubAccelerator.Core.Services;
 using GithubAccelerator.UI.Services;
 
 namespace GithubAccelerator.UI.ViewModels;
@@ -14,6 +15,8 @@ public partial class HostsGroupViewModel : ObservableObject
     private readonly HostsGroupService _groupService;
     private readonly OperationHistoryService _historyService;
     private readonly NotificationService _notificationService;
+    /// <summary>分组里若含 github.com 映射，写入前同样过 20% 准入门槛（与主链路共用同一判定）。</summary>
+    private OfficialSiteHostsGuardService? _admissionGuard;
     private static readonly IBrush _confirmingBrush = new SolidColorBrush(Color.Parse("#D13438"));
 
     [ObservableProperty]
@@ -322,6 +325,25 @@ public partial class HostsGroupViewModel : ObservableObject
                 StatusMessage = "没有可应用的分组规则";
                 _notificationService.Warning("分组管理", "没有可应用的分组规则");
                 return;
+            }
+
+            // 与主链路同一道 20% 门槛：分组里含 github.com 映射时先测后写，不达标一次都不写。
+            var githubIp = AcceleratedHostsWriter.ExtractFirstIp(
+                content, AcceleratedHostsWriter.PrimaryDomain);
+            if (!string.IsNullOrEmpty(githubIp))
+            {
+                StatusMessage = $"正在比较分组里的 github.com 候选 {githubIp} 与直连（20% 门槛）...";
+                var guard = _admissionGuard ??= OfficialSiteHostsGuardService.CreateDefault();
+                var check = await guard.EvaluateAdmissionAsync(
+                    githubIp, "分组规则", System.Threading.CancellationToken.None);
+                if (!check.Allowed)
+                {
+                    StatusMessage = check.DecisionText;
+                    _historyService.Record(OperationType.HostsApplied,
+                        $"分组规则未通过 20% 准入：{check.DecisionText}", false);
+                    _notificationService.Warning("分组管理", check.DecisionText);
+                    return;
+                }
             }
 
             var hostsPath = System.IO.Path.Combine(

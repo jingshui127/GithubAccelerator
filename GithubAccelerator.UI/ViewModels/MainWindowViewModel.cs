@@ -203,6 +203,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly DownloadAccelerationService _downloadAccelerationService;
     private readonly SettingsViewModel _settings;
     private readonly SourceStatisticsService _statsService;
+    /// <summary>主链路写前准入门槛：与防护版共用同一套交错配对 + 20% 判定。</summary>
+    private readonly AcceleratedHostsWriter _acceleratedHostsWriter;
     private System.Timers.Timer? _updateTimer;
     private System.Timers.Timer? _githubConnectivityTimer;
     private System.Timers.Timer? _periodicHostsRefreshTimer;
@@ -669,7 +671,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public string AvailabilityDetail => IsHostsApplied
         ? "可随时恢复原始访问。push、登录、issue 仍然直连 GitHub，不经过加速块。"
-        : "能否打开取决于本机网络。开启前会先比较候选与直连：候选没有超过直连 20% 时不写入 Hosts。";
+        : "能否打开取决于本机网络。开启前会先把即将写入的 github.com 候选与直连交错配对：未快 20% 时提示「当前网络换 IP 改善不了」且不写入 Hosts。";
 
     partial void OnIsRefreshingSourcesChanged(bool value)
     {
@@ -730,6 +732,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _connectionService = new GithubConnectionService();
         _hostsFileService = new WindowsHostsFileService();
         _backupService = new HostsBackupService(_hostsFileService);
+        _acceleratedHostsWriter = new AcceleratedHostsWriter(OfficialSiteHostsGuardService.CreateDefault());
         _dnsFlusher = PlatformServiceFactory.CreateDnsFlusher();
         _downloadAccelerationService = new DownloadAccelerationService();
 
@@ -1355,9 +1358,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// 加速写入的统一入口：首次写入前保存"首启前完整快照"，供高级恢复使用。
+    /// 加速写入的统一入口：先过 20% 准入门槛（与防护版同一判定），再写 Hosts。
+    /// 不达标时不写、不提权、保留「恢复原始状态」。
     /// </summary>
-    private async Task<bool> ApplyAcceleratedHostsAsync(string hostsContent)
+    private async Task<AcceleratedWriteOutcome> ApplyAcceleratedHostsAsync(string hostsContent)
     {
         try
         {
@@ -1382,7 +1386,50 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             Log.Warning(ex, "写入前检查 Hosts 标记块失败");
         }
 
-        return await _hostsFileService.ApplyGithubHostsAsync(hostsContent);
+        var candidateIp = AcceleratedHostsWriter.ExtractFirstIp(
+            hostsContent, AcceleratedHostsWriter.PrimaryDomain);
+        StatusMessage = candidateIp == null
+            ? "正在校验准入（候选里没有 github.com 映射）..."
+            : $"正在比较候选 {candidateIp} 与直连（20% 门槛：候选需快 ≥20%）...";
+
+        AcceleratedHostsWriteResult write;
+        try
+        {
+            write = await _acceleratedHostsWriter.WriteAsync(
+                hostsContent, "主链路优选", _hostsFileService, _applyCts?.Token ?? default);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "准入校验或 Hosts 写入异常");
+            _applyIssue = $"Hosts 写入异常：{ex.Message}";
+            StatusMessage = _applyIssue;
+            _historyService.Record(OperationType.HostsApplied, $"应用 Hosts 异常：{ex.Message}", false, ex.StackTrace);
+            _notificationService.Error("Hosts 应用", $"准入校验或写入异常：{ex.Message}");
+            return AcceleratedWriteOutcome.WriteFailed;
+        }
+
+        if (write.GateRejected)
+        {
+            _applyIssue = write.Message;
+            StatusMessage = write.Message;
+            XTrace.WriteLine($"[Gate] 拒绝写入 Hosts：{write.Message}");
+            _historyService.Record(OperationType.HostsApplied, $"准入门槛拒绝写入：{write.Message}", false);
+            _notificationService.Warning("Hosts 未写入", write.Message);
+            return AcceleratedWriteOutcome.GateRejected;
+        }
+
+        return write.Written ? AcceleratedWriteOutcome.Success : AcceleratedWriteOutcome.WriteFailed;
+    }
+
+    private enum AcceleratedWriteOutcome
+    {
+        Success,
+        GateRejected,
+        WriteFailed
     }
 
     [RelayCommand]
@@ -1546,6 +1593,16 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             else
             {
                 await ApplyBestHostsForSpeedTestAsync();
+                if (!IsHostsApplied)
+                {
+                    // 候选被 20% 门槛拒绝：没有“应用后”状态可测，如实中止，不用直连数据冒充“加速后”。
+                    StatusMessage = string.IsNullOrEmpty(_applyIssue)
+                        ? "候选未通过 20% 准入门槛，未写入 Hosts，无法比较应用后耗时"
+                        : $"未写入 Hosts，无法比较应用后耗时：{_applyIssue}";
+                    PostApplyLatency = "未应用（候选未达标）";
+                    _historyService.Record(OperationType.HostsApplied, "测速中止：候选未通过 20% 准入门槛", false);
+                    return;
+                }
             }
 
             await _dnsFlusher.FlushDnsCacheAsync();
@@ -1881,11 +1938,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             AbortIfCanceled();
             if (!_accelState.IsBusy) return;
 
-            // 4. 写入 hosts 文件（原子替换；取消只发生在写入前，不会留下半写状态）
-            var success = await ApplyAcceleratedHostsAsync(optimizedContent);
-            if (success) SetAccelerationProgress(4, totalSteps, "Hosts 写入完成");
+            // 4. 写入 hosts 文件（先过 20% 准入门槛；不达标不写）
+            var outcome = await ApplyAcceleratedHostsAsync(optimizedContent);
+            if (outcome == AcceleratedWriteOutcome.Success) SetAccelerationProgress(4, totalSteps, "Hosts 写入完成");
 
-            if (success)
+            if (outcome == AcceleratedWriteOutcome.Success)
             {
                 IsHostsApplied = true;
                 CurrentHostsSource = "多源智能合并";
@@ -1922,6 +1979,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 // 自动触发子域健康检查
                 _ = TriggerAutoHealthCheckAsync();
             }
+            else if (outcome == AcceleratedWriteOutcome.GateRejected)
+            {
+                SetAccelerationProgress(3, totalSteps, "准入门槛未通过（未写入）");
+                XTrace.WriteLine("[ApplyHosts/All] 准入门槛未通过，未写入 Hosts");
+            }
             else
             {
                 _applyIssue = "Hosts 写入失败（权限不足或文件被占用）";
@@ -1945,8 +2007,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
             _applyIssue = "IP 优选未完成（已应用原始合并内容）";
             StatusMessage = "IP 优化失败，使用原始合并内容...";
-            var success = await ApplyAcceleratedHostsAsync(mergedHosts);
-            if (success)
+            var outcome = await ApplyAcceleratedHostsAsync(mergedHosts);
+            if (outcome == AcceleratedWriteOutcome.Success)
             {
                 IsHostsApplied = true;
                 CurrentHostsSource = "多源合并（未优化）";
@@ -1956,7 +2018,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 // 自动触发子域健康检查
                 _ = TriggerAutoHealthCheckAsync();
             }
-            else
+            else if (outcome == AcceleratedWriteOutcome.WriteFailed)
             {
                 _applyIssue = "Hosts 写入失败（权限不足或文件被占用）";
                 ShowFailureAdvice(FailureKind.HostsWriteDenied);
@@ -2033,10 +2095,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             AbortIfCanceled();
             if (!_accelState.IsBusy) return;
 
-            var success = await ApplyAcceleratedHostsAsync(hostsContent);
-            if (success) SetAccelerationProgress(3, totalSteps, "Hosts 写入完成");
+            var outcome = await ApplyAcceleratedHostsAsync(hostsContent);
+            if (outcome == AcceleratedWriteOutcome.Success) SetAccelerationProgress(3, totalSteps, "Hosts 写入完成");
 
-            if (success)
+            if (outcome == AcceleratedWriteOutcome.Success)
             {
                 IsHostsApplied = true;
                 CurrentHostsSource = sourceName;
@@ -2068,6 +2130,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 _historyService.Record(OperationType.HostsApplied, $"从 {sourceName} 应用 Hosts 成功{usedMirrorHint}", true);
                 _statsService.RecordSourceUsed(sourceName, usedUrl ?? sourceUrl, 0, true);
                 _notificationService.Success("Hosts 应用", $"已从 {sourceName} 成功应用 Hosts");
+            }
+            else if (outcome == AcceleratedWriteOutcome.GateRejected)
+            {
+                SetAccelerationProgress(2, totalSteps, "准入门槛未通过（未写入）");
+                XTrace.WriteLine($"[ApplyHosts] 准入门槛未通过，未写入 Hosts，source={sourceName}");
             }
             else
             {
@@ -2222,10 +2289,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             AbortIfCanceled();
             if (!_accelState.IsBusy) return;
 
-            var success = await ApplyAcceleratedHostsAsync(mergedContent);
-            if (success) SetAccelerationProgress(++doneSteps, totalSteps, "Hosts 写入完成");
+            var outcome = await ApplyAcceleratedHostsAsync(mergedContent);
+            if (outcome == AcceleratedWriteOutcome.Success) SetAccelerationProgress(++doneSteps, totalSteps, "Hosts 写入完成");
 
-            if (success)
+            if (outcome == AcceleratedWriteOutcome.Success)
             {
                 IsHostsApplied = true;
                 CurrentHostsSource = $"{selectedSources.Count} 个源";
@@ -2252,6 +2319,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 
                 _historyService.Record(OperationType.HostsApplied, $"应用 {selectedSources.Count} 个数据源成功", true);
                 _notificationService.Success("Hosts 应用", $"已成功应用 {selectedSources.Count} 个数据源");
+            }
+            else if (outcome == AcceleratedWriteOutcome.GateRejected)
+            {
+                XTrace.WriteLine($"[ApplySel] 准入门槛未通过，未写入 Hosts（{selectedSources.Count} 个源）");
             }
             else
             {

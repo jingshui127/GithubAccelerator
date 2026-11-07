@@ -987,66 +987,20 @@ public sealed class OfficialSiteHostsGuardService
     {
         var selection = await _selector.SelectAsync(_seeds.Load(), Domain, cancellationToken);
         var checkedAt = _clock();
-
-        string? baselineIp = null;
-        int? baselinePageMs = null;
-        long? baselineBytes = null;
-        var baselineSuccess = 0;
-        var baselineRounds = _selector.Rounds;
-        var baselineUsable = false;
-        string? baselineFailure = null;
-
-        try
-        {
-            var resolution = await _dnsResolver.ResolveAsync(Domain, cancellationToken);
-            baselineIp = resolution.Ipv4Addresses.FirstOrDefault();
-            if (baselineIp == null)
-            {
-                baselineFailure = resolution.FailureReason ?? "系统 DNS 未解析到 IPv4 地址";
-            }
-            else
-            {
-                var baselineEntry = new OfficialSiteSeedEntry
-                {
-                    Ip = baselineIp,
-                    Source = "系统 DNS 基线（整页对照）",
-                    AddedAt = checkedAt
-                };
-                var baselineResult = await _selector.MeasureAsync(baselineEntry, Domain, cancellationToken);
-                baselineRounds = baselineResult.Rounds;
-                baselineSuccess = baselineResult.SuccessCount;
-                baselinePageMs = baselineResult.MedianPageMs;
-                baselineBytes = baselineResult.MedianPageBytes;
-                baselineUsable = _selector.IsQualified(baselineResult);
-                baselineFailure = baselineResult.FailureReason;
-            }
-        }
-        catch (Exception ex)
-        {
-            baselineFailure = ex.Message;
-        }
+        var baseline = await MeasureBaselineAsync(checkedAt, cancellationToken);
+        var baselineIp = baseline.Ip;
+        var baselinePageMs = baseline.PageMs;
+        var baselineBytes = baseline.Bytes;
+        var baselineSuccess = baseline.Success;
+        var baselineRounds = baseline.Rounds;
+        var baselineUsable = baseline.Usable;
+        var baselineFailure = baseline.Failure;
 
         // 交错配对（A/B/A/B，6 组）：只在同一时间窗内比较候选与直连，准入以配对差值中位数为准。
         OfficialSitePairComparison? pairs = null;
         if (selection.Selected != null && baselineIp != null)
         {
-            try
-            {
-                var comparer = new OfficialSitePairedComparer(
-                    _selector.PageLoader, OfficialSitePairedComparer.DefaultGroups, _selector.PageTimeout);
-                pairs = await comparer.CompareAsync(
-                    selection.Selected.Entry.Ip, baselineIp, Domain, _clock(), cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                pairs = new OfficialSitePairComparison(
-                    selection.Selected.Entry.Ip, baselineIp, 0, Array.Empty<OfficialSitePairRound>(),
-                    0, null, null, null, 0, false, "配对实测异常：" + ex.Message, _clock());
-            }
+            pairs = await ComparePairsAsync(selection.Selected.Entry.Ip, baselineIp, cancellationToken);
         }
 
         var decision = BuildAdmission(
@@ -1069,6 +1023,115 @@ public sealed class OfficialSiteHostsGuardService
             BuildBenefitText(decision.Text),
             BuildScopeWarning());
     }
+
+    /// <summary>
+    /// 对“主链路将要写入的某个 IP”执行与防护版完全相同的准入判定。
+    /// 复用同一套整页度量、交错配对（<see cref="OfficialSitePairedComparer"/>）、
+    /// <see cref="OfficialSitePairComparison.MeetsThreshold"/> 与 <see cref="BuildAdmission"/>，不复制第二份阈值逻辑。
+    /// 本方法只测不写，不保存状态、不碰 Hosts。
+    /// </summary>
+    public async Task<OfficialSiteAdmissionCheck> EvaluateAdmissionAsync(
+        string candidateIp,
+        string candidateSource,
+        CancellationToken cancellationToken = default)
+    {
+        var checkedAt = _clock();
+        var baseline = await MeasureBaselineAsync(checkedAt, cancellationToken);
+
+        var entry = new OfficialSiteSeedEntry
+        {
+            Ip = candidateIp,
+            Source = candidateSource,
+            AddedAt = checkedAt
+        };
+        var candidate = await _selector.MeasureAsync(entry, Domain, cancellationToken);
+
+        OfficialSitePairComparison? pairs = null;
+        if (baseline.Ip != null && candidate.MedianPageMs.HasValue)
+        {
+            pairs = await ComparePairsAsync(candidateIp, baseline.Ip, cancellationToken);
+        }
+
+        var selection = new OfficialSiteSelection(
+            checkedAt, Domain, _selector.Rounds, _selector.MinSuccessRate,
+            new[] { candidate }, candidate);
+
+        var decision = BuildAdmission(
+            selection, baseline.Ip, baseline.PageMs, baseline.Success, baseline.Rounds,
+            pairs, baseline.Failure, checkedAt);
+
+        return new OfficialSiteAdmissionCheck(
+            decision.Allowed, decision.Text, candidateIp, candidateSource,
+            baseline.Ip, pairs, candidate);
+    }
+
+    /// <summary>系统 DNS 直连整页基线：预览与主链路准入门槛共用同一测量口径。</summary>
+    private async Task<BaselineMeasurement> MeasureBaselineAsync(
+        DateTimeOffset checkedAt,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var resolution = await _dnsResolver.ResolveAsync(Domain, cancellationToken);
+            var ip = resolution.Ipv4Addresses.FirstOrDefault();
+            if (ip == null)
+            {
+                return new BaselineMeasurement(null,
+                    null, null, 0, _selector.Rounds, false,
+                    resolution.FailureReason ?? "系统 DNS 未解析到 IPv4 地址");
+            }
+
+            var entry = new OfficialSiteSeedEntry
+            {
+                Ip = ip,
+                Source = "系统 DNS 基线（整页对照）",
+                AddedAt = checkedAt
+            };
+            var result = await _selector.MeasureAsync(entry, Domain, cancellationToken);
+            return new BaselineMeasurement(ip,
+                result.MedianPageMs, result.MedianPageBytes, result.SuccessCount, result.Rounds,
+                _selector.IsQualified(result), result.FailureReason);
+        }
+        catch (Exception ex)
+        {
+            return new BaselineMeasurement(null,
+                null, null, 0, _selector.Rounds, false, ex.Message);
+        }
+    }
+
+    /// <summary>交错配对实测；异常时不参与准入（Text 说明原因）。</summary>
+    private async Task<OfficialSitePairComparison> ComparePairsAsync(
+        string candidateIp,
+        string baselineIp,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var comparer = new OfficialSitePairedComparer(
+                _selector.PageLoader, OfficialSitePairedComparer.DefaultGroups, _selector.PageTimeout);
+            return await comparer.CompareAsync(
+                candidateIp, baselineIp, Domain, _clock(), cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return new OfficialSitePairComparison(
+                candidateIp, baselineIp, 0, Array.Empty<OfficialSitePairRound>(),
+                0, null, null, null, 0, false, "配对实测异常：" + ex.Message, _clock());
+        }
+    }
+
+    private sealed record BaselineMeasurement(
+        string? Ip,
+        int? PageMs,
+        long? Bytes,
+        int Success,
+        int Rounds,
+        bool Usable,
+        string? Failure);
 
     /// <summary>应用预览结果：写前快照 → 标记块写入 → 读回校验。无权限时不提权、不写入。</summary>
     public async Task<OfficialSiteGuardApplyResult> ApplyAsync(
@@ -1447,4 +1510,104 @@ public sealed class OfficialSiteHostsGuardService
         var hash = await SHA256.HashDataAsync(stream, cancellationToken);
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
+}
+
+/// <summary>一次主链路准入判定的结果（只测不写）。</summary>
+public sealed record OfficialSiteAdmissionCheck(
+    bool Allowed,
+    string DecisionText,
+    string CandidateIp,
+    string CandidateSource,
+    string? BaselineIp,
+    OfficialSitePairComparison? Pairs,
+    OfficialSiteCandidateResult Candidate);
+
+/// <summary>
+/// 主链路“先判后写”的唯一写入器：把内容里将要写入的 github.com 映射交给
+/// <see cref="OfficialSiteHostsGuardService.EvaluateAdmissionAsync"/>（与防护版同一判定），
+/// 只有判定允许时才调用 Hosts 写入；不达标时一次都不写。
+/// </summary>
+public sealed class AcceleratedHostsWriter
+{
+    public const string PrimaryDomain = OfficialSiteHostsPolicy.PrimaryDomain;
+
+    private readonly OfficialSiteHostsGuardService _guard;
+
+    public AcceleratedHostsWriter(OfficialSiteHostsGuardService guard)
+    {
+        _guard = guard;
+    }
+
+    public async Task<AcceleratedHostsWriteResult> WriteAsync(
+        string hostsContent,
+        string candidateSource,
+        IHostsFileService hosts,
+        CancellationToken cancellationToken = default)
+    {
+        var candidateIp = ExtractFirstIp(hostsContent, PrimaryDomain);
+        if (string.IsNullOrEmpty(candidateIp))
+        {
+            return new AcceleratedHostsWriteResult(false, false,
+                "候选内容里没有 github.com 映射，无法判断换 IP 是否有用，未写入 Hosts。", null);
+        }
+
+        OfficialSiteAdmissionCheck check;
+        try
+        {
+            check = await _guard.EvaluateAdmissionAsync(candidateIp, candidateSource, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return new AcceleratedHostsWriteResult(false, false,
+                $"准入校验没有跑完（{ex.Message}），未写入 Hosts。", candidateIp);
+        }
+
+        if (!check.Allowed)
+            return new AcceleratedHostsWriteResult(false, false, check.DecisionText, candidateIp);
+
+        var written = await hosts.ApplyGithubHostsAsync(hostsContent);
+        return new AcceleratedHostsWriteResult(true, written,
+            written ? check.DecisionText : "准入通过，但 Hosts 写入失败（权限不足或文件被占用）。",
+            candidateIp);
+    }
+
+    /// <summary>从 hosts 内容里取某个域名的第一条映射 IP；忽略注释与行尾注释。</summary>
+    public static string? ExtractFirstIp(string hostsContent, string domain)
+    {
+        if (string.IsNullOrEmpty(hostsContent)) return null;
+
+        foreach (var raw in hostsContent.Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal)) continue;
+
+            var commentIndex = line.IndexOf('#');
+            if (commentIndex >= 0) line = line[..commentIndex].Trim();
+
+            var parts = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2 || !IPAddress.TryParse(parts[0], out _)) continue;
+
+            for (var i = 1; i < parts.Length; i++)
+            {
+                if (string.Equals(parts[i], domain, StringComparison.OrdinalIgnoreCase))
+                    return parts[0];
+            }
+        }
+
+        return null;
+    }
+}
+
+/// <summary>主链路写入结果：<see cref="AdmissionAllowed"/> 为 false 表示被门槛拒绝，<see cref="Written"/> 必为 false。</summary>
+public sealed record AcceleratedHostsWriteResult(
+    bool AdmissionAllowed,
+    bool Written,
+    string Message,
+    string? CandidateIp)
+{
+    public bool GateRejected => !AdmissionAllowed;
 }

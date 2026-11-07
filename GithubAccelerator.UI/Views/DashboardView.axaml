@@ -79,7 +79,7 @@
                                     IsVisible="{Binding !IsHostsApplied}"
                                     IsEnabled="{Binding !IsApplyingHosts}"
                                     Padding="16,8" FontSize="13" FontWeight="SemiBold"
-                                    ToolTip.Tip="先比较候选与直连；候选未超过直连 20% 时不写入 Hosts，且只写 github.com；可随时恢复原始访问"/>
+                                    ToolTip.Tip="先把即将写入的 github.com 候选与直连交错配对；未快 20% 时提示「当前网络换 IP 改善不了」且不写入 Hosts；达标才写入合并后的多域名映射，可随时恢复原始访问"/>
                             <Button Content="↩️ 恢复原始访问" Command="{Binding ClearAppliedHostsCommand}"
                                     IsVisible="{Binding IsHostsApplied}"
                                     Padding="16,8" FontSize="13" FontWeight="SemiBold"

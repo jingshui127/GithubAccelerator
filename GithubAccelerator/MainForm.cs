@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Net.NetworkInformation;
 using System.Windows.Forms;
 using ScottPlot;
+using GithubAccelerator.Core.Services;
 using GithubAccelerator.Services;
 
 namespace GithubAccelerator;
@@ -15,6 +16,9 @@ public partial class MainForm : MaterialForm
     private readonly IHostsFileService _fileService;
     private readonly IDnsFlusher _dnsFlusher;
     private readonly IStartupManager _startupManager;
+    /// <summary>与主程序同一道 20% 准入门槛：不达标不写 Hosts。</summary>
+    private readonly AcceleratedHostsWriter _gatedWriter =
+        new(OfficialSiteHostsGuardService.CreateDefault());
     private string _currentHostsContent = string.Empty;
     private bool _isHostsApplied = false;
     private string _lastTestResults = string.Empty;
@@ -85,10 +89,17 @@ public partial class MainForm : MaterialForm
             // 2. 获取最新 Hosts
             var newHosts = await _hostsService.FetchHostsAsync();
             
-            // 3. 应用 Hosts 配置
+            // 3. 应用 Hosts 配置（先过 20% 准入门槛）
             UpdateStatusIndicator(StatusWarning, "正在应用 Hosts 配置...");
             await _fileService.BackupHostsFileAsync();
-            await _fileService.ApplyGithubHostsAsync(newHosts);
+            var write = await _gatedWriter.WriteAsync(newHosts, "WinForms 一键加速", _fileService);
+            if (!write.Written)
+            {
+                UpdateStatusIndicator(StatusError, write.Message);
+                materialButtonApply.Enabled = true;
+                MessageBox.Show(write.Message, "未写入 Hosts", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
             await _dnsFlusher.FlushDnsCacheAsync();
             
             // 4. 测试连接
@@ -207,7 +218,14 @@ public partial class MainForm : MaterialForm
 
             UpdateStatusIndicator(StatusWarning, "正在备份并应用...");
             await _fileService.BackupHostsFileAsync();
-            await _fileService.ApplyGithubHostsAsync(hostsContent);
+            var write = await _gatedWriter.WriteAsync(hostsContent, "WinForms 启用加速", _fileService);
+            if (!write.Written)
+            {
+                UpdateStatusIndicator(StatusError, write.Message);
+                materialButtonApply.Enabled = true;
+                MessageBox.Show(write.Message, "未写入 Hosts", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
 
             await _dnsFlusher.FlushDnsCacheAsync();
 

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] - 2026-11-07
+
+### Fixed
+- 主按钮「🚀 开启网页加速」此前绕过 20% 准入门槛，现改为与防护版同一判定：对**即将写入**的 `github.com` 候选做交错配对，未快 20% 时明确提示「当前网络换 IP 改善不了」且不写入 Hosts
+- 统一所有写 Hosts 入口：来源卡片应用、选中数据源应用、自动切换、自动刷新、分组「用此分组加速」、CLI、旧版 WinForms 均走同一道判定，不再存在绕过路径
+- 测速对比在门槛拒绝时如实中止，不再用直连数据冒充「加速后」
+
 ## [1.6.0] - 2026-11-07
 
 ### Changed

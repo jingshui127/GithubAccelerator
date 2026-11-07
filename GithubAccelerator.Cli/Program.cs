@@ -1,4 +1,5 @@
 using Spectre.Console;
+using GithubAccelerator.Core.Services;
 using GithubAccelerator.Services;
 
 namespace GithubAccelerator.Cli;
@@ -12,6 +13,9 @@ public static class Program
     private static readonly GithubConnectionService _connectionService = new();
     private static readonly IpSpeedTestService _speedTestService = new();
     private static readonly GithubProxyService _proxyService = new();
+    /// <summary>与 GUI 同一道 20% 准入门槛：不达标不写 Hosts。</summary>
+    private static readonly AcceleratedHostsWriter _gatedWriter =
+        new(OfficialSiteHostsGuardService.CreateDefault());
     private static CancellationTokenSource _statusCts = new();
     private static List<(string ip, string domain)> _currentBestIps = new();
     private static bool _isTesting = false;
@@ -200,7 +204,12 @@ public static class Program
             
             AnsiConsole.MarkupLine("[dim]4. 正在应用 Hosts 配置...[/]");
             await _fileService.BackupHostsFileAsync();
-            await _fileService.ApplyGithubHostsAsync(optimizedContent);
+            var write = await _gatedWriter.WriteAsync(optimizedContent, "CLI 一键加速", _fileService);
+            if (!write.Written)
+            {
+                AnsiConsole.MarkupLine($"[red]✗ 未写入 Hosts：{write.Message}[/]");
+                return 1;
+            }
             await _dnsFlusher.FlushDnsCacheAsync();
             
             _currentBestIps = bestIps;
@@ -289,7 +298,12 @@ public static class Program
                             var newBestIps = _speedTestService.SelectBestIps(newSpeedResults, maxPerDomain: 3);
                             var newOptimized = _speedTestService.GenerateOptimizedHostsContent(newBestIps, newHosts);
 
-                            await _fileService.ApplyGithubHostsAsync(newOptimized);
+                            var write = await _gatedWriter.WriteAsync(newOptimized, "CLI 自动刷新", _fileService);
+                            if (!write.Written)
+                            {
+                                AnsiConsole.MarkupLine($"[yellow]⚠ 自动刷新未写入 Hosts：{write.Message}[/]");
+                                continue;
+                            }
                             await _dnsFlusher.FlushDnsCacheAsync();
                             lastRefresh = DateTime.Now;
                             _currentBestIps = newBestIps;
@@ -444,7 +458,12 @@ public static class Program
             _currentBestIps = bestIps;
 
             await _fileService.BackupHostsFileAsync();
-            await _fileService.ApplyGithubHostsAsync(optimizedContent);
+            var write = await _gatedWriter.WriteAsync(optimizedContent, "CLI 启用加速", _fileService);
+            if (!write.Written)
+            {
+                AnsiConsole.MarkupLine($"[red]✗ 未写入 Hosts：{write.Message}[/]");
+                return 1;
+            }
             await _dnsFlusher.FlushDnsCacheAsync();
 
             AnsiConsole.MarkupLine($"\n[green]✓ Hosts 配置已应用成功！[/]");

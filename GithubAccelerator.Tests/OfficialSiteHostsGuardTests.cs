@@ -855,4 +855,104 @@ public class OfficialSiteHostsGuardTests
         temp.Page.SetDefault(DeadIp, PageFail("整页加载超时（2s）"));
         temp.Page.SetDefault(BaselineIp, PageOk(baselinePageMs));
     }
+
+    // ---------------------------------------------------------------- 主链路统一门槛（主按钮/分组/CLI 共用）
+
+    private sealed class CountingHostsFileService : IHostsFileService
+    {
+        public int ApplyCalls { get; private set; }
+        public string? LastContent { get; private set; }
+
+        public Task<string> ReadHostsFileAsync() => Task.FromResult(string.Empty);
+
+        public Task<bool> ApplyGithubHostsAsync(string hostsContent)
+        {
+            ApplyCalls++;
+            LastContent = hostsContent;
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> RestoreOriginalHostsAsync() => Task.FromResult(true);
+        public Task<bool> ReplaceHostsFileAsync(string content) => Task.FromResult(true);
+        public bool IsGithubHostsApplied(string hostsContent) => false;
+        public bool IsBlockModified(string hostsContent) => false;
+        public string GetCurrentGithubHostsBlock(string hostsContent) => string.Empty;
+        public Task<bool> BackupHostsFileAsync() => Task.FromResult(true);
+        public bool RequiresAdminPrivileges() => false;
+    }
+
+    [Fact]
+    public async Task EvaluateAdmission_RejectsSlowerCandidate_WithHumanConclusion()
+    {
+        using var temp = new TempGuard();
+        SetAllHealthy(temp, fastPageMs: 1600, slowPageMs: 800, baselinePageMs: 1000);
+
+        var check = await temp.Service.EvaluateAdmissionAsync(FastIp, "主链路测试");
+
+        Assert.False(check.Allowed);
+        Assert.Contains("改善不了", check.DecisionText);
+        Assert.Equal(FastIp, check.CandidateIp);
+        Assert.Equal(BaselineIp, check.BaselineIp);
+    }
+
+    [Fact]
+    public async Task EvaluateAdmission_AllowsCandidateAtLeast20PercentFaster()
+    {
+        using var temp = new TempGuard();
+        SetAllHealthy(temp, fastPageMs: 600, slowPageMs: 1200, baselinePageMs: 1000);
+
+        var check = await temp.Service.EvaluateAdmissionAsync(FastIp, "主链路测试");
+
+        Assert.True(check.Allowed);
+        Assert.Contains("准入通过", check.DecisionText);
+    }
+
+    [Fact]
+    public async Task AcceleratedHostsWriter_GateRejected_DoesNotCallWrite()
+    {
+        using var temp = new TempGuard();
+        SetAllHealthy(temp, fastPageMs: 1600, slowPageMs: 800, baselinePageMs: 1000);
+        var hosts = new CountingHostsFileService();
+        var writer = new AcceleratedHostsWriter(temp.Service);
+        var before = temp.Sha256();
+
+        var result = await writer.WriteAsync(
+            $"{FastIp} github.com\n", "主链路测试", hosts, CancellationToken.None);
+
+        Assert.False(result.AdmissionAllowed);
+        Assert.False(result.Written);
+        Assert.Equal(0, hosts.ApplyCalls);
+        Assert.Equal(before, temp.Sha256());
+        Assert.DoesNotContain(HostsFileManager.StartMarker, await temp.Hosts.ReadAsync());
+    }
+
+    [Fact]
+    public async Task AcceleratedHostsWriter_Admitted_WritesHostsOnce()
+    {
+        using var temp = new TempGuard();
+        SetAllHealthy(temp, fastPageMs: 500, slowPageMs: 1200, baselinePageMs: 1000);
+        var hosts = new CountingHostsFileService();
+        var writer = new AcceleratedHostsWriter(temp.Service);
+        const string content = "20.27.177.113 github.com\n";
+
+        var result = await writer.WriteAsync(content, "主链路测试", hosts, CancellationToken.None);
+
+        Assert.True(result.AdmissionAllowed);
+        Assert.True(result.Written);
+        Assert.Equal(1, hosts.ApplyCalls);
+        Assert.Equal(content, hosts.LastContent);
+    }
+
+    [Fact]
+    public void AcceleratedHostsWriter_ExtractsGithubIp_IgnoringComments()
+    {
+        var content = """
+        # comment 140.82.112.3 github.com
+        127.0.0.1 localhost
+        140.82.112.3 github.com  # 行尾注释
+        """;
+
+        Assert.Equal("140.82.112.3", AcceleratedHostsWriter.ExtractFirstIp(content, "github.com"));
+        Assert.Null(AcceleratedHostsWriter.ExtractFirstIp("# only comments\n", "github.com"));
+    }
 }
