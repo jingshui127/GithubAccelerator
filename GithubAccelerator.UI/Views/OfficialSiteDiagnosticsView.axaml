@@ -179,11 +179,15 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- 能力边界（明确不做） -->
-        <Border Grid.Row="2" Padding="14,10" CornerRadius="8"
-                Background="{DynamicResource ControlFillColorSecondaryBrush}">
-            <TextBlock FontSize="11" TextWrapping="Wrap" Classes="SecondaryText"
-                       Text="上方诊断仅只读观测：不写 Hosts、不请求管理员权限。下方「固定 GitHub 地址（可撤销）」默认关闭，只有用户预览并二次确认后才写入 github.com，且不写 CDN 域；不改 DNS/代理/证书，不做后台常驻轮询。"/>
-        </Border>
+        <!-- 能力边界（明确不做）：默认折叠，避免打断诊断结论 -->
+        <Expander Grid.Row="2" Header="为什么有些问题这里修不了？（能力边界）"
+                  IsExpanded="False"
+                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+            <Border Padding="14,10" CornerRadius="8"
+                    Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                <TextBlock FontSize="11" TextWrapping="Wrap" Classes="SecondaryText"
+                           Text="上方诊断仅只读观测：不写 Hosts、不请求管理员权限。下方「固定 GitHub 地址（可撤销）」默认关闭，只有用户预览并二次确认后才写入 github.com，且不写 CDN 域；不改 DNS/代理/证书，不做后台常驻轮询。"/>
+            </Border>
+        </Expander>
     </Grid>
 </UserControl>

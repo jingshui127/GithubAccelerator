@@ -660,6 +660,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public string BestSourceResponseText => string.IsNullOrEmpty(BestSourceName) ? "—" : $"{BestSourceResponseTime} ms";
 
+    public string CurrentBestSourceText => string.IsNullOrEmpty(BestSourceName) ? "尚未探测完成" : BestSourceName;
+
     partial void OnIsRefreshingSourcesChanged(bool value)
     {
         OnPropertyChanged(nameof(TotalSourcesText));
@@ -670,6 +672,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     partial void OnBestSourceNameChanged(string value)
     {
         OnPropertyChanged(nameof(BestSourceResponseText));
+        OnPropertyChanged(nameof(CurrentBestSourceText));
     }
 
     partial void OnBestSourceResponseTimeChanged(long value) => OnPropertyChanged(nameof(BestSourceResponseText));
