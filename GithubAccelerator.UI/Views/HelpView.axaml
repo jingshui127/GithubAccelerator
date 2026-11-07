@@ -64,6 +64,17 @@
                         <views:LogViewerView DataContext="{Binding LogViewer}"/>
                     </Border>
                 </Expander>
+
+                <Expander Header="容器与包拉取为什么不在覆盖范围？（技术附录）" IsExpanded="False"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Border Padding="14,10" CornerRadius="12"
+                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                            BorderThickness="1">
+                        <TextBlock FontSize="12" TextWrapping="Wrap" Classes="SecondaryText"
+                                   Text="本工具加速的是浏览器访问 GitHub 页面与文件下载（含 raw 与 release 资产）。容器镜像（ghcr.io）由 Docker/Podman 等运行时自己的网络栈拉取，需要在容器运行时侧配置可信镜像或代理，工具无法代劳。GitHub Packages 的私有包还需要带 token 的登录，同样不在加速范围。" />
+                    </Border>
+                </Expander>
             </StackPanel>
         </ScrollViewer>
     </Grid>
