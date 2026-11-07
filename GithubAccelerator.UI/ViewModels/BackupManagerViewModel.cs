@@ -271,10 +271,29 @@ public partial class BackupManagerViewModel : ObservableObject
             return;
         }
 
+        await RestoreSnapshotCoreAsync(snapshot);
+    }
+
+    /// <summary>已由上层统一确认框确认后的恢复；供「回到原始状态」入口调用，避免二次确认。</summary>
+    internal async Task<bool> RestoreFirstRunSnapshotConfirmedAsync()
+    {
+        var snapshot = await _backupService.GetFirstRunSnapshotAsync();
+        if (snapshot == null)
+        {
+            StatusMessage = "没有首启前快照（首次加速时才自动创建）";
+            return false;
+        }
+
+        return await RestoreSnapshotCoreAsync(snapshot);
+    }
+
+    private async Task<bool> RestoreSnapshotCoreAsync(HostsBackup snapshot)
+    {
         var success = await _backupService.RestoreBackupAsync(snapshot.BackupPath);
         await LoadBackupsAsync();
         StatusMessage = success ? "已恢复到首启前完整快照" : "恢复到首启前快照失败";
         Serilog.Log.Information("恢复到首启前快照：{Success}", success);
+        return success;
     }
 
     /// <summary>恢复前的确认入口：摘要写清"将覆盖什么"，用户取消则不动文件。</summary>

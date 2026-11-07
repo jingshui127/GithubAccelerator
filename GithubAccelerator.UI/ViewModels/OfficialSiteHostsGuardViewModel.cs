@@ -320,6 +320,14 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
             return;
         }
 
+        await UndoConfirmedAsync();
+    }
+
+    /// <summary>已被上层确认框确认后的实际撤销；供「回到原始状态」统一入口调用，避免二次确认。</summary>
+    internal async Task UndoConfirmedAsync()
+    {
+        if (IsBusy) return;
+
         IsBusy = true;
         _undoArmed = false;
         UndoButtonText = "恢复原始状态";
