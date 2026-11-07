@@ -662,6 +662,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public string CurrentBestSourceText => string.IsNullOrEmpty(BestSourceName) ? "尚未探测完成" : BestSourceName;
 
+    /// <summary>第一层「能不能用」的唯一结论：不推断、不夸大。</summary>
+    public string AvailabilityConclusion => IsHostsApplied
+        ? "GitHub 当前走本机加速（Hosts 已写入）"
+        : "GitHub 当前走原始直连（未写入加速）";
+
+    public string AvailabilityDetail => IsHostsApplied
+        ? "可随时恢复原始访问。push、登录、issue 仍然直连 GitHub，不经过加速块。"
+        : "能否打开取决于本机网络。开启前会先比较候选与直连：候选没有超过直连 20% 时不写入 Hosts。";
+
     partial void OnIsRefreshingSourcesChanged(bool value)
     {
         OnPropertyChanged(nameof(TotalSourcesText));
@@ -1288,6 +1297,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         _accelState.SyncFromFile(value);
         RaiseAccelerationStateChanged();
+        OnPropertyChanged(nameof(AvailabilityConclusion));
+        OnPropertyChanged(nameof(AvailabilityDetail));
     }
 
     [RelayCommand(CanExecute = nameof(CanClearHosts))]
@@ -2406,6 +2417,24 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             StatusMessage = $"读取 Hosts 失败：{ex.Message}";
             _historyService.Record(OperationType.HostsViewed, $"查看 Hosts 失败：{ex.Message}", false);
+        }
+    }
+
+    [RelayCommand]
+    private void OpenGitHubOriginal()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "https://github.com",
+                UseShellExecute = true
+            });
+            _historyService.Record(OperationType.HostsViewed, "打开 github.com 原始链接");
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"打开浏览器失败：{ex.Message}";
         }
     }
 
