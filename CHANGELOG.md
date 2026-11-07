@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-11-07
+
+### Changed
+- 主界面合并为三层结构：能不能用 / 快不快 / 出问题怎么办，常用操作只保留一个主按钮
+- 左侧导航精简为 6 项：检查与修复（含网络监控）、Hosts 与备份、帮助与支持各自合并成一个页面
+- 速度统一按「页面加载耗时（不执行 JS）」展示，直连与候选并排比较，不再混用解析耗时
+- 「回到原始状态」合并了四种清除方式，写 Hosts 前先给预览，可一键撤销
+- 术语改为白话：数据源 → 加速线路，去掉未解释的内部评分与重复状态文案
+- 备份页、Hosts 防护面板、设置页各只保留一个恢复入口，避免同名按钮行为不一致
+
 ## [1.5.5] - 2026-07-21
 
 ### Added

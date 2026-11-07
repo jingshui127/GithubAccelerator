@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6.svg)](https://www.microsoft.com/windows)
-[![Version](https://img.shields.io/badge/version-1.5.5-brightgreen.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.6.0-brightgreen.svg)](CHANGELOG.md)
 
 🚀 一款智能的 GitHub 访问加速工具，通过优化 Hosts 文件实现快速稳定的 GitHub 访问。
 
@@ -113,7 +113,7 @@ dotnet run --project GithubAccelerator.Cli
 
 ## 📝 变更日志
 
-查看 [CHANGELOG.md](CHANGELOG.md) 了解版本更新历史（当前版本 v1.5.5）。
+查看 [CHANGELOG.md](CHANGELOG.md) 了解版本更新历史（当前版本 v1.6.0）。
 
 ## 🤝 贡献
 
