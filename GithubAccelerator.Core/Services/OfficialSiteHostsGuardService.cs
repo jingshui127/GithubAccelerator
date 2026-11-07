@@ -1414,8 +1414,8 @@ public sealed class OfficialSiteHostsGuardService
         if (!pairs.Stable)
         {
             return (false,
-                $"拒绝应用：交错配对结果不稳定（{pairs.UnstableReason}）；" +
-                $"{pairs.MedianText}；检测时间 {time}。");
+                $"拒绝应用：本次测量波动太大，判断不了换 IP 有没有用（{pairs.UnstableReason}）；" +
+                $"{pairs.MedianText}；建议稍后重测；检测时间 {time}。");
         }
 
         if (pairs.MeetsThreshold)
@@ -1425,7 +1425,8 @@ public sealed class OfficialSiteHostsGuardService
         }
 
         return (false,
-            $"拒绝应用：{pairs.MedianText}；未达到“候选比直连快 ≥20%”的要求{sequentialNote}；检测时间 {time}。");
+            $"拒绝应用：当前网络换 IP 改善不了（候选没有比直连快 ≥20%，换 IP 不会更快）；" +
+            $"{pairs.MedianText}；检测时间 {time}。");
     }
 
     private static string BuildBenefitText(string decisionText) =>

@@ -297,7 +297,7 @@ public class OfficialSiteDiagnosticsTests
 
         Assert.Equal(DiagnosticsConclusionKind.NoExpectedGain, report.ConclusionKind);
         Assert.Contains("瓶颈不在解析层", report.ConclusionTitle);
-        Assert.Contains("Hosts 加速预计无收益", report.ConclusionTitle);
+        Assert.Contains("当前网络换 IP 改善不了", report.ConclusionTitle);
         Assert.Contains("500ms", report.ConclusionDetail);
         Assert.Contains("400ms", report.ConclusionDetail);
     }

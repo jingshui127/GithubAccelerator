@@ -163,7 +163,7 @@ public partial class OfficialSiteDiagnosticsViewModel : ObservableObject
         ConclusionBadge = report.ConclusionKind switch
         {
             DiagnosticsConclusionKind.OptimizationPossible => "有优化空间",
-            DiagnosticsConclusionKind.NoExpectedGain => "预计无收益",
+            DiagnosticsConclusionKind.NoExpectedGain => "换 IP 改善不了",
             _ => "无法判断"
         };
 

@@ -739,12 +739,12 @@ public sealed class OfficialSiteDiagnosticsService
         {
             var best = measuredCandidates[0];
             var detail = best.Baseline is int baseline
-                ? $"本次测得最快候选 {best.Domain} / {best.Row.Ip}：{best.Row.MedianMs}ms，" +
-                  $"系统解析基线 {baseline}ms，未达到“更快”的判定（20% 差异）。"
-                : $"本次测得最快候选 {best.Domain} / {best.Row.Ip}：{best.Row.MedianMs}ms，" +
+                ? $"本次最快候选 {best.Domain} / {best.Row.Ip}：{best.Row.MedianMs}ms，" +
+                  $"系统解析基线 {baseline}ms，差距未到 20%（换 IP 不会更快）。"
+                : $"本次最快候选 {best.Domain} / {best.Row.Ip}：{best.Row.MedianMs}ms，" +
                   "但系统解析基线不可用，无法比较。";
             return (DiagnosticsConclusionKind.NoExpectedGain,
-                "瓶颈不在解析层，Hosts 加速预计无收益", detail + observation);
+                "当前网络换 IP 改善不了（瓶颈不在解析层）", detail + observation);
         }
 
         var failures = domains
