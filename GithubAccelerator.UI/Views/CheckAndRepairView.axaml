@@ -1,0 +1,117 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:GithubAccelerator.UI.ViewModels"
+             xmlns:views="using:GithubAccelerator.UI.Views"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+             x:Class="GithubAccelerator.UI.Views.CheckAndRepairView"
+             x:DataType="vm:CheckAndRepairViewModel">
+
+    <Grid RowDefinitions="Auto,*" Margin="20" RowSpacing="10">
+        <!-- 顶部：一个入口、一个只读动作 -->
+        <Border Grid.Row="0" Padding="20" CornerRadius="12"
+                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                BorderThickness="1">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" Spacing="4">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock Text="🩺" FontSize="22"/>
+                        <TextBlock Text="检查与修复" FontSize="18" FontWeight="SemiBold"/>
+                    </StackPanel>
+                    <TextBlock Text="页面打不开时先看这里：依赖站点是否可达、解析层是否瓶颈、延迟是否抖动。全部只读，不改 Hosts / DNS / 代理。"
+                               FontSize="12" Classes="SecondaryText" TextWrapping="Wrap"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Button Content="🔄 重新检查（只读）" Command="{Binding RunAllCommand}"
+                            Padding="20,8" FontSize="13" FontWeight="SemiBold"
+                            IsEnabled="{Binding IsNotRunningAll}"/>
+                    <Button Content="取消" Command="{Binding Health.CancelCommand}"
+                            Padding="16,8" FontSize="13"
+                            IsVisible="{Binding Health.IsRunning}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <TabControl Grid.Row="1">
+            <!-- 结论：先给判断，再进明细 -->
+            <TabItem Header="结论">
+                <ScrollViewer Margin="16">
+                    <StackPanel Spacing="12">
+                        <Border Padding="16" CornerRadius="12"
+                                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                BorderThickness="1">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="{Binding OfficialSite.ConclusionTitle}" FontSize="15" FontWeight="SemiBold"
+                                           Foreground="{Binding OfficialSite.ConclusionBrush}"/>
+                                <TextBlock Text="{Binding OfficialSite.ConclusionDetail}" FontSize="12"
+                                           Classes="SecondaryText" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Padding="16" CornerRadius="12"
+                                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                BorderThickness="1">
+                            <Grid ColumnDefinitions="*,*,*,*,*">
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="依赖站点" FontSize="11" Classes="SecondaryText"/>
+                                    <TextBlock Text="{Binding Health.OverallStatus}" FontSize="16" FontWeight="Bold"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <TextBlock Text="正常" FontSize="11" Classes="SecondaryText"/>
+                                    <TextBlock Text="{Binding Health.OkCountText}" FontSize="16" FontWeight="Bold" Foreground="#4CAF50"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Spacing="2">
+                                    <TextBlock Text="较慢" FontSize="11" Classes="SecondaryText"/>
+                                    <TextBlock Text="{Binding Health.SlowCountText}" FontSize="16" FontWeight="Bold" Foreground="#FFC107"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="3" Spacing="2">
+                                    <TextBlock Text="失败" FontSize="11" Classes="SecondaryText"/>
+                                    <TextBlock Text="{Binding Health.FailCountText}" FontSize="16" FontWeight="Bold" Foreground="#FF5722"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="4" Spacing="2">
+                                    <TextBlock Text="检查时间" FontSize="11" Classes="SecondaryText"/>
+                                    <TextBlock Text="{Binding Health.LastCheckTimeText}" FontSize="12"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border Padding="16" CornerRadius="12"
+                                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                BorderThickness="1">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="直连与解析" FontSize="13" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding OfficialSite.DirectStatusText}" FontSize="12" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding OfficialSite.ResolutionText}" FontSize="12" TextWrapping="Wrap" Classes="SecondaryText"/>
+                                <TextBlock Text="{Binding OfficialSite.DohSourceText}" FontSize="12" TextWrapping="Wrap" Classes="SecondaryText"/>
+                                <TextBlock Text="{Binding OfficialSite.StatusMessage}" FontSize="12" TextWrapping="Wrap" Classes="SecondaryText"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Expander Header="连续采样（按需展开，不常驻）" IsExpanded="False"
+                                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                            <Border Height="420" Padding="8" CornerRadius="12"
+                                    Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                    BorderThickness="1">
+                                <views:GitHubLatencyView DataContext="{Binding Latency}"/>
+                            </Border>
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="依赖站点检查">
+                <views:HealthCheckView DataContext="{Binding Health}"/>
+            </TabItem>
+
+            <TabItem Header="官网诊断">
+                <views:OfficialSiteDiagnosticsView DataContext="{Binding OfficialSite}"/>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>

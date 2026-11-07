@@ -294,8 +294,9 @@ public partial class SettingsViewModel : ObservableObject
         ToastService.Instance.Success("已重置", "所有设置已恢复为默认值");
     }
 
+    /// <summary>数据导入导出（设置/分组/加速线路/历史），换机器或重装时唯一的迁移路径。</summary>
     [RelayCommand]
-    private async Task ExportSettings()
+    private async Task ExportAllData()
     {
         try
         {
@@ -304,15 +305,26 @@ public partial class SettingsViewModel : ObservableObject
 
             var filePicker = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
-                Title = "导出设置",
-                SuggestedFileName = $"GithubAccelerator_Settings_{DateTime.Now:yyyyMMdd_HHmmss}.json",
-                FileTypeChoices = new[] { new FilePickerFileType("JSON 文件") { Patterns = new[] { "*.json" } } }
+                Title = "导出数据",
+                SuggestedFileName = $"GithubAccelerator_backup_{DateTime.Now:yyyyMMdd_HHmmss}.zip",
+                FileTypeChoices = new[]
+                {
+                    new FilePickerFileType("压缩包") { Patterns = new[] { "*.zip" } },
+                    new FilePickerFileType("JSON 文件") { Patterns = new[] { "*.json" } }
+                }
             });
 
             if (filePicker != null)
             {
-                await DataExportImportService.Instance.ExportAsync(filePicker.Path.LocalPath, this);
-                ToastService.Instance.Success("导出成功", "设置已成功导出");
+                var success = await DataExportImportService.Instance.ExportAsync(filePicker.Path.LocalPath, this);
+                if (success)
+                {
+                    ToastService.Instance.Success("导出成功", "设置、分组、加速线路与历史已导出");
+                }
+                else
+                {
+                    ToastService.Instance.Error("导出失败", "写入导出文件失败");
+                }
             }
         }
         catch (Exception ex)
@@ -322,7 +334,7 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task ImportSettings()
+    private async Task ImportAllData()
     {
         try
         {
@@ -331,9 +343,9 @@ public partial class SettingsViewModel : ObservableObject
 
             var filePicker = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                Title = "导入设置",
+                Title = "导入数据",
                 AllowMultiple = false,
-                FileTypeFilter = new[] { new FilePickerFileType("JSON 文件") { Patterns = new[] { "*.json" } } }
+                FileTypeFilter = new[] { new FilePickerFileType("数据文件") { Patterns = new[] { "*.zip", "*.json" } } }
             });
 
             if (filePicker.Count > 0)
@@ -342,7 +354,7 @@ public partial class SettingsViewModel : ObservableObject
                 if (data != null)
                 {
                     await DataExportImportService.Instance.ApplyImportedDataAsync(data, this);
-                    ToastService.Instance.Success("导入成功", "设置已成功导入并生效");
+                    ToastService.Instance.Success("导入成功", "设置、分组、加速线路已导入并生效");
                 }
                 else
                 {

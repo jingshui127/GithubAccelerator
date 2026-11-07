@@ -8,10 +8,6 @@
              x:Class="GithubAccelerator.UI.Views.HealthCheckView"
              x:DataType="vm:HealthCheckViewModel">
 
-    <UserControl.DataContext>
-        <vm:HealthCheckViewModel/>
-    </UserControl.DataContext>
-
     <Grid RowDefinitions="Auto,*,Auto" Margin="20">
         <!-- 顶部标题和操作区 -->
         <Border Grid.Row="0" Padding="20" CornerRadius="12"

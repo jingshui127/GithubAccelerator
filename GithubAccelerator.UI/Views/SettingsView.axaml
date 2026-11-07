@@ -95,9 +95,9 @@
                     </Border>
                 </StackPanel>
 
-                <!-- Git 设置 -->
+                <!-- Git 加速 -->
                 <StackPanel Spacing="12">
-                    <TextBlock Text="Git 设置" FontSize="16" FontWeight="SemiBold"/>
+                    <TextBlock Text="Git 加速" FontSize="16" FontWeight="SemiBold"/>
 
                     <Border Padding="16" CornerRadius="8"
                             Background="{DynamicResource ControlFillColorDefaultBrush}"
@@ -261,26 +261,7 @@
                     </Border>
                 </StackPanel>
 
-                <!-- 关于与反馈 -->
-                <StackPanel Spacing="12">
-                    <TextBlock Text="关于与反馈" FontSize="16" FontWeight="SemiBold"/>
-
-                    <Border Padding="16" CornerRadius="8"
-                            Background="{DynamicResource ControlFillColorDefaultBrush}"
-                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
-                            BorderThickness="1">
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="用户反馈" FontSize="14" FontWeight="SemiBold"/>
-                            <TextBlock Text="如有问题或建议，欢迎通过以下方式联系我们：" FontSize="12" Classes="SecondaryText"/>
-                            <Border Padding="10,8" CornerRadius="6" Background="{DynamicResource ControlFillColorDisabledBrush}">
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="科控物联" FontSize="13" FontWeight="SemiBold"/>
-                                    <TextBlock Text="QQ: 2492123056 | 微信公众号：科控物联" FontSize="12" Classes="SecondaryText"/>
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
+                <!-- 关于与反馈已统一到「帮助与支持」页 -->
 
             </StackPanel>
         </ScrollViewer>
@@ -289,10 +270,12 @@
         <Border Grid.Row="1" Padding="16" Background="{DynamicResource ControlFillColorDefaultBrush}"
                 BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="12">
-                <Button Content="📤 导出设置" Command="{Binding ExportSettingsCommand}"
-                        Padding="16,10" FontSize="14"/>
-                <Button Content="📥 导入设置" Command="{Binding ImportSettingsCommand}"
-                        Padding="16,10" FontSize="14"/>
+                <Button Content="📦 导出数据" Command="{Binding ExportAllDataCommand}"
+                        Padding="16,10" FontSize="14"
+                        ToolTip.Tip="导出设置、分组、加速线路与历史，用于换机器或重装迁移"/>
+                <Button Content="📥 导入数据" Command="{Binding ImportAllDataCommand}"
+                        Padding="16,10" FontSize="14"
+                        ToolTip.Tip="从导出的数据包恢复设置、分组与加速线路"/>
                 <Button Content="🔄 恢复默认" Command="{Binding ResetToDefaultsCommand}"
                         Padding="16,10" FontSize="14"/>
                 <Button Content="💾 保存设置" Command="{Binding SaveSettingsCommand}"

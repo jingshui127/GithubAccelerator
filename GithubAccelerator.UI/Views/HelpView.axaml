@@ -1,0 +1,70 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:GithubAccelerator.UI.ViewModels"
+             xmlns:views="using:GithubAccelerator.UI.Views"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+             x:Class="GithubAccelerator.UI.Views.HelpView"
+             x:DataType="vm:HelpViewModel">
+
+    <Grid RowDefinitions="Auto,*" Margin="20" RowSpacing="10">
+        <Border Grid.Row="0" Padding="20" CornerRadius="12"
+                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                BorderThickness="1">
+            <StackPanel Spacing="4">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="❓" FontSize="22"/>
+                    <TextBlock Text="帮助与支持" FontSize="18" FontWeight="SemiBold"/>
+                </StackPanel>
+                <TextBlock Text="先看引导；出问题时生成一份只在本地的诊断包（日志、脱敏设置、Hosts 块），不会自动上传。"
+                           FontSize="12" Classes="SecondaryText" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="1">
+            <StackPanel Spacing="12">
+                <Border Padding="16" CornerRadius="12"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="操作与问题报告" FontSize="14" FontWeight="SemiBold"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="📖 重新查看新手引导" Command="{Binding ShowGuideCommand}"
+                                    Padding="14,8" FontSize="12"/>
+                            <Button Content="🧾 生成问题报告（诊断包）" Command="{Binding OpenDiagnosticsCommand}"
+                                    Padding="14,8" FontSize="12"/>
+                            <Button Content="ℹ️ 关于本程序" Command="{Binding ShowAboutCommand}"
+                                    Padding="14,8" FontSize="12"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding VersionText}" FontSize="11" Classes="SecondaryText"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Padding="16" CornerRadius="12"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="联系与反馈" FontSize="14" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding ContactText}" FontSize="12" Classes="SecondaryText"/>
+                        <TextBlock Text="反馈时请附诊断包；包内已脱敏，不含 token、用户名或完整路径。"
+                                   FontSize="11" Classes="SecondaryText" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <Expander Header="高级：日志（默认折叠）" IsExpanded="False"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Border Height="420" Padding="8" CornerRadius="12"
+                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                            BorderThickness="1">
+                        <views:LogViewerView DataContext="{Binding LogViewer}"/>
+                    </Border>
+                </Expander>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

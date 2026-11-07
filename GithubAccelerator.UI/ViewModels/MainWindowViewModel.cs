@@ -289,6 +289,24 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private bool _isOfficialSiteDiagnosticsVisible;
 
     [ObservableProperty]
+    private CheckAndRepairViewModel? _checkAndRepair;
+
+    [ObservableProperty]
+    private HelpViewModel? _help;
+
+    [ObservableProperty]
+    private RestoreOriginalStateViewModel? _restoreOriginalState;
+
+    [ObservableProperty]
+    private bool _isCheckAndRepairSelected;
+
+    [ObservableProperty]
+    private bool _isHostsAndBackupSelected;
+
+    [ObservableProperty]
+    private bool _isHelpSelected;
+
+    [ObservableProperty]
     private string _hostsContent = string.Empty;
 
     /// <summary>
@@ -602,7 +620,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 await TestGitHubConnectionAsync(showNotification: true);
                 break;
             case FailureKind.HostsRewrittenByThirdParty:
-                await ViewHostsContent();
+                ShowHostsAndBackup();
                 break;
             case FailureKind.GitConfigConflict:
                 ShowSettings();
@@ -642,8 +660,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public string BestSourceResponseText => string.IsNullOrEmpty(BestSourceName) ? "—" : $"{BestSourceResponseTime} ms";
 
-    public string BestSourceScoreText => string.IsNullOrEmpty(BestSourceName) ? "—" : BestSourceScore.ToString("F1");
-
     partial void OnIsRefreshingSourcesChanged(bool value)
     {
         OnPropertyChanged(nameof(TotalSourcesText));
@@ -654,12 +670,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     partial void OnBestSourceNameChanged(string value)
     {
         OnPropertyChanged(nameof(BestSourceResponseText));
-        OnPropertyChanged(nameof(BestSourceScoreText));
     }
 
     partial void OnBestSourceResponseTimeChanged(long value) => OnPropertyChanged(nameof(BestSourceResponseText));
-
-    partial void OnBestSourceScoreChanged(double value) => OnPropertyChanged(nameof(BestSourceScoreText));
 
     public bool HasFilteredSources => FilteredSources.Count > 0;
     private void CheckAdminPrivileges()
@@ -713,6 +726,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         Log.Information("正在预初始化网络监控");
         NetworkMonitor = new NetworkMonitorViewModel();
+        // 诊断/防护版状态供「检查与修复」与「回到原始状态」共用，构造无网络访问。
+        OfficialSiteDiagnostics = new OfficialSiteDiagnosticsViewModel();
 
         Log.Information("正在加载仪表盘");
         ShowDashboard();
@@ -938,156 +953,92 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IsLogViewerVisible = false;
     }
 
-    [RelayCommand]
-    private void ShowLogViewer()
+    /// <summary>「检查与修复」复用三个既有排查面板：依赖站点检查 + 官网诊断 + 连续采样。</summary>
+    private void EnsureCheckAndRepairViewModels()
     {
-        if (LogViewer == null)
-        {
-            LogViewer = new LogViewerViewModel();
-        }
-        
-        var logViewerView = new GithubAccelerator.UI.Views.LogViewerView();
-        logViewerView.DataContext = LogViewer;
-        CurrentView = logViewerView;
-        CurrentPageTitle = "日志查看";
-        ResetNavigationSelection();
-        IsLogViewerSelected = true;
-        IsDashboardVisible = false;
-        IsSettingsVisible = false;
-        IsLogViewerVisible = true;
+        HealthCheck ??= new HealthCheckViewModel();
+        OfficialSiteDiagnostics ??= new OfficialSiteDiagnosticsViewModel();
+        NetworkMonitor ??= new NetworkMonitorViewModel();
+    }
+
+    /// <summary>「Hosts 与备份」复用 Hosts 内容 / 分组 / 备份 / 回到原始状态。</summary>
+    private void EnsureHostsAndBackupViewModels()
+    {
+        EnsureCheckAndRepairViewModels();
+        HostsGroupManager ??= new HostsGroupViewModel();
+        BackupManager ??= new BackupManagerViewModel();
+        RestoreOriginalState ??= new RestoreOriginalStateViewModel(
+            this, _settings, OfficialSiteDiagnostics!.Guard, BackupManager);
+    }
+
+    private void EnsureHelpViewModel()
+    {
+        LogViewer ??= new LogViewerViewModel();
+        Help ??= new HelpViewModel(this, _settings, LogViewer);
     }
 
     [RelayCommand]
-    private void ShowBackupManager()
+    private void ShowCheckAndRepair()
     {
-        if (BackupManager == null)
-        {
-            BackupManager = new BackupManagerViewModel();
-        }
-        
-        var backupManagerView = new GithubAccelerator.UI.Views.BackupManagerView();
-        backupManagerView.DataContext = BackupManager;
-        CurrentView = backupManagerView;
-        CurrentPageTitle = "备份管理";
+        EnsureCheckAndRepairViewModels();
+        CheckAndRepair ??= new CheckAndRepairViewModel(
+            HealthCheck!, OfficialSiteDiagnostics!, NetworkMonitor!);
+
+        var view = new GithubAccelerator.UI.Views.CheckAndRepairView();
+        view.DataContext = CheckAndRepair;
+        CurrentView = view;
+        CurrentPageTitle = "检查与修复";
         ResetNavigationSelection();
-        IsBackupSelected = true;
+        IsCheckAndRepairSelected = true;
         IsDashboardVisible = false;
         IsSettingsVisible = false;
-        IsLogViewerVisible = false;
-        IsHostsGroupVisible = false;
-    }
-
-    [RelayCommand]
-    private void ShowHostsGroupManager()
-    {
-        if (HostsGroupManager == null)
-        {
-            HostsGroupManager = new HostsGroupViewModel();
-        }
-
-        var hostsGroupView = new GithubAccelerator.UI.Views.HostsGroupView();
-        hostsGroupView.DataContext = HostsGroupManager;
-        CurrentView = hostsGroupView;
-        CurrentPageTitle = "分组管理";
-        ResetNavigationSelection();
-        IsHostsGroupSelected = true;
-        IsDashboardVisible = false;
-        IsSettingsVisible = false;
-        IsLogViewerVisible = false;
-        IsHostsGroupVisible = true;
-        IsNetworkMonitorVisible = false;
-    }
-
-    [RelayCommand]
-    private void ShowNetworkMonitor()
-    {
-        if (NetworkMonitor == null)
-        {
-            NetworkMonitor = new NetworkMonitorViewModel();
-        }
-
-        var networkMonitorView = new GithubAccelerator.UI.Views.NetworkMonitorView();
-        networkMonitorView.DataContext = NetworkMonitor;
-        CurrentView = networkMonitorView;
-        CurrentPageTitle = "网络监控";
-        ResetNavigationSelection();
-        IsNetworkMonitorSelected = true;
-        IsDashboardVisible = false;
-        IsSettingsVisible = false;
-        IsLogViewerVisible = false;
-        IsHostsGroupVisible = false;
-        IsNetworkMonitorVisible = true;
-        IsDownloadAcceleratorVisible = false;
     }
 
     [RelayCommand]
     private void ShowDownloadAccelerator()
     {
-        if (DownloadAccelerator == null)
-        {
-            DownloadAccelerator = new DownloadAcceleratorViewModel();
-        }
+        DownloadAccelerator ??= new DownloadAcceleratorViewModel();
 
-        var downloadAcceleratorView = new GithubAccelerator.UI.Views.DownloadAcceleratorView();
-        downloadAcceleratorView.DataContext = DownloadAccelerator;
-        CurrentView = downloadAcceleratorView;
+        var view = new GithubAccelerator.UI.Views.DownloadAcceleratorView();
+        view.DataContext = DownloadAccelerator;
+        CurrentView = view;
         CurrentPageTitle = "下载加速器";
         ResetNavigationSelection();
         IsDownloadAcceleratorSelected = true;
         IsDashboardVisible = false;
         IsSettingsVisible = false;
-        IsLogViewerVisible = false;
-        IsHostsGroupVisible = false;
-        IsNetworkMonitorVisible = false;
-        IsDownloadAcceleratorVisible = true;
-        IsHealthCheckVisible = false;
     }
 
     [RelayCommand]
-    private void ShowHealthCheck()
+    private void ShowHostsAndBackup()
     {
-        if (HealthCheck == null)
-        {
-            HealthCheck = new HealthCheckViewModel();
-        }
+        EnsureHostsAndBackupViewModels();
 
-        var healthCheckView = new GithubAccelerator.UI.Views.HealthCheckView();
-        healthCheckView.DataContext = HealthCheck;
-        CurrentView = healthCheckView;
-        CurrentPageTitle = "依赖站点检查";
+        var view = new GithubAccelerator.UI.Views.HostsAndBackupView();
+        view.DataContext = this;
+        CurrentView = view;
+        CurrentPageTitle = "Hosts 与备份";
         ResetNavigationSelection();
-        IsHealthCheckSelected = true;
+        IsHostsAndBackupSelected = true;
         IsDashboardVisible = false;
         IsSettingsVisible = false;
-        IsLogViewerVisible = false;
-        IsHostsGroupVisible = false;
-        IsNetworkMonitorVisible = false;
-        IsDownloadAcceleratorVisible = false;
-        IsHealthCheckVisible = true;
+        _ = RefreshHostsContent();
+        RestoreOriginalState?.RefreshStatus();
     }
 
     [RelayCommand]
-    private void ShowOfficialSiteDiagnostics()
+    private void ShowHelp()
     {
-        if (OfficialSiteDiagnostics == null)
-        {
-            OfficialSiteDiagnostics = new OfficialSiteDiagnosticsViewModel();
-        }
+        EnsureHelpViewModel();
 
-        var diagnosticsView = new GithubAccelerator.UI.Views.OfficialSiteDiagnosticsView();
-        diagnosticsView.DataContext = OfficialSiteDiagnostics;
-        CurrentView = diagnosticsView;
-        CurrentPageTitle = "官网访问诊断";
+        var view = new GithubAccelerator.UI.Views.HelpView();
+        view.DataContext = Help;
+        CurrentView = view;
+        CurrentPageTitle = "帮助与支持";
         ResetNavigationSelection();
-        IsOfficialSiteDiagnosticsSelected = true;
+        IsHelpSelected = true;
         IsDashboardVisible = false;
         IsSettingsVisible = false;
-        IsLogViewerVisible = false;
-        IsHostsGroupVisible = false;
-        IsNetworkMonitorVisible = false;
-        IsDownloadAcceleratorVisible = false;
-        IsHealthCheckVisible = false;
-        IsOfficialSiteDiagnosticsVisible = true;
     }
 
     private void ResetNavigationSelection()
@@ -1102,6 +1053,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IsDownloadAcceleratorSelected = false;
         IsHealthCheckSelected = false;
         IsOfficialSiteDiagnosticsSelected = false;
+        IsCheckAndRepairSelected = false;
+        IsHostsAndBackupSelected = false;
+        IsHelpSelected = false;
     }
 
     [RelayCommand]
@@ -1139,7 +1093,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// 首次启动时自动显示单页引导（延迟 3 秒，等 UI 加载完成）。
-    /// 只在从未完成过引导时出现；跳过也算完成，之后可从左侧「使用指南」重新进入。
+    /// 只在从未完成过引导时出现；跳过也算完成，之后可从左侧「帮助与支持」重新进入。
     /// </summary>
     private async Task ShowFirstRunGuideOnFirstLaunchAsync()
     {
@@ -2433,26 +2387,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>重读 Hosts 文本，供「Hosts 与备份」页内刷新使用；不切换页面。</summary>
     [RelayCommand]
-    private async Task ViewHostsContent()
+    private async Task RefreshHostsContent()
     {
         try
         {
             var hostsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "drivers", "etc", "hosts");
             HostsContent = await File.ReadAllTextAsync(hostsPath);
-            
-            var hostsContentView = new GithubAccelerator.UI.Views.HostsContentView();
-            hostsContentView.DataContext = this;
-            CurrentView = hostsContentView;
-            CurrentPageTitle = "Hosts 内容";
-            ResetNavigationSelection();
-            IsHostsContentSelected = true;
-            IsDashboardVisible = false;
-            IsSettingsVisible = false;
-            IsLogViewerVisible = false;
-            IsHostsGroupVisible = false;
-            IsNetworkMonitorVisible = false;
-
+            IsHostsApplied = _hostsFileService.IsGithubHostsApplied(HostsContent);
             StatusMessage = "已加载 Hosts 文件内容";
             _historyService.Record(OperationType.HostsViewed, "查看 Hosts 文件内容");
         }
@@ -2515,126 +2458,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             StatusMessage = $"复制失败：{ex.Message}";
-        }
-    }
-
-    [RelayCommand]
-    private async Task ExportDataAsync()
-    {
-        try
-        {
-            var window = App.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
-                ? desktop.MainWindow
-                : null;
-
-            if (window == null) return;
-
-            var storageProvider = window.StorageProvider;
-            var file = await storageProvider.SaveFilePickerAsync(new Avalonia.Platform.Storage.FilePickerSaveOptions
-            {
-                Title = "导出数据",
-                SuggestedFileName = $"GithubAccelerator_backup_{DateTime.Now:yyyyMMdd_HHmmss}.zip",
-                FileTypeChoices = new[]
-                {
-                    new Avalonia.Platform.Storage.FilePickerFileType("压缩包")
-                    {
-                        Patterns = new[] { "*.zip" }
-                    },
-                    new Avalonia.Platform.Storage.FilePickerFileType("JSON 文件")
-                    {
-                        Patterns = new[] { "*.json" }
-                    }
-                }
-            });
-
-            if (file == null) return;
-
-            var filePath = file.TryGetLocalPath();
-            if (string.IsNullOrEmpty(filePath)) return;
-
-            StatusMessage = "正在导出数据...";
-            var exportService = DataExportImportService.Instance;
-            exportService.OnExportProgress += msg => StatusMessage = msg;
-
-            var success = await exportService.ExportAsync(filePath);
-            if (success)
-            {
-                StatusMessage = $"数据已导出到：{Path.GetFileName(filePath)}";
-                _historyService.Record(OperationType.SettingsChanged, $"导出数据到 {Path.GetFileName(filePath)}");
-                _notificationService.Success("数据导出", "数据已成功导出");
-            }
-            else
-            {
-                StatusMessage = "导出失败";
-                _notificationService.Error("数据导出", "导出失败");
-            }
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"导出异常：{ex.Message}";
-            _notificationService.Error("数据导出", $"导出异常：{ex.Message}");
-        }
-    }
-
-    [RelayCommand]
-    private async Task ImportDataAsync()
-    {
-        try
-        {
-            var window = App.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
-                ? desktop.MainWindow
-                : null;
-
-            if (window == null) return;
-
-            var storageProvider = window.StorageProvider;
-            var files = await storageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
-            {
-                Title = "导入数据",
-                AllowMultiple = false,
-                FileTypeFilter = new[]
-                {
-                    new Avalonia.Platform.Storage.FilePickerFileType("数据文件")
-                    {
-                        Patterns = new[] { "*.zip", "*.json" }
-                    }
-                }
-            });
-
-            if (files.Count == 0) return;
-
-            var filePath = files[0].TryGetLocalPath();
-            if (string.IsNullOrEmpty(filePath)) return;
-
-            StatusMessage = "正在导入数据...";
-            var importService = DataExportImportService.Instance;
-            importService.OnImportProgress += msg => StatusMessage = msg;
-
-            var data = await importService.ImportAsync(filePath);
-            if (data == null)
-            {
-                StatusMessage = "导入失败：无效的数据文件";
-                _notificationService.Error("数据导入", "无效的数据文件");
-                return;
-            }
-
-            var success = await importService.ApplyImportedDataAsync(data);
-            if (success)
-            {
-                StatusMessage = "数据已成功导入";
-                _historyService.Record(OperationType.SettingsChanged, "导入数据成功");
-                _notificationService.Success("数据导入", "数据已成功导入");
-            }
-            else
-            {
-                StatusMessage = "导入失败";
-                _notificationService.Error("数据导入", "导入失败");
-            }
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"导入异常：{ex.Message}";
-            _notificationService.Error("数据导入", $"导入异常：{ex.Message}");
         }
     }
 

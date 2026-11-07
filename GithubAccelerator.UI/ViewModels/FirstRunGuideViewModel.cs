@@ -212,7 +212,7 @@ public partial class FirstRunGuideViewModel : ObservableObject
         }
     }
 
-    /// <summary>跳过引导：不写任何系统文件，稍后可从左侧「使用指南」重新进入。</summary>
+    /// <summary>跳过引导：不写任何系统文件，稍后可从左侧「帮助与支持」重新进入。</summary>
     public void Skip()
     {
         _saveOptions?.Invoke(AutoStart, DiagnosticsEnabled);

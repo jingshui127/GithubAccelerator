@@ -19,10 +19,10 @@
     <Window.KeyBindings>
         <KeyBinding Gesture="Ctrl+R" Command="{Binding RefreshSourcesCommand}"/>
         <KeyBinding Gesture="Ctrl+S" Command="{Binding ApplyHostsCommand}"/>
-        <KeyBinding Gesture="Ctrl+H" Command="{Binding ViewHostsContentCommand}"/>
+        <KeyBinding Gesture="Ctrl+H" Command="{Binding ShowHostsAndBackupCommand}"/>
         <KeyBinding Gesture="F5" Command="{Binding ToggleMonitoringCommand}"/>
         <KeyBinding Gesture="Ctrl+1" Command="{Binding ShowDashboardCommand}"/>
-        <KeyBinding Gesture="Ctrl+2" Command="{Binding ShowNetworkMonitorCommand}"/>
+        <KeyBinding Gesture="Ctrl+2" Command="{Binding ShowCheckAndRepairCommand}"/>
         <KeyBinding Gesture="Ctrl+3" Command="{Binding ShowSettingsCommand}"/>
         <KeyBinding Gesture="Ctrl+4" Command="{Binding ShowDownloadAcceleratorCommand}"/>
     </Window.KeyBindings>
@@ -82,7 +82,7 @@
                             </StackPanel>
                         </Button>
 
-                        <Button Command="{Binding ShowNetworkMonitorCommand}"
+                        <Button Command="{Binding ShowCheckAndRepairCommand}"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
                                 Padding="12,10"
@@ -90,8 +90,8 @@
                                 BorderThickness="0"
                                 Classes="NavButton">
                             <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock Text="📈" FontSize="16"/>
-                                <TextBlock Text="网络监控" FontSize="13"/>
+                                <TextBlock Text="🩺" FontSize="16"/>
+                                <TextBlock Text="检查与修复" FontSize="13"/>
                             </StackPanel>
                         </Button>
 
@@ -108,40 +108,14 @@
                             </StackPanel>
                         </Button>
 
-                        <Button Command="{Binding ShowHealthCheckCommand}"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left"
-                                Padding="12,10"
-                                CornerRadius="8"
-                                BorderThickness="0"
-                                Classes="NavButton">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock Text="🩺" FontSize="16"/>
-                                <TextBlock Text="依赖站点检查" FontSize="13"/>
-                            </StackPanel>
-                        </Button>
-
-                        <Button Command="{Binding ShowOfficialSiteDiagnosticsCommand}"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left"
-                                Padding="12,10"
-                                CornerRadius="8"
-                                BorderThickness="0"
-                                Classes="NavButton">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock Text="🔎" FontSize="16"/>
-                                <TextBlock Text="官网访问诊断" FontSize="13"/>
-                            </StackPanel>
-                        </Button>
-
-                        <!-- Hosts管理 -->
-                        <TextBlock Text="Hosts 管理" 
+                        <!-- Hosts 与备份（Hosts 内容 / 分组 / 备份 / 回到原始状态 统一入口） -->
+                        <TextBlock Text="Hosts 与备份" 
                                    FontSize="10" 
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    Margin="12,16,0,4"/>
 
-                        <Button Command="{Binding ViewHostsContentCommand}"
+                        <Button Command="{Binding ShowHostsAndBackupCommand}"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
                                 Padding="12,10"
@@ -150,33 +124,7 @@
                                 Classes="NavButton">
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <TextBlock Text="📄" FontSize="16"/>
-                                <TextBlock Text="Hosts 内容" FontSize="13"/>
-                            </StackPanel>
-                        </Button>
-
-                        <Button Command="{Binding ShowHostsGroupManagerCommand}"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left"
-                                Padding="12,10"
-                                CornerRadius="8"
-                                BorderThickness="0"
-                                Classes="NavButton">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock Text="📁" FontSize="16"/>
-                                <TextBlock Text="分组管理" FontSize="13"/>
-                            </StackPanel>
-                        </Button>
-
-                        <Button Command="{Binding ShowBackupManagerCommand}"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left"
-                                Padding="12,10"
-                                CornerRadius="8"
-                                BorderThickness="0"
-                                Classes="NavButton">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock Text="💾" FontSize="16"/>
-                                <TextBlock Text="备份管理" FontSize="13"/>
+                                <TextBlock Text="Hosts 与备份" FontSize="13"/>
                             </StackPanel>
                         </Button>
 
@@ -200,7 +148,7 @@
                             </StackPanel>
                         </Button>
 
-                        <Button Command="{Binding ShowQuickGuideCommand}"
+                        <Button Command="{Binding ShowHelpCommand}"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
                                 Padding="12,10"
@@ -209,20 +157,7 @@
                                 Classes="NavButton">
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <TextBlock Text="❓" FontSize="16"/>
-                                <TextBlock Text="使用指南" FontSize="13"/>
-                            </StackPanel>
-                        </Button>
-
-                        <Button Command="{Binding ShowLogViewerCommand}"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left"
-                                Padding="12,10"
-                                CornerRadius="8"
-                                BorderThickness="0"
-                                Classes="NavButton">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock Text="📝" FontSize="16"/>
-                                <TextBlock Text="日志查看" FontSize="13"/>
+                                <TextBlock Text="帮助与支持" FontSize="13"/>
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -259,36 +194,15 @@
                         </Grid>
 
                         <!-- 快捷操作 -->
-                        <Grid ColumnDefinitions="*,*">
-                            <Button Grid.Column="0"
-                                    Content="{Binding IsDarkMode, Converter={StaticResource BoolToStringConverter}, ConverterParameter='☀️|🌙'}"
-                                    Command="{Binding ToggleThemeCommand}"
-                                    Padding="8,6"
-                                    FontSize="14"
-                                    HorizontalAlignment="Stretch"
-                                    CornerRadius="8"
-                                    Background="Transparent"
-                                    BorderThickness="1"
-                                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"/>
-                            <Button Grid.Column="1"
-                                    Content="ℹ️"
-                                    Command="{Binding ShowAboutCommand}"
-                                    Padding="8,6"
-                                    FontSize="14"
-                                    HorizontalAlignment="Stretch"
-                                    CornerRadius="8"
-                                    Background="Transparent"
-                                    BorderThickness="1"
-                                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"/>
-                        </Grid>
-
-                        <!-- 联系方式 -->
-                        <Border Padding="6,4" CornerRadius="6" Background="{DynamicResource ControlFillColorDisabledBrush}">
-                            <TextBlock Text="QQ: 2492123056 | 微信公众号：科控物联" 
-                                       FontSize="10" 
-                                       HorizontalAlignment="Center"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"/>
-                        </Border>
+                        <Button Content="{Binding IsDarkMode, Converter={StaticResource BoolToStringConverter}, ConverterParameter='☀️|🌙'}"
+                                Command="{Binding ToggleThemeCommand}"
+                                Padding="8,6"
+                                FontSize="14"
+                                HorizontalAlignment="Stretch"
+                                CornerRadius="8"
+                                Background="Transparent"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"/>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -319,14 +233,8 @@
                               HorizontalAlignment="Center"
                               TextTrimming="CharacterEllipsis"/>
 
-                    <!-- 快捷操作 -->
+                    <!-- 快捷操作（导入导出已统一到设置页，顶栏只保留高频只读动作） -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-                        <Button Content="📤 导出" Command="{Binding ExportDataCommand}"
-                                Padding="10,6" FontSize="11"
-                                CornerRadius="6"/>
-                        <Button Content="📥 导入" Command="{Binding ImportDataCommand}"
-                                Padding="10,6" FontSize="11"
-                                CornerRadius="6"/>
                         <Button Content="🔄 刷新DNS" Command="{Binding FlushDnsCacheCommand}"
                                 Padding="10,6" FontSize="11"
                                 CornerRadius="6"/>
