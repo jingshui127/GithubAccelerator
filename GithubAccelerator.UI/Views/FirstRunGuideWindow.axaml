@@ -26,7 +26,7 @@
         <!-- 内容 -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled" Padding="28,20">
-            <StackPanel Spacing="18">
+            <StackPanel Spacing="18" MaxWidth="560">
 
                 <!-- 网络状态 -->
                 <Border CornerRadius="10" Padding="16"
@@ -50,12 +50,12 @@
 
                 <!-- 失败提示（原因 + 下一步） -->
                 <Border CornerRadius="10" Padding="16"
-                        Background="#FDECEA" BorderBrush="#F5B7B1" BorderThickness="1"
+                        Background="{DynamicResource ErrorTintBackground}" BorderBrush="{DynamicResource ErrorTintBorder}" BorderThickness="1"
                         IsVisible="{Binding HasFailure}">
                     <StackPanel Spacing="6">
-                        <TextBlock Text="⚠ 这次没有成功" FontSize="13" FontWeight="SemiBold" Foreground="#B03A2E"/>
-                        <TextBlock Text="{Binding FailureText}" FontSize="12" TextWrapping="Wrap" Foreground="#7B241C"/>
-                        <TextBlock Text="{Binding FailureActionText}" FontSize="12" TextWrapping="Wrap" Foreground="#7B241C"/>
+                        <TextBlock Text="⚠ 这次没有成功" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource ErrorTintStrongText}"/>
+                        <TextBlock Text="{Binding FailureText}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource ErrorTintText}"/>
+                        <TextBlock Text="{Binding FailureActionText}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource ErrorTintText}"/>
                     </StackPanel>
                 </Border>
 

@@ -306,7 +306,7 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Border Padding="16,12" CornerRadius="8"
-                                Background="#F5F5F5"
+                                Background="{DynamicResource ToastBackground}"
                                 BoxShadow="0 4 12 0 #30000000"
                                 MinWidth="300" MaxWidth="400">
                             <Grid ColumnDefinitions="Auto,*,Auto">
@@ -318,7 +318,7 @@
                                 <StackPanel Grid.Column="1" Spacing="4">
                                     <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13"/>
                                     <TextBlock Text="{Binding Message}" FontSize="12" TextWrapping="Wrap" MaxWidth="280"
-                                              Foreground="#666666"/>
+                                              Foreground="{DynamicResource SecondaryTextBrush}"/>
                                 </StackPanel>
                                 <Button Grid.Column="2" Content="✕" Padding="4" FontSize="10"
                                         Background="Transparent" BorderThickness="0"

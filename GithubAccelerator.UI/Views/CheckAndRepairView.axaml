@@ -62,15 +62,15 @@
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Spacing="2">
                                     <TextBlock Text="正常" FontSize="11" Classes="SecondaryText"/>
-                                    <TextBlock Text="{Binding Health.OkCountText}" FontSize="16" FontWeight="Bold" Foreground="#4CAF50"/>
+                                    <TextBlock Text="{Binding Health.OkCountText}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource SuccessTextBrush}"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Spacing="2">
                                     <TextBlock Text="较慢" FontSize="11" Classes="SecondaryText"/>
-                                    <TextBlock Text="{Binding Health.SlowCountText}" FontSize="16" FontWeight="Bold" Foreground="#FFC107"/>
+                                    <TextBlock Text="{Binding Health.SlowCountText}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource CautionTextBrush}"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="3" Spacing="2">
                                     <TextBlock Text="失败" FontSize="11" Classes="SecondaryText"/>
-                                    <TextBlock Text="{Binding Health.FailCountText}" FontSize="16" FontWeight="Bold" Foreground="#FF5722"/>
+                                    <TextBlock Text="{Binding Health.FailCountText}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource ErrorTextBrush}"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="4" Spacing="2">
                                     <TextBlock Text="检查时间" FontSize="11" Classes="SecondaryText"/>

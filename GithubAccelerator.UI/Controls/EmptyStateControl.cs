@@ -2,6 +2,7 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using GithubAccelerator.UI.Services;
 
 namespace GithubAccelerator.UI.Controls;
 
@@ -87,7 +88,7 @@ public class EmptyStateControl : ContentControl
         {
             FontSize = 13,
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-            Foreground = new SolidColorBrush(Color.Parse("#666666")),
+            Foreground = new SolidColorBrush(Color.Parse(ThemeManager.IsDarkMode ? "#A8A8A8" : "#666666")),
             TextWrapping = TextWrapping.Wrap,
             MaxWidth = 300,
             TextAlignment = TextAlignment.Center,

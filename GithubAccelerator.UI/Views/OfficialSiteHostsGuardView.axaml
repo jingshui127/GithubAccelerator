@@ -115,7 +115,7 @@
                     <TextBlock Grid.Row="2" Text="{Binding StatusText}" FontSize="10.5" TextWrapping="Wrap"
                                Foreground="{DynamicResource SecondaryTextBrush}"/>
                     <TextBlock Grid.Row="3" Text="当前不是管理员，写入/撤销/恢复都需要管理员权限；本程序不会静默提权。"
-                               FontSize="10" TextWrapping="Wrap" Foreground="#E8A23D"
+                               FontSize="10" TextWrapping="Wrap" Foreground="{DynamicResource WarningStrongTextBrush}"
                                IsVisible="{Binding NeedsElevation}"/>
                 </Grid>
             </Border>

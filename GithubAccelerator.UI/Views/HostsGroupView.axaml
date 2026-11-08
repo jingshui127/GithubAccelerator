@@ -46,7 +46,7 @@
                                     </TextBlock>
                                 </StackPanel>
                                 <TextBlock Grid.Column="2" Text="✓" FontSize="14"
-                                           Foreground="#4CAF50" IsVisible="{Binding IsEnabled}"
+                                           Foreground="{DynamicResource SuccessTextBrush}" IsVisible="{Binding IsEnabled}"
                                            VerticalAlignment="Center"/>
                             </Grid>
                         </DataTemplate>

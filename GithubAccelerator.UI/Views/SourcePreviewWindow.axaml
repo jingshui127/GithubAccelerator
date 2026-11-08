@@ -8,6 +8,7 @@
         x:DataType="local:SourcePreviewModel"
         Title="{Binding Title}"
         Width="700" Height="500"
+        Background="{DynamicResource BackgroundColor}"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
 

@@ -5,6 +5,7 @@ using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Styling;
+using GithubAccelerator.UI.Services;
 
 namespace GithubAccelerator.UI.Controls;
 
@@ -56,8 +57,8 @@ public class SkeletonControl : ContentControl
 
     public SkeletonControl()
     {
-        SkeletonBrush = new SolidColorBrush(Color.Parse("#E0E0E0"));
-        SkeletonHighlightBrush = new SolidColorBrush(Color.Parse("#F0F0F0"));
+        SkeletonBrush = SkeletonBrushes.Base;
+        SkeletonHighlightBrush = SkeletonBrushes.Highlight;
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -220,7 +221,7 @@ public class SkeletonPanel : StackPanel
             var skeleton = new Border
             {
                 Height = ItemHeight,
-                Background = new SolidColorBrush(Color.Parse("#E0E0E0")),
+                Background = SkeletonBrushes.Base,
                 CornerRadius = new CornerRadius(8)
             };
 
@@ -237,7 +238,7 @@ public class SkeletonPanel : StackPanel
                         Cue = new Cue(0.0),
                         Setters =
                         {
-                            new Setter(Border.BackgroundProperty, new SolidColorBrush(Color.Parse("#E0E0E0")))
+                            new Setter(Border.BackgroundProperty, SkeletonBrushes.Base)
                         }
                     },
                     new KeyFrame
@@ -245,7 +246,7 @@ public class SkeletonPanel : StackPanel
                         Cue = new Cue(0.5),
                         Setters =
                         {
-                            new Setter(Border.BackgroundProperty, new SolidColorBrush(Color.Parse("#F5F5F5")))
+                            new Setter(Border.BackgroundProperty, SkeletonBrushes.Highlight)
                         }
                     },
                     new KeyFrame
@@ -253,7 +254,7 @@ public class SkeletonPanel : StackPanel
                         Cue = new Cue(1.0),
                         Setters =
                         {
-                            new Setter(Border.BackgroundProperty, new SolidColorBrush(Color.Parse("#E0E0E0")))
+                            new Setter(Border.BackgroundProperty, SkeletonBrushes.Base)
                         }
                     }
                 }
@@ -302,7 +303,7 @@ public class SkeletonCard : UserControl
     {
         return new Border
         {
-            Background = new SolidColorBrush(Color.Parse("#F5F5F5")),
+            Background = SkeletonBrushes.CardBackground,
             CornerRadius = new CornerRadius(12),
             Padding = new Thickness(16),
             Child = new StackPanel
@@ -314,31 +315,38 @@ public class SkeletonCard : UserControl
                     {
                         Height = 20,
                         Width = 150,
-                        Background = new SolidColorBrush(Color.Parse("#E0E0E0")),
+                        Background = SkeletonBrushes.Base,
                         CornerRadius = new CornerRadius(4)
                     },
                     new Border
                     {
                         Height = 14,
-                        Background = new SolidColorBrush(Color.Parse("#E0E0E0")),
+                        Background = SkeletonBrushes.Base,
                         CornerRadius = new CornerRadius(4)
                     },
                     new Border
                     {
                         Height = 14,
                         Width = 200,
-                        Background = new SolidColorBrush(Color.Parse("#E0E0E0")),
+                        Background = SkeletonBrushes.Base,
                         CornerRadius = new CornerRadius(4)
                     },
                     new Border
                     {
                         Height = 14,
                         Width = 180,
-                        Background = new SolidColorBrush(Color.Parse("#E0E0E0")),
+                        Background = SkeletonBrushes.Base,
                         CornerRadius = new CornerRadius(4)
                     }
                 }
             }
         };
     }
+}
+
+internal static class SkeletonBrushes
+{
+    public static IBrush Base => new SolidColorBrush(Color.Parse(ThemeManager.IsDarkMode ? "#333333" : "#E0E0E0"));
+    public static IBrush Highlight => new SolidColorBrush(Color.Parse(ThemeManager.IsDarkMode ? "#414141" : "#F0F0F0"));
+    public static IBrush CardBackground => new SolidColorBrush(Color.Parse(ThemeManager.IsDarkMode ? "#2B2B2B" : "#F5F5F5"));
 }

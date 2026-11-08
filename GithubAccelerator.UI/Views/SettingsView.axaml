@@ -116,7 +116,7 @@
                                 <TextBlock Text="{Binding GitRewriteStatus}" FontSize="12" Classes="SecondaryText"
                                            TextWrapping="Wrap"/>
                                 <TextBlock Text="{Binding GitRewriteAdvice}" FontSize="12"
-                                           Foreground="#E8A23D" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource WarningStrongTextBrush}" TextWrapping="Wrap"
                                            IsVisible="{Binding HasGitRewriteAdvice}"/>
                                 <TextBlock Text="{Binding GitRewriteProgressText}" FontSize="12" FontWeight="SemiBold"
                                            Foreground="{DynamicResource PrimaryColor}"
@@ -147,10 +147,10 @@
                             </StackPanel>
 
                             <Border Padding="12" CornerRadius="6"
-                                    Background="#FFF8E1" BorderBrush="#FFB74D" BorderThickness="1">
+                                    Background="{DynamicResource WarningTintBackground}" BorderBrush="{DynamicResource WarningTintBorder}" BorderThickness="1">
                                 <StackPanel Spacing="4">
-                                    <TextBlock Text="加速范围（部分路径，不是全站）" FontSize="12" FontWeight="SemiBold" Foreground="#8D6E00"/>
-                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#6D5A00"
+                                    <TextBlock Text="加速范围（部分路径，不是全站）" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource WarningTintStrongText}"/>
+                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource WarningTintText}"
                                                Text="覆盖：git clone/fetch/pull、raw.githubusercontent.com 文件、release 下载、公开仓库页面。不需要加速：api.github.com 接口与需要登录的操作（直连可用）；直连是否可用视当时网络而定，直连可用时优先直连。页面内脚本请求与 ghcr.io 容器镜像不在覆盖范围。镜像站不可用时工具会提示原因，不会假装已加速。"/>
                                 </StackPanel>
                             </Border>

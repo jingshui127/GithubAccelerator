@@ -6,6 +6,7 @@
         x:Class="GithubAccelerator.UI.Views.AboutWindow"
         Title="关于 GitHub 加速器 Pro"
         Width="450" Height="560"
+        Background="{DynamicResource BackgroundColor}"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         CanResize="False">

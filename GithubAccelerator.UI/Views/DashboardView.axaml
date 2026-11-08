@@ -164,7 +164,7 @@
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel Grid.Column="0" Spacing="4">
                             <TextBlock Text="出问题怎么办 · 所有加速线路都不可用" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="#F44336"/>
+                                       Foreground="{DynamicResource ErrorTextBrush}"/>
                             <TextBlock Text="只说明这些线路探测失败，不代表 github.com 直连打不开。"
                                        FontSize="11" Classes="SecondaryText" TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding AllSourcesFailureText}" FontSize="11"
@@ -300,7 +300,7 @@
                                         <Border Grid.Column="3" VerticalAlignment="Center" Margin="8,0"
                                                 IsVisible="{Binding IsDnsProbe}"
                                                 Background="#20FF9800" CornerRadius="4" Padding="6,2">
-                                            <TextBlock Text="🔍 DNS探测" FontSize="10" Foreground="#FF9800"/>
+                                            <TextBlock Text="🔍 DNS探测" FontSize="10" Foreground="{DynamicResource CautionTextBrush}"/>
                                         </Border>
 
                                         <!-- 响应时间 -->
@@ -347,7 +347,7 @@
                             <TextBlock Text="未找到匹配的加速线路" FontSize="18" FontWeight="SemiBold" 
                                       HorizontalAlignment="Center"/>
                             <TextBlock Text="请尝试修改搜索条件或重新探测线路" FontSize="13" 
-                                      HorizontalAlignment="Center" Foreground="#666666"/>
+                                      HorizontalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}"/>
                             <Button Content="重新探测线路" Command="{Binding RefreshSourcesCommand}"
                                    Padding="16,8" Margin="0,8,0,0" HorizontalAlignment="Center"
                                    CornerRadius="6"/>

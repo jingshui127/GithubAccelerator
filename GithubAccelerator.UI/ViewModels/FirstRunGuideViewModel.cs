@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GithubAccelerator.UI.Services;
 
 namespace GithubAccelerator.UI.ViewModels;
 
@@ -106,11 +107,15 @@ public partial class FirstRunGuideViewModel : ObservableObject
 
     public string NetworkColor => NetworkState switch
     {
-        FirstRunNetworkState.Checking => "#9E9E9E",
-        FirstRunNetworkState.Reachable => "#2E7D32",
-        FirstRunNetworkState.Slow => "#EF6C00",
-        _ => "#C62828"
+        FirstRunNetworkState.Checking => ThemeColor("#9E9E9E", "#BDBDBD"),
+        FirstRunNetworkState.Reachable => ThemeColor("#2E7D32", "#81C784"),
+        FirstRunNetworkState.Slow => ThemeColor("#EF6C00", "#FFB74D"),
+        _ => ThemeColor("#C62828", "#FF8A80")
     };
+
+    /// <summary>状态色按当前主题取色：浅色用深一档，深色用亮一档，避免深色下看不清。</summary>
+    private static string ThemeColor(string light, string dark)
+        => ThemeManager.IsDarkMode ? dark : light;
 
     partial void OnFailureTextChanged(string? value) => OnPropertyChanged(nameof(HasFailure));
 

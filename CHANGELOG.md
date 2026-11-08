@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.9] - 2026-11-08
+
+### Fixed
+- 深色主题：页面底色、卡片底色、正文与次要文字改为随主题切换，不再出现浅底白字或深底深字
+- 深色主题：选中的页签文字改用主文字色，不再暗红、低对比
+- 深色主题：下载加速器的链接、jsDelivr / Git Clone 结果卡、黄色提示块、错误提示块全部改用主题色，深色下不再出现刺眼浅色块
+- 深色主题：Toast、空态、骨架屏、备份弹窗、关于 / 源码预览 / 诊断包窗口按当前主题取色
+- 深色主题：首启引导的网络状态色随主题取色，深色下不再用深绿/深红压暗底
+- 浅色主题：正常 / 较慢 / 失败计数、链接与警告文字改用更深色值，修掉原来对比度不足的问题
+- 首启引导正文右侧被裁切，改为限宽 560 后正常换行
+
 ## [1.6.8] - 2026-11-08
 
 ### Changed

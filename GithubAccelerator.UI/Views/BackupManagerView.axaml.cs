@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using GithubAccelerator.UI.Services;
 using GithubAccelerator.UI.ViewModels;
 
 namespace GithubAccelerator.UI.Views;
@@ -58,6 +59,7 @@ public partial class BackupManagerView : UserControl
                 Width = 800,
                 Height = 600,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Background = new SolidColorBrush(Color.Parse(ThemeManager.IsDarkMode ? "#1E1E1E" : "#FAFAFA")),
                 Content = textBox
             };
 
@@ -127,6 +129,7 @@ public partial class BackupManagerView : UserControl
                 SizeToContent = SizeToContent.Height,
                 CanResize = false,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Background = new SolidColorBrush(Color.Parse(ThemeManager.IsDarkMode ? "#1E1E1E" : "#FAFAFA")),
                 Content = panel
             };
 

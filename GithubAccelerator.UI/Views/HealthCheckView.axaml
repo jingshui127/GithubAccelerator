@@ -44,21 +44,21 @@
                             Background="{DynamicResource ControlFillColorSecondaryBrush}">
                         <StackPanel>
                             <TextBlock Text="✅ 正常" FontSize="11" Classes="SecondaryText"/>
-                            <TextBlock Text="{Binding OkCountText}" FontSize="20" FontWeight="Bold" Foreground="#4CAF50"/>
+                            <TextBlock Text="{Binding OkCountText}" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource SuccessTextBrush}"/>
                         </StackPanel>
                     </Border>
                     <Border Grid.Column="1" Padding="12,8" CornerRadius="8" Margin="4,0"
                             Background="{DynamicResource ControlFillColorSecondaryBrush}">
                         <StackPanel>
                             <TextBlock Text="⚠️ 较慢" FontSize="11" Classes="SecondaryText"/>
-                            <TextBlock Text="{Binding SlowCountText}" FontSize="20" FontWeight="Bold" Foreground="#FFC107"/>
+                            <TextBlock Text="{Binding SlowCountText}" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource CautionTextBrush}"/>
                         </StackPanel>
                     </Border>
                     <Border Grid.Column="2" Padding="12,8" CornerRadius="8" Margin="4,0"
                             Background="{DynamicResource ControlFillColorSecondaryBrush}">
                         <StackPanel>
                             <TextBlock Text="❌ 失败" FontSize="11" Classes="SecondaryText"/>
-                            <TextBlock Text="{Binding FailCountText}" FontSize="20" FontWeight="Bold" Foreground="#FF5722"/>
+                            <TextBlock Text="{Binding FailCountText}" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource ErrorTextBrush}"/>
                         </StackPanel>
                     </Border>
                     <Border Grid.Column="3" Padding="12,8" CornerRadius="8" Margin="4,0,0,0"
@@ -132,8 +132,8 @@
 
                                 <!-- 错误信息（仅失败时显示） -->
                                 <Border IsVisible="{Binding IsFail}" Margin="0,8,0,0" Padding="10,6" CornerRadius="6"
-                                        Background="#FFFFEBEE" BorderBrush="#FF5722" BorderThickness="1">
-                                    <TextBlock Text="{Binding ErrorMessageText}" FontSize="11" Foreground="#C62828"
+                                        Background="{DynamicResource ErrorTintBackground}" BorderBrush="{DynamicResource ErrorTintBorder}" BorderThickness="1">
+                                    <TextBlock Text="{Binding ErrorMessageText}" FontSize="11" Foreground="{DynamicResource ErrorTintText}"
                                                TextWrapping="Wrap"/>
                                 </Border>
                                 </StackPanel>

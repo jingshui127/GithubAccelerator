@@ -8,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Styling;
 using CommunityToolkit.Mvvm.ComponentModel;
+using GithubAccelerator.UI.Services;
 
 namespace GithubAccelerator.UI.Controls;
 
@@ -219,7 +220,7 @@ public class ToastControl : UserControl
         var border = Content as Border;
         if (border == null) return;
 
-        border.Background = new SolidColorBrush(Color.Parse("#F5F5F5"));
+        border.Background = new SolidColorBrush(Color.Parse(ThemeManager.IsDarkMode ? "#2B2B2B" : "#F5F5F5"));
 
         var grid = border.Child as Grid;
         if (grid == null) return;
@@ -252,7 +253,7 @@ public class ToastControl : UserControl
             if (messageBlock != null)
             {
                 messageBlock.Text = toast.Message;
-                messageBlock.Foreground = new SolidColorBrush(Color.Parse("#666666"));
+                messageBlock.Foreground = new SolidColorBrush(Color.Parse(ThemeManager.IsDarkMode ? "#A8A8A8" : "#666666"));
             }
         }
 

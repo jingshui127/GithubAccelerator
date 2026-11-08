@@ -12,7 +12,7 @@
             <TextBlock Text="诊断包预览" FontSize="18" FontWeight="SemiBold"/>
             <TextBlock Text="下面列出将要打包的文件和脱敏规则。确认后才保存 zip；程序不会自动上传或发送，发送与否由你决定。"
                        FontSize="12" Classes="SecondaryText" TextWrapping="Wrap"/>
-            <TextBlock x:Name="StatusText" Text="正在生成预览…" FontSize="12" Foreground="#E8A23D"/>
+            <TextBlock x:Name="StatusText" Text="正在生成预览…" FontSize="12" Foreground="{DynamicResource WarningStrongTextBrush}"/>
         </StackPanel>
 
         <ScrollViewer Grid.Row="1" Margin="0,12,0,0">

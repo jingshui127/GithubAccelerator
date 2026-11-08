@@ -7,39 +7,106 @@
              RequestedThemeVariant="Default">
 
     <Application.Resources>
-        <converters:BoolToStringConverter x:Key="BoolToStringConverter"/>
-        <converters:StringNotEmptyConverter x:Key="StringNotEmptyConverter"/>
-        <converters:BoolToColorConverter x:Key="BoolToColorConverter"/>
-        <converters:BoolToFontWeightConverter x:Key="BoolToFontWeightConverter"/>
+        <ResourceDictionary>
+            <!-- 浅色/深色两套 Brush：所有页面通过 DynamicResource 引用，切换主题时立即生效 -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="BackgroundColor" Color="#FAFAFA"/>
+                    <SolidColorBrush x:Key="CardBackground" Color="#FFFFFF"/>
+                    <SolidColorBrush x:Key="InfoBackground" Color="#E3F2FD"/>
+                    <SolidColorBrush x:Key="CardBorderBrush" Color="#E0E0E0"/>
+                    <SolidColorBrush x:Key="PrimaryTextBrush" Color="#1A1A1A"/>
+                    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#666666"/>
+                    <SolidColorBrush x:Key="NavHoverBackground" Color="#E5E5E5"/>
+                    <SolidColorBrush x:Key="NavPressedBackground" Color="#D0D0D0"/>
+                    <SolidColorBrush x:Key="SecondaryButtonBackground" Color="#E5E5E5"/>
+                    <SolidColorBrush x:Key="ToastBackground" Color="#F5F5F5"/>
+                    <SolidColorBrush x:Key="SkeletonBaseBrush" Color="#E0E0E0"/>
+                    <SolidColorBrush x:Key="SkeletonHighlightBrush" Color="#F5F5F5"/>
+                    <!-- 语义色：状态文字 / 链接 / 带底色提示块，深色下自动换更亮的一档 -->
+                    <SolidColorBrush x:Key="LinkTextBrush" Color="#0066CC"/>
+                    <SolidColorBrush x:Key="SuccessTextBrush" Color="#107C10"/>
+                    <SolidColorBrush x:Key="CautionTextBrush" Color="#B45309"/>
+                    <SolidColorBrush x:Key="ErrorTextBrush" Color="#C62828"/>
+                    <SolidColorBrush x:Key="WarningStrongTextBrush" Color="#B45309"/>
+                    <SolidColorBrush x:Key="InfoAccentBackground" Color="#4FC3F7"/>
+                    <SolidColorBrush x:Key="InfoAccentText" Color="#1A1A1A"/>
+                    <SolidColorBrush x:Key="SuccessTintBackground" Color="#E8F5E9"/>
+                    <SolidColorBrush x:Key="SuccessTintText" Color="#2E7D32"/>
+                    <SolidColorBrush x:Key="PurpleTintBackground" Color="#F3E5F5"/>
+                    <SolidColorBrush x:Key="PurpleTintText" Color="#6A1B9A"/>
+                    <SolidColorBrush x:Key="PurpleTintStrongText" Color="#7B1FA2"/>
+                    <SolidColorBrush x:Key="WarningTintBackground" Color="#FFF8E1"/>
+                    <SolidColorBrush x:Key="WarningTintBorder" Color="#FFB74D"/>
+                    <SolidColorBrush x:Key="WarningTintText" Color="#6D5A00"/>
+                    <SolidColorBrush x:Key="WarningTintStrongText" Color="#8D6E00"/>
+                    <SolidColorBrush x:Key="ErrorTintBackground" Color="#FDECEA"/>
+                    <SolidColorBrush x:Key="ErrorTintBorder" Color="#F5B7B1"/>
+                    <SolidColorBrush x:Key="ErrorTintStrongText" Color="#B03A2E"/>
+                    <SolidColorBrush x:Key="ErrorTintText" Color="#7B241C"/>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="BackgroundColor" Color="#1E1E1E"/>
+                    <SolidColorBrush x:Key="CardBackground" Color="#2B2B2B"/>
+                    <SolidColorBrush x:Key="InfoBackground" Color="#1E2A33"/>
+                    <SolidColorBrush x:Key="CardBorderBrush" Color="#3C3C3C"/>
+                    <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F2F2F2"/>
+                    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A8A8A8"/>
+                    <SolidColorBrush x:Key="NavHoverBackground" Color="#343434"/>
+                    <SolidColorBrush x:Key="NavPressedBackground" Color="#3F3F3F"/>
+                    <SolidColorBrush x:Key="SecondaryButtonBackground" Color="#3A3A3A"/>
+                    <SolidColorBrush x:Key="ToastBackground" Color="#2B2B2B"/>
+                    <SolidColorBrush x:Key="SkeletonBaseBrush" Color="#333333"/>
+                    <SolidColorBrush x:Key="SkeletonHighlightBrush" Color="#414141"/>
+                    <SolidColorBrush x:Key="LinkTextBrush" Color="#64B5F6"/>
+                    <SolidColorBrush x:Key="SuccessTextBrush" Color="#81C784"/>
+                    <SolidColorBrush x:Key="CautionTextBrush" Color="#FFC107"/>
+                    <SolidColorBrush x:Key="ErrorTextBrush" Color="#FF8A80"/>
+                    <SolidColorBrush x:Key="WarningStrongTextBrush" Color="#FFB74D"/>
+                    <SolidColorBrush x:Key="InfoAccentBackground" Color="#17364A"/>
+                    <SolidColorBrush x:Key="InfoAccentText" Color="#D6F0FF"/>
+                    <SolidColorBrush x:Key="SuccessTintBackground" Color="#1F2E22"/>
+                    <SolidColorBrush x:Key="SuccessTintText" Color="#81C784"/>
+                    <SolidColorBrush x:Key="PurpleTintBackground" Color="#2A1D2D"/>
+                    <SolidColorBrush x:Key="PurpleTintText" Color="#CE93D8"/>
+                    <SolidColorBrush x:Key="PurpleTintStrongText" Color="#E1BEE7"/>
+                    <SolidColorBrush x:Key="WarningTintBackground" Color="#33290F"/>
+                    <SolidColorBrush x:Key="WarningTintBorder" Color="#8A6A2A"/>
+                    <SolidColorBrush x:Key="WarningTintText" Color="#FFD54F"/>
+                    <SolidColorBrush x:Key="WarningTintStrongText" Color="#FFE082"/>
+                    <SolidColorBrush x:Key="ErrorTintBackground" Color="#3A2020"/>
+                    <SolidColorBrush x:Key="ErrorTintBorder" Color="#7A413B"/>
+                    <SolidColorBrush x:Key="ErrorTintStrongText" Color="#FF9E90"/>
+                    <SolidColorBrush x:Key="ErrorTintText" Color="#FFC9C2"/>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
 
-        <!-- Theme Colors (共享) -->
-        <Color x:Key="PrimaryColorValue">#0078D4</Color>
-        <Color x:Key="SuccessColorValue">#107C10</Color>
-        <Color x:Key="WarningColorValue">#FF8C00</Color>
-        <Color x:Key="ErrorColorValue">#D13438</Color>
-        <Color x:Key="AccentColorValue">#0078D4</Color>
+            <converters:BoolToStringConverter x:Key="BoolToStringConverter"/>
+            <converters:StringNotEmptyConverter x:Key="StringNotEmptyConverter"/>
+            <converters:BoolToColorConverter x:Key="BoolToColorConverter"/>
+            <converters:BoolToFontWeightConverter x:Key="BoolToFontWeightConverter"/>
 
-        <!-- Theme Brushes -->
-        <SolidColorBrush x:Key="PrimaryColor" Color="{StaticResource PrimaryColorValue}"/>
-        <SolidColorBrush x:Key="SuccessColor" Color="{StaticResource SuccessColorValue}"/>
-        <SolidColorBrush x:Key="WarningColor" Color="{StaticResource WarningColorValue}"/>
-        <SolidColorBrush x:Key="ErrorColor" Color="{StaticResource ErrorColorValue}"/>
-        <SolidColorBrush x:Key="AccentColor" Color="{StaticResource AccentColorValue}"/>
-        <SolidColorBrush x:Key="AccentColorLight" Color="#4FC3F7"/>
+            <!-- Theme Colors (共享) -->
+            <Color x:Key="PrimaryColorValue">#0078D4</Color>
+            <Color x:Key="SuccessColorValue">#107C10</Color>
+            <Color x:Key="WarningColorValue">#FF8C00</Color>
+            <Color x:Key="ErrorColorValue">#D13438</Color>
+            <Color x:Key="AccentColorValue">#0078D4</Color>
 
-        <!-- Status colors (统一全项目使用) -->
-        <SolidColorBrush x:Key="StatusHealthyBrush" Color="#107C10"/>
-        <SolidColorBrush x:Key="StatusWarningBrush" Color="#FF8C00"/>
-        <SolidColorBrush x:Key="StatusErrorBrush" Color="#D13438"/>
-        <SolidColorBrush x:Key="StatusUnknownBrush" Color="#9E9E9E"/>
+            <!-- Theme Brushes -->
+            <SolidColorBrush x:Key="PrimaryColor" Color="{StaticResource PrimaryColorValue}"/>
+            <SolidColorBrush x:Key="SuccessColor" Color="{StaticResource SuccessColorValue}"/>
+            <SolidColorBrush x:Key="WarningColor" Color="{StaticResource WarningColorValue}"/>
+            <SolidColorBrush x:Key="ErrorColor" Color="{StaticResource ErrorColorValue}"/>
+            <SolidColorBrush x:Key="AccentColor" Color="{StaticResource AccentColorValue}"/>
+            <SolidColorBrush x:Key="AccentColorLight" Color="#4FC3F7"/>
 
-        <!-- 默认浅色主题 Brush（深色主题通过 NavButton/SecondaryText 的 DynamicResource 自动切换） -->
-        <SolidColorBrush x:Key="BackgroundColor" Color="#FAFAFA"/>
-        <SolidColorBrush x:Key="CardBackground" Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="InfoBackground" Color="#E3F2FD"/>
-        <SolidColorBrush x:Key="CardBorderBrush" Color="#E0E0E0"/>
-        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#1A1A1A"/>
-        <SolidColorBrush x:Key="SecondaryTextBrush" Color="#666666"/>
+            <!-- Status colors (统一全项目使用) -->
+            <SolidColorBrush x:Key="StatusHealthyBrush" Color="#107C10"/>
+            <SolidColorBrush x:Key="StatusWarningBrush" Color="#FF8C00"/>
+            <SolidColorBrush x:Key="StatusErrorBrush" Color="#D13438"/>
+            <SolidColorBrush x:Key="StatusUnknownBrush" Color="#9E9E9E"/>
+        </ResourceDictionary>
     </Application.Resources>
 
     <Application.DataTemplates>
@@ -79,11 +146,15 @@
                 </Transitions>
             </Setter>
         </Style>
+        <Style Selector="TabItem:selected">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+        </Style>
+
         <Style Selector="Button.NavButton:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#E5E5E5"/>
+            <Setter Property="Background" Value="{DynamicResource NavHoverBackground}"/>
         </Style>
         <Style Selector="Button.NavButton:pressed /template/ ContentPresenter">
-            <Setter Property="Background" Value="#D0D0D0"/>
+            <Setter Property="Background" Value="{DynamicResource NavPressedBackground}"/>
         </Style>
         <Style Selector="Button.NavButton TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
@@ -114,7 +185,7 @@
             <Setter Property="Padding" Value="16,8"/>
         </Style>
         <Style Selector="Button.SecondaryButton">
-            <Setter Property="Background" Value="#E5E5E5"/>
+            <Setter Property="Background" Value="{DynamicResource SecondaryButtonBackground}"/>
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
             <Setter Property="CornerRadius" Value="6"/>
             <Setter Property="Padding" Value="16,8"/>

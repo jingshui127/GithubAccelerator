@@ -100,7 +100,7 @@
                     <!-- 入口被禁用时的原因（页面路径实测不健康，避免送出 403 页） -->
                     <TextBlock IsVisible="{Binding MirrorPageHint, Converter={StaticResource StringNotEmptyConverter}}"
                                Text="{Binding MirrorPageHint}" TextWrapping="Wrap"
-                               FontSize="12" Foreground="#B45309"/>
+                               FontSize="12" Foreground="{DynamicResource WarningStrongTextBrush}"/>
                 </StackPanel>
             </Border>
 
@@ -124,10 +124,11 @@
             <!-- 回退：源不可用或域名不支持时，提供明确的"改用原始链接" -->
             <Border IsVisible="{Binding FallbackVisible}"
                     Padding="16" CornerRadius="8"
-                    BorderThickness="1" BorderBrush="#FFB74D" Background="#FFF8E1">
+                    BorderThickness="1" BorderBrush="{DynamicResource WarningTintBorder}"
+                    Background="{DynamicResource WarningTintBackground}">
                 <StackPanel Spacing="10">
-                    <TextBlock Text="镜像不可用时的退路" FontSize="13" FontWeight="SemiBold" Foreground="#8D6E00"/>
-                    <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#6D5A00"
+                    <TextBlock Text="镜像不可用时的退路" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource WarningTintStrongText}"/>
+                    <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource WarningTintText}"
                                Text="可以直接打开原始链接，但未经镜像，能否打开取决于本机网络；也可以稍后重新点“打开镜像版页面”再试一次。"/>
                     <Button Content="🔗 打开原始链接（直连）"
                             Command="{Binding OpenOriginalLinkCommand}"
@@ -150,7 +151,7 @@
                         <Border Grid.Column="1" Padding="12" CornerRadius="8"
                                 Background="{DynamicResource ControlStrongFillDefaultBrush}">
                             <TextBlock Text="{Binding Result.OriginalUrl}" FontSize="12"
-                                       TextWrapping="Wrap" Foreground="#666666"/>
+                                       TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}"/>
                         </Border>
                     </Grid>
 
@@ -205,7 +206,7 @@
                                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                                         ToolTip.Tip="点击在浏览器中打开">
                                                     <TextBlock Text="{Binding Url}" FontSize="12"
-                                                               Foreground="#0066CC" TextDecorations="Underline"
+                                                               Foreground="{DynamicResource LinkTextBrush}" TextDecorations="Underline"
                                                                TextWrapping="NoWrap"
                                                                TextTrimming="CharacterEllipsis"/>
                                                 </Button>
@@ -241,28 +242,28 @@
                     <!-- jsDelivr 链接（如果有） -->
                     <Border IsVisible="{Binding Result.HasJsDelivrUrl}"
                             Padding="16" CornerRadius="10"
-                            Background="#F3E5F5"
+                            Background="{DynamicResource PurpleTintBackground}"
                             BorderBrush="#9C27B0"
                             BorderThickness="1,1,1,3">
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <StackPanel Grid.Column="0" Margin="0,0,16,0" MinWidth="140">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <TextBlock Text="🚀" FontSize="16"/>
-                                    <TextBlock Text="jsDelivr CDN" FontSize="14" FontWeight="Medium"/>
+                                    <TextBlock Text="jsDelivr CDN" FontSize="14" FontWeight="Medium" Foreground="{DynamicResource PurpleTintStrongText}"/>
                                 </StackPanel>
                                 <TextBlock Text="全球 CDN 加速 | 推荐用于静态资源" FontSize="11"
-                                           Classes="SecondaryText"/>
+                                           Foreground="{DynamicResource PurpleTintText}"/>
                             </StackPanel>
 
                             <Border Grid.Column="1" Padding="10,8" CornerRadius="6"
-                                    Background="White"
+                                    Background="{DynamicResource ControlStrongFillDefaultBrush}"
                                     VerticalAlignment="Center">
                                 <Button Background="Transparent" BorderThickness="0" Padding="0" Margin="0"
                                         Command="{Binding OpenJsDelivrBrowserCommand}"
                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                         ToolTip.Tip="点击在浏览器中打开">
                                     <TextBlock Text="{Binding Result.JsDelivrUrl}" FontSize="12"
-                                               Foreground="#0066CC" TextDecorations="Underline"
+                                               Foreground="{DynamicResource LinkTextBrush}" TextDecorations="Underline"
                                                TextWrapping="NoWrap"
                                                TextTrimming="CharacterEllipsis"/>
                                 </Button>
@@ -296,19 +297,19 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:GitCloneCommandViewModel">
                                     <Border Padding="16" Margin="0,0,0,8" CornerRadius="10"
-                                            Background="#E8F5E9"
+                                            Background="{DynamicResource SuccessTintBackground}"
                                             BorderBrush="#4CAF50"
                                             BorderThickness="1,1,1,3">
                                         <Grid ColumnDefinitions="Auto,*,Auto">
                                             <StackPanel Grid.Column="0" Margin="0,0,16,0" MinWidth="100">
                                                 <TextBlock Text="{Binding MirrorName}" FontSize="13"
-                                                           FontWeight="Medium" Foreground="#2E7D32"/>
+                                                           FontWeight="Medium" Foreground="{DynamicResource SuccessTintText}"/>
                                                 <TextBlock Text="{Binding Description}" FontSize="11"
-                                                           Foreground="#66BB6A"/>
+                                                           Foreground="{DynamicResource SuccessTintText}"/>
                                             </StackPanel>
 
                                             <Border Grid.Column="1" Padding="10,8" CornerRadius="6"
-                                                    Background="White"
+                                                    Background="{DynamicResource CardBackground}"
                                                     VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding Command}" FontSize="12"
                                                            FontFamily="Consolas"
@@ -334,12 +335,12 @@
 
                     <!-- 一键复制所有 + 测速打开 -->
                     <Border Padding="16" CornerRadius="10"
-                            Background="{DynamicResource AccentColorLight}"
+                            Background="{DynamicResource InfoAccentBackground}"
                             HorizontalAlignment="Stretch">
                         <Grid ColumnDefinitions="*,Auto,Auto">
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                 <TextBlock Text="💡 提示：点击 URL 可直接在浏览器打开，或测速后自动打开最快镜像" FontSize="12"
-                                           Foreground="#666666" TextWrapping="Wrap"/>
+                                           Foreground="{DynamicResource InfoAccentText}" TextWrapping="Wrap"/>
                             </StackPanel>
                             <Button Grid.Column="1" Content="🏆 测速并打开最快"
                                     Command="{Binding TestSpeedAndOpenFastestCommand}"
@@ -398,16 +399,16 @@
                     <Separator Margin="0,8,0,8"/>
                     <TextBlock Text="当前可用镜像站" FontSize="13" FontWeight="Medium"/>
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Border Padding="10,6" CornerRadius="6" Background="#E8F5E9" BorderBrush="#4CAF50" BorderThickness="1">
+                        <Border Padding="10,6" CornerRadius="6" Background="{DynamicResource SuccessTintBackground}" BorderBrush="#4CAF50" BorderThickness="1">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <Border Width="8" Height="8" CornerRadius="4" Background="#4CAF50" VerticalAlignment="Center"/>
-                                <TextBlock Text="ghfast.top - 全功能加速" FontSize="11" Foreground="#2E7D32"/>
+                                <TextBlock Text="ghfast.top - 全功能加速" FontSize="11" Foreground="{DynamicResource SuccessTintText}"/>
                             </StackPanel>
                         </Border>
-                        <Border Padding="10,6" CornerRadius="6" Background="#F3E5F5" BorderBrush="#9C27B0" BorderThickness="1">
+                        <Border Padding="10,6" CornerRadius="6" Background="{DynamicResource PurpleTintBackground}" BorderBrush="#9C27B0" BorderThickness="1">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <Border Width="8" Height="8" CornerRadius="4" Background="#9C27B0" VerticalAlignment="Center"/>
-                                <TextBlock Text="jsDelivr CDN - 静态资源专用" FontSize="11" Foreground="#7B1FA2"/>
+                                <TextBlock Text="jsDelivr CDN - 静态资源专用" FontSize="11" Foreground="{DynamicResource PurpleTintStrongText}"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
