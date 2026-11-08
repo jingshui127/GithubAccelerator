@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -13,11 +12,6 @@ namespace GithubAccelerator.UI.ViewModels
         private readonly GitHubLatencyMonitorService _monitorService = GitHubLatencyMonitorService.Instance;
         private readonly OperationHistoryService _historyService = OperationHistoryService.Instance;
         private bool _isInitialized = false;
-
-        // Chart Y axis 相关常量
-        private const double ChartYAxisStep = 100;
-        private const double MinChartMaxY = 200;
-        private const double DefaultChartMaxY = 1000;
 
         // 延迟状态判定字符串常量
         private const string StatusNotMonitoring = "未监控";
@@ -54,14 +48,8 @@ namespace GithubAccelerator.UI.ViewModels
         [ObservableProperty]
         private string _latencyStatus = "等待数据";
 
-        [ObservableProperty]
-        private IList<double> _chartValues = new List<double>();
-
-        [ObservableProperty]
-        private double _chartMaxY = 1000;
-
         /// <summary>是否已有成功采样：没有时统计值显示“—”，不显示会误导的 0 ms。</summary>
-        public bool HasSamples => ChartValues.Count > 0;
+        public bool HasSamples => LatencyRecords.Any(r => r.LatencyMs > 0);
 
         public string CurrentLatencyText => HasSamples ? $"{CurrentLatency} ms" : "—";
         public string AverageLatencyText => HasSamples ? $"{AverageLatency} ms" : "—";
@@ -137,34 +125,16 @@ namespace GithubAccelerator.UI.ViewModels
             // 增量更新（diff/patch）逻辑较复杂，且本场景下记录数量有限（最多 30 条），
             // 暂时保留该简单实现，后续若有性能或视觉问题再考虑增量更新。
             LatencyRecords.Clear();
-            var latencyValues = new List<double>();
             foreach (var record in recentRecords)
             {
                 LatencyRecords.Add(record);
-                if (record.LatencyMs > 0)
-                {
-                    latencyValues.Add(Math.Min(record.LatencyMs, 5000));
-                }
             }
-
-            ChartValues = latencyValues;
 
             OnPropertyChanged(nameof(HasSamples));
             OnPropertyChanged(nameof(CurrentLatencyText));
             OnPropertyChanged(nameof(AverageLatencyText));
             OnPropertyChanged(nameof(MinLatencyText));
             OnPropertyChanged(nameof(MaxLatencyText));
-
-            if (latencyValues.Count > 0)
-            {
-                var maxVal = latencyValues.Max();
-                ChartMaxY = Math.Ceiling(maxVal / ChartYAxisStep) * ChartYAxisStep + ChartYAxisStep;
-                if (ChartMaxY < MinChartMaxY) ChartMaxY = MinChartMaxY;
-            }
-            else
-            {
-                ChartMaxY = DefaultChartMaxY;
-            }
 
             if (!IsMonitoring)
             {
@@ -219,7 +189,6 @@ namespace GithubAccelerator.UI.ViewModels
         {
             _monitorService.ClearRecords();
             LatencyRecords.Clear();
-            ChartValues = new List<double>();
             _historyService.Record(OperationType.SettingsChanged, "清除 GitHub 延迟历史数据");
             UpdateFromService();
         }

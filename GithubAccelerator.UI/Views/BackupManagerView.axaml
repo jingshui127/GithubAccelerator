@@ -11,7 +11,7 @@
         <vm:BackupManagerViewModel/>
     </Design.DataContext>
 
-    <Grid RowDefinitions="Auto,*" Margin="24">
+    <Grid RowDefinitions="Auto,*" Margin="0">
         <Grid Grid.Row="0" Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
@@ -19,7 +19,7 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0">
-                <TextBlock Text="Hosts 备份管理" FontSize="16" FontWeight="SemiBold"/>
+                <TextBlock Text="💾 备份与恢复" FontSize="16" FontWeight="SemiBold"/>
                 <TextBlock Text="{Binding StatusMessage}" FontSize="11" Classes="SecondaryText"
                            Margin="0,4,0,0" TextWrapping="Wrap"/>
             </StackPanel>
@@ -27,7 +27,7 @@
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
                 <Button Content="创建备份" Command="{Binding CreateBackupCommand}"
                         Theme="{DynamicResource SuccessButton}"
-                        Padding="12,4"/>
+                        Padding="10,4" FontSize="11"/>
             </StackPanel>
         </Grid>
 
@@ -41,26 +41,29 @@
                          IsVisible="{Binding HasBackups}">
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:BackupItemViewModel">
-                            <Border Padding="12" Margin="0,0,0,1" BorderThickness="0,0,0,1"
+                            <Border Padding="10,8" Margin="0,0,0,1" BorderThickness="0,0,0,1"
                                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
-                                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
-                                    <StackPanel Grid.Column="0">
-                                        <TextBlock Text="{Binding BackupTimeText}" FontSize="14" FontWeight="SemiBold"/>
+                                <Grid RowDefinitions="Auto,Auto">
+                                    <StackPanel Grid.Row="0">
+                                        <TextBlock Text="{Binding BackupTimeText}" FontSize="13" FontWeight="SemiBold"/>
                                         <TextBlock Text="{Binding Note}" FontSize="11" Classes="SecondaryText"
-                                                   IsVisible="{Binding HasNote}"/>
+                                                   IsVisible="{Binding HasNote}" TextWrapping="Wrap"/>
                                     </StackPanel>
 
-                                    <Button Grid.Column="1" Content="恢复" Command="{Binding RestoreCommand}"
-                                            Theme="{DynamicResource PrimaryButton}"
-                                            Padding="8,4" Margin="4,0"/>
+                                    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                                                Spacing="4" Margin="0,6,0,0">
+                                        <Button Content="恢复" Command="{Binding RestoreCommand}"
+                                                Theme="{DynamicResource PrimaryButton}"
+                                                Padding="8,3" FontSize="11"/>
 
-                                    <Button Grid.Column="2" Content="查看" Command="{Binding ViewContentCommand}"
-                                            Theme="{DynamicResource SecondaryButton}"
-                                            Padding="8,4" Margin="4,0"/>
+                                        <Button Content="查看" Command="{Binding ViewContentCommand}"
+                                                Theme="{DynamicResource SecondaryButton}"
+                                                Padding="8,3" FontSize="11"/>
 
-                                    <Button Grid.Column="3" Content="删除" Command="{Binding DeleteCommand}"
-                                            Theme="{DynamicResource DangerButton}"
-                                            Padding="8,4" Margin="4,0"/>
+                                        <Button Content="删除" Command="{Binding DeleteCommand}"
+                                                Theme="{DynamicResource DangerButton}"
+                                                Padding="8,3" FontSize="11"/>
+                                    </StackPanel>
                                 </Grid>
                             </Border>
                         </DataTemplate>

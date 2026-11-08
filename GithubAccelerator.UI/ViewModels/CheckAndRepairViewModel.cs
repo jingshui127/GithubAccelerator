@@ -6,7 +6,7 @@ namespace GithubAccelerator.UI.ViewModels;
 
 /// <summary>
 /// 「检查与修复」统一入口：合并原来的「依赖站点检查」「官网访问诊断」「网络监控」三页。
-/// 只读检测，不改 Hosts / DNS / 代理；结论、明细、连续采样都在此页。
+/// 只读检测，不改 Hosts / DNS / 代理；结论、明细、单次响应统计都在此页。
 /// </summary>
 public partial class CheckAndRepairViewModel : ObservableObject
 {

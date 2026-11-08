@@ -3,7 +3,6 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:GithubAccelerator.UI.ViewModels"
-             xmlns:ctrl="using:GithubAccelerator.UI.Controls"
              mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="400"
              x:Class="GithubAccelerator.UI.Views.GitHubLatencyView"
              x:DataType="vm:GitHubLatencyViewModel">
@@ -12,7 +11,7 @@
             Background="{DynamicResource ControlFillColorDefaultBrush}"
             CornerRadius="12" BorderThickness="1"
             BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
-        <Grid RowDefinitions="Auto,*,Auto">
+        <Grid RowDefinitions="Auto,Auto,Auto">
             <!-- 标题和状态 -->
             <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,12">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
@@ -46,36 +45,21 @@
                         ToolTip.Tip="只清空本页的采样记录"/>
             </Grid>
 
-            <!-- 图表区域 - 使用自绘图表 -->
-            <Border Grid.Row="1" Padding="8" Margin="0,0,0,12"
-                    Background="{DynamicResource ControlFillColorSecondaryBrush}"
-                    CornerRadius="8" BorderThickness="1"
-                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
-                <StackPanel>
-                <Border IsVisible="{Binding !HasSamples}" Padding="24" CornerRadius="8"
-                        Background="{DynamicResource ControlFillColorDefaultBrush}">
+            <!-- 说明与空态：只保留 4 个统计值，不再画与仪表盘口径重叠的曲线 -->
+            <StackPanel Grid.Row="1" Spacing="8" Margin="0,4,0,12">
+                <Border IsVisible="{Binding !HasSamples}" Padding="16" CornerRadius="8"
+                        Background="{DynamicResource ControlFillColorSecondaryBrush}">
                     <TextBlock Text="还没有采样数据：点右上角「▶ 开始测速」，每 10 秒记录一次单次请求响应。"
                                FontSize="12" TextWrapping="Wrap" Classes="SecondaryText"
                                HorizontalAlignment="Center"/>
                 </Border>
-                <ctrl:SimpleLineChart Values="{Binding ChartValues}"
-                                      IsVisible="{Binding HasSamples}"
-                                      YAxisLabel="响应时间 (ms)"
-                                      XAxisLabel="测试次数"
-                                      MinY="0"
-                                      MaxY="{Binding ChartMaxY}"
-                                      LineColor="#4FC3F7"
-                                      FillColor="#1A4FC3F7"
-                                      AxisColor="#666666"
-                                      TextColor="#999999"/>
-                <TextBlock Margin="4,8,4,0" FontSize="11" TextWrapping="Wrap"
+                <TextBlock FontSize="11" TextWrapping="Wrap"
                            Foreground="{DynamicResource SecondaryTextBrush}"
-                           Text="度量口径：每 10 秒对 github.com 的单次请求首字节/响应（favicon → 首页 → API，取首个成功），只代表单个请求，不代表整页打开耗时。整页对比请在「检查与修复 → 官网诊断」查看备选 IP 与当前直连的整页打开实测。"/>
-                </StackPanel>
-            </Border>
+                           Text="只保留当前、平均、最快、最慢 4 个统计值；每 10 秒对 github.com 的单次请求（favicon → 首页 → API，取首个成功）。只代表单个请求，不代表整页打开耗时；整页对比请在「检查与修复 → 官网诊断」查看。"/>
+            </StackPanel>
 
             <!-- 底部统计 -->
-            <Grid Grid.Row="2" ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
+            <Grid Grid.Row="2" ColumnDefinitions="*,*,*,*" ColumnSpacing="8" VerticalAlignment="Top" Margin="0,0,0,12">
                 <Border Grid.Column="0" Padding="12,8" CornerRadius="8"
                         Background="{DynamicResource ControlFillColorSecondaryBrush}"
                         BorderThickness="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">

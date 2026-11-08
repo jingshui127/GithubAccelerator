@@ -40,7 +40,7 @@ public static class FailureAdvisor
 
             FailureKind.HostsRewrittenByThirdParty => new FailureAdvice(kind,
                 "Hosts 里我们那段内容被别的软件改过，所以这次没有直接覆盖它。",
-                "查看 Hosts 内容"),
+                "查看 Hosts 文件"),
 
             FailureKind.GitConfigConflict => new FailureAdvice(kind,
                 "Git 全局配置里已有一条同名的加速改写项，属于你自己的设置，程序没有覆盖。",

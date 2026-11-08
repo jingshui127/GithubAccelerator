@@ -8,76 +8,78 @@
              x:Class="GithubAccelerator.UI.Views.HostsAndBackupView"
              x:DataType="vm:MainWindowViewModel">
 
-    <Grid RowDefinitions="Auto,Auto,*" Margin="20" RowSpacing="10">
-        <!-- 统一入口：四种清除合并为「回到原始状态」 -->
-        <Border Grid.Row="0" Padding="16" CornerRadius="12"
-                Background="{DynamicResource ControlFillColorDefaultBrush}"
-                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                DataContext="{Binding RestoreOriginalState}">
-            <StackPanel Spacing="10">
-                <StackPanel Spacing="3">
-                    <TextBlock Text="↩️ 回到原始状态" FontSize="16" FontWeight="SemiBold"/>
-                    <TextBlock Text="Hosts 加速块 / Git 地址改写 / 固定 GitHub 地址 / 首启前快照，统一在这里还原。确认前不会修改任何系统设置。"
-                               FontSize="12" Classes="SecondaryText" TextWrapping="Wrap"/>
-                </StackPanel>
-
-                <ItemsControl ItemsSource="{Binding Items}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:RestoreItemViewModel">
-                            <Border Padding="10,8" Margin="0,0,0,6" CornerRadius="8"
-                                    Background="{DynamicResource ControlFillColorSecondaryBrush}">
-                                <Grid ColumnDefinitions="Auto,*,Auto">
-                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}"
-                                              IsEnabled="{Binding IsAvailable}" VerticalAlignment="Top"/>
-                                    <StackPanel Grid.Column="1" Spacing="2" Margin="8,0,0,0">
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"/>
-                                            <TextBlock Text="{Binding StateText}" FontSize="11" Classes="SecondaryText"
-                                                       IsVisible="{Binding !IsAvailable}"/>
-                                        </StackPanel>
-                                        <TextBlock Text="{Binding Detail}" FontSize="11" Classes="SecondaryText"
-                                                   TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button Content="预览将还原什么" Command="{Binding PreviewRestoreCommand}"
-                            Padding="14,8" FontSize="12"/>
-                    <Button Content="确认还原" Command="{Binding ConfirmRestoreCommand}"
-                            IsVisible="{Binding IsConfirming}" IsEnabled="{Binding !IsBusy}"
-                            Padding="14,8" FontSize="12" FontWeight="SemiBold"/>
-                    <Button Content="取消" Command="{Binding CancelRestoreCommand}"
-                            IsVisible="{Binding IsConfirming}"
-                            Padding="14,8" FontSize="12"/>
-                    <TextBlock Text="{Binding StatusMessage}" FontSize="11" Classes="SecondaryText"
-                               VerticalAlignment="Center" TextWrapping="Wrap"/>
-                </StackPanel>
-
-                <Border Padding="10" CornerRadius="8"
-                        Background="{DynamicResource ControlFillColorDisabledBrush}"
-                        IsVisible="{Binding HasPreview}">
-                    <TextBlock Text="{Binding PreviewText}" FontSize="11" TextWrapping="Wrap"/>
-                </Border>
-            </StackPanel>
-        </Border>
-
-        <TextBlock Grid.Row="1" Text="Hosts 内容、分组与备份（只读查看 / 手动管理）"
+    <Grid RowDefinitions="Auto,*" Margin="20" RowSpacing="10">
+        <TextBlock Grid.Row="0" Text="Hosts 文件 / 分组 / 回到原始状态（只读查看 / 手动管理）"
                    FontSize="12" Classes="SecondaryText"/>
 
-        <TabControl Grid.Row="2">
-            <TabItem Header="Hosts 内容">
-                <views:HostsContentView DataContext="{Binding}"/>
+        <TabControl Grid.Row="1">
+            <TabItem Header="Hosts 文件">
+                <Grid ColumnDefinitions="3*,2*" ColumnSpacing="16" Margin="12">
+                    <views:HostsContentView Grid.Column="0" DataContext="{Binding}"/>
+                    <views:BackupManagerView Grid.Column="1" DataContext="{Binding BackupManager}"/>
+                </Grid>
             </TabItem>
             <TabItem Header="分组">
                 <views:HostsGroupView DataContext="{Binding HostsGroupManager}"/>
             </TabItem>
-            <TabItem Header="备份">
-                <views:BackupManagerView DataContext="{Binding BackupManager}"/>
+            <TabItem Header="回到原始状态">
+                <ScrollViewer>
+                    <Border Padding="16" CornerRadius="12"
+                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            DataContext="{Binding RestoreOriginalState}">
+                        <StackPanel Spacing="10">
+                            <StackPanel Spacing="3">
+                                <TextBlock Text="↩️ 回到原始状态" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="Hosts 加速块 / Git 地址改写 / 固定 GitHub 地址 / 首启前快照，统一在这里还原。确认前不会修改任何系统设置。"
+                                           FontSize="12" Classes="SecondaryText" TextWrapping="Wrap"/>
+                            </StackPanel>
+
+                            <ItemsControl ItemsSource="{Binding Items}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:RestoreItemViewModel">
+                                        <Border Padding="10,8" Margin="0,0,0,6" CornerRadius="8"
+                                                Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                                <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}"
+                                                          IsEnabled="{Binding IsAvailable}" VerticalAlignment="Top"/>
+                                                <StackPanel Grid.Column="1" Spacing="2" Margin="8,0,0,0">
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"/>
+                                                        <TextBlock Text="{Binding StateText}" FontSize="11" Classes="SecondaryText"
+                                                                   IsVisible="{Binding !IsAvailable}"/>
+                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding Detail}" FontSize="11" Classes="SecondaryText"
+                                                               TextWrapping="Wrap"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Content="预览将还原什么" Command="{Binding PreviewRestoreCommand}"
+                                        Padding="14,8" FontSize="12"/>
+                                <Button Content="确认还原" Command="{Binding ConfirmRestoreCommand}"
+                                        IsVisible="{Binding IsConfirming}" IsEnabled="{Binding !IsBusy}"
+                                        Padding="14,8" FontSize="12" FontWeight="SemiBold"/>
+                                <Button Content="取消" Command="{Binding CancelRestoreCommand}"
+                                        IsVisible="{Binding IsConfirming}"
+                                        Padding="14,8" FontSize="12"/>
+                                <TextBlock Text="{Binding StatusMessage}" FontSize="11" Classes="SecondaryText"
+                                           VerticalAlignment="Center" TextWrapping="Wrap"/>
+                            </StackPanel>
+
+                            <Border Padding="10" CornerRadius="8"
+                                    Background="{DynamicResource ControlFillColorDisabledBrush}"
+                                    IsVisible="{Binding HasPreview}">
+                                <TextBlock Text="{Binding PreviewText}" FontSize="11" TextWrapping="Wrap"/>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </ScrollViewer>
             </TabItem>
         </TabControl>
     </Grid>

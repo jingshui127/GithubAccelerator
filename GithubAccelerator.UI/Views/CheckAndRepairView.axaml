@@ -92,9 +92,9 @@
                             </StackPanel>
                         </Border>
 
-                        <Expander Header="连续采样（按需展开，不常驻）" IsExpanded="False"
+                        <Expander Header="单次响应统计（按需展开，不常驻）" IsExpanded="False"
                                   HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                            <Border Height="420" Padding="8" CornerRadius="12"
+                            <Border Padding="8" CornerRadius="12"
                                     Background="{DynamicResource ControlFillColorDefaultBrush}"
                                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                                     BorderThickness="1">

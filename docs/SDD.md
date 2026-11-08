@@ -139,7 +139,9 @@ GithubAccelerator/
 │   │   ├── NotificationService.cs
 │   │   └── ...
 │   ├── Controls/                     # 自定义控件
-│   │   └── SimpleChart.cs
+│   │   ├── EmptyStateControl.cs
+│   │   ├── SkeletonControl.cs
+│   │   └── ToastControl.cs
 │   ├── Converters/                   # 值转换器
 │   └── Helpers/                      # 辅助类
 │
@@ -570,65 +572,13 @@ ApplyHostsAsync(records)
 |------|--------|------|
 | RefreshSourcesCommand | Ctrl+R | 刷新数据源 |
 | ApplyHostsCommand | Ctrl+S | 应用 Hosts |
-| ShowHostsAndBackupCommand | Ctrl+H | Hosts 与备份（含回到原始状态） |
+| ShowHostsAndBackupCommand | Ctrl+H | Hosts 文件（含分组与回到原始状态） |
 
 ---
 
-### 3.6 SimpleChart (自定义图表控件)
+### 3.6 SimpleChart（S4 已删除）
 
-#### 3.6.1 类图
-
-```
-┌─────────────────────────────────────────────┐
-│          SimpleLineChart : Control           │
-├─────────────────────────────────────────────┤
-│ + Values: IList<double>                      │
-│ + Labels: IList<string>                      │
-│ + LineColor: Color                           │
-│ + FillColor: Color                           │
-│ + ShowGrid: bool                             │
-│ + ShowLabels: bool                           │
-├─────────────────────────────────────────────┤
-│ - Render(context): void                      │
-│ - DrawGrid(context): void                    │
-│ - DrawLine(context): void                    │
-│ - DrawLabels(context): void                  │
-│ - DrawPoints(context): void                  │
-└─────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────┐
-│          SimpleBarChart : Control            │
-├─────────────────────────────────────────────┤
-│ + Values: IList<double>                      │
-│ + Labels: IList<string>                      │
-│ + BarColor: Color                            │
-│ + ShowValues: bool                           │
-├─────────────────────────────────────────────┤
-│ - Render(context): void                      │
-│ - DrawBars(context): void                    │
-│ - DrawLabels(context): void                  │
-│ - DrawValues(context): void                  │
-└─────────────────────────────────────────────┘
-```
-
-#### 3.6.2 渲染流程
-
-```
-Render(context)
-    │
-    ├──▶ CalculateBounds()
-    │
-    ├──▶ if (ShowGrid) DrawGrid()
-    │
-    ├──▶ DrawAxes()
-    │
-    ├──▶ DrawData()
-    │        │
-    │        ├── LineChart: DrawLine() + DrawPoints()
-    │        └── BarChart: DrawBars()
-    │
-    └──▶ if (ShowLabels) DrawLabels()
-```
+S4 删除「单次响应统计」折线图后，`SimpleLineChart` / `SimpleBarChart` 与 `GithubAccelerator.UI/Controls/SimpleChart.cs` 已全仓 0 引用并移除；页面只保留当前 / 平均 / 最快 / 最慢 4 个统计值。本节仅保留删除记录，不再维护历史设计。
 
 ---
 

@@ -1019,7 +1019,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IsLogViewerVisible = false;
     }
 
-    /// <summary>「检查与修复」复用三个既有排查面板：依赖站点检查 + 官网诊断 + 连续采样。</summary>
+    /// <summary>「检查与修复」复用三个既有排查面板：依赖站点检查 + 官网诊断 + 单次响应统计。</summary>
     private void EnsureCheckAndRepairViewModels()
     {
         HealthCheck ??= new HealthCheckViewModel();
@@ -1027,7 +1027,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         NetworkMonitor ??= new NetworkMonitorViewModel();
     }
 
-    /// <summary>「Hosts 与备份」复用 Hosts 内容 / 分组 / 备份 / 回到原始状态。</summary>
+    /// <summary>「Hosts 文件」复用 Hosts 内容 + 备份 / 分组 / 回到原始状态。</summary>
     private void EnsureHostsAndBackupViewModels()
     {
         EnsureCheckAndRepairViewModels();
@@ -1083,7 +1083,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         var view = new GithubAccelerator.UI.Views.HostsAndBackupView();
         view.DataContext = this;
         CurrentView = view;
-        CurrentPageTitle = "Hosts 与备份";
+        CurrentPageTitle = "Hosts 文件";
         ResetNavigationSelection();
         IsHostsAndBackupSelected = true;
         IsDashboardVisible = false;
@@ -2801,7 +2801,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>重读 Hosts 文本，供「Hosts 与备份」页内刷新使用；不切换页面。</summary>
+    /// <summary>重读 Hosts 文本，供「Hosts 文件」页内刷新使用；不切换页面。</summary>
     [RelayCommand]
     private async Task RefreshHostsContent()
     {

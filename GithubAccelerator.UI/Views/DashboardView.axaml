@@ -77,7 +77,7 @@
                                     Padding="10,6" FontSize="12" ToolTip.Tip="只中止进行中的任务，不会写入 Hosts"/>
                             <Button Content="🩺 检查与修复 ›" Command="{Binding ShowCheckAndRepairCommand}"
                                     Padding="12,8" FontSize="12"
-                                    ToolTip.Tip="依赖站点检查、官网诊断、连续采样统一入口"/>
+                                    ToolTip.Tip="依赖站点检查、官网诊断、单次响应统计统一入口"/>
                         </StackPanel>
                     </StackPanel>
                 </Border>

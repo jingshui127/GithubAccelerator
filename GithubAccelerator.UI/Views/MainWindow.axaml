@@ -107,8 +107,8 @@
                             </StackPanel>
                         </Button>
 
-                        <!-- Hosts 与备份（Hosts 内容 / 分组 / 备份 / 回到原始状态 统一入口） -->
-                        <TextBlock Text="Hosts 与备份" 
+                        <!-- Hosts 文件（内容 + 备份 / 分组 / 回到原始状态统一入口） -->
+                        <TextBlock Text="Hosts 文件" 
                                    FontSize="10" 
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
@@ -123,7 +123,7 @@
                                 Classes="NavButton">
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <TextBlock Text="📄" FontSize="16"/>
-                                <TextBlock Text="Hosts 与备份" FontSize="13"/>
+                                <TextBlock Text="Hosts 文件" FontSize="13"/>
                             </StackPanel>
                         </Button>
 
