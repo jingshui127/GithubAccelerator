@@ -161,16 +161,14 @@ not a valid line
         Assert.Single(result);
     }
 
-    // ===== MaxConcurrentProbes 常量验证 =====
+    // ===== MaxConcurrentProbes 默认值验证 =====
 
     [Fact]
     public void MaxConcurrentProbes_HasExpectedValue()
     {
-        var field = typeof(HostsOptimizerService)
-            .GetField("MaxConcurrentProbes", BindingFlags.NonPublic | BindingFlags.Static);
-        Assert.NotNull(field);
-        var value = field!.GetValue(null);
-        Assert.Equal(12, value);
+        var optimizer = new HostsOptimizerService();
+        Assert.Equal(12, optimizer.MaxConcurrentProbes);
+        Assert.True(optimizer.MaxConcurrentProbes > 0);
     }
 
     // ===== CoreDomains 验证 =====

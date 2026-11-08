@@ -66,6 +66,10 @@ public partial class MainWindow : Window, IRestorableWindow
 
             // 提权重启后接续用户上次未完成的操作
             _ = viewModel.RunPendingLaunchIntentAsync();
+
+            // 后台预热“拉取 + 优选”结果：把这段网络等待挪到用户还没点按钮的时候，
+            // 用户真正点击时只要缓存还新鲜（10 分钟内）就直接进入判定。
+            _ = viewModel.PrewarmSelectionCacheAsync();
         }
     }
 

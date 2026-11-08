@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
 using NewLife.Log;
+using GithubAccelerator.Core.Services;
 
 namespace GithubAccelerator.Services;
 
@@ -20,6 +21,18 @@ public class HostsOptimizerService
 
     /// <summary>探测超时时间（秒）</summary>
     public int ProbeTimeoutSeconds { get; set; } = 5;
+
+    /// <summary>
+    /// 快速模式：只对 github.com 收集 DNS 候选并做单次探测，其余域名保留源内第一条 IP、不再逐个探测。
+    /// <para>
+    /// 一键加速要的是“能用”而不是“最优”：真正决定是否换线的是写入前的 20% 配对门槛，
+    /// 优选只负责给出候选 IP，不需要把 11 个核心域名全部探 3 遍。逐源应用仍走完整模式。
+    /// </para>
+    /// </summary>
+    public bool FastMode { get; set; }
+
+    /// <summary>探针并发度上限（快速模式下一批探完，避免第二批再等一个超时周期）。</summary>
+    public int MaxConcurrentProbes { get; set; } = 12;
 
     /// <summary>每个域名最多保留几条映射</summary>
     public int MaxMappingsPerDomain { get; set; } = 1;
@@ -45,9 +58,6 @@ public class HostsOptimizerService
         "media.githubusercontent.com",
         "user-images.githubusercontent.com",
     };
-
-    /// <summary>探针并发度上限</summary>
-    private const int MaxConcurrentProbes = 12;
 
     public event Action<string>? OnLog;
 
@@ -168,8 +178,11 @@ public class HostsOptimizerService
                 }
             }
 
-            // 通过 DNS 查询获取更多候选 IP（仅核心域名）
-            if (IncludeDnsResolvedIps && CoreDomains.Contains(domain))
+            // 通过 DNS 查询获取更多候选 IP（仅核心域名；快速模式只查 github.com）
+            var needDns = IncludeDnsResolvedIps
+                && CoreDomains.Contains(domain)
+                && (!FastMode || domain.Equals(OfficialSiteHostsPolicy.PrimaryDomain, StringComparison.OrdinalIgnoreCase));
+            if (needDns)
             {
                 try
                 {
@@ -218,8 +231,24 @@ public class HostsOptimizerService
 
         foreach (var kvp in domainCandidates)
         {
+            // 快速模式：非 github.com 域名不探测，保留源内第一条 IP（写入前仍由 20% 配对门槛把关）
+            if (FastMode && !kvp.Key.Equals(OfficialSiteHostsPolicy.PrimaryDomain, StringComparison.OrdinalIgnoreCase))
+            {
+                var kept = kvp.Value[0];
+                optimized.Add(new OptimizedMapping
+                {
+                    Domain = kvp.Key,
+                    Ip = kept.Ip,
+                    LatencyMs = -1,
+                    IsReachable = false,
+                    Source = kept.Source,
+                    ErrorMessage = "快速模式：未探测（保留源内 IP）"
+                });
+                continue;
+            }
+
             bool isCore = CoreDomains.Contains(kvp.Key);
-            int attempts = isCore ? 3 : 1;
+            int attempts = FastMode ? 1 : (isCore ? 3 : 1);
 
             foreach (var candidate in kvp.Value)
             {

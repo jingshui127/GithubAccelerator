@@ -428,6 +428,47 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>提权前判定票据：仅由提权续做实例使用，用于二次校验。</summary>
     private PreflightTicket? _pendingPreflight;
 
+    /// <summary>“拉取 + 线路优选”缓存：10 分钟内再次点击直接复用，避免重复网络等待。</summary>
+    private readonly HostsSelectionCache _selectionCache = new();
+
+    /// <summary>启动后台预热与用户点击共享同一个“选出线路”任务，避免重复拉取。</summary>
+    private readonly object _pipelineGate = new();
+    private Task<SelectionResult>? _pipelineTask;
+
+    /// <summary>管线进度回调（预热时为 null；用户点击时接入状态栏）。</summary>
+    private Action<string>? _selectionStatusSink;
+
+    /// <summary>最近一次端到端耗时拆分：拉取 / 优选 / 是否命中缓存。</summary>
+    private SelectionTiming _lastSelectionTiming = new(0, 0, false);
+
+    /// <summary>最近一次准入判定的耗时（秒）。</summary>
+    private double _lastGateSeconds;
+
+    private sealed record SelectionTiming(double FetchSeconds, double OptimizeSeconds, bool FromCache);
+
+    private sealed record SelectionResult(
+        string OptimizedHosts,
+        string MergedHosts,
+        int ValidSources,
+        int TotalSources,
+        IReadOnlyList<(string Name, string? Error)> FetchResults,
+        bool OptimizeFailed,
+        TimeSpan FetchElapsed,
+        TimeSpan OptimizeElapsed,
+        bool FromCache);
+
+    private sealed class SelectionUnavailableException : Exception
+    {
+        public SelectionUnavailableException(IReadOnlyList<(string Name, string? Error)> fetchResults)
+            : base("所有加速线路均不可用")
+        {
+            FetchResults = fetchResults;
+        }
+
+        public IReadOnlyList<(string Name, string? Error)> FetchResults { get; }
+    }
+
+
     /// <summary>进行中（可取消）：由状态机派生，避免"按钮灰着但后台在跑"。</summary>
     public bool IsApplyingHosts => _accelState.IsBusy;
 
@@ -1400,6 +1441,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             : $"正在比较候选 {candidateIp} 与直连（20% 门槛：候选需快 ≥20%）...";
 
         AcceleratedHostsWriteResult write;
+        var gateWatch = Stopwatch.StartNew();
         try
         {
             // 提权后的写入同样先跑分级判定（同一套门槛），这里只负责把进度显示出来。
@@ -1420,11 +1462,16 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             _notificationService.Error("Hosts 应用", $"准入校验或写入异常：{ex.Message}");
             return AcceleratedWriteOutcome.WriteFailed;
         }
+        finally
+        {
+            gateWatch.Stop();
+            _lastGateSeconds = gateWatch.Elapsed.TotalSeconds;
+        }
 
         if (write.GateRejected)
         {
             _applyIssue = write.Message;
-            StatusMessage = write.Message;
+            StatusMessage = $"{write.Message}{TimingSuffix()}";
             XTrace.WriteLine($"[Gate] 拒绝写入 Hosts：{write.Message}");
             _historyService.Record(OperationType.HostsApplied, $"准入门槛拒绝写入：{write.Message}", false);
             _notificationService.Warning("Hosts 未写入", write.Message);
@@ -1943,12 +1990,222 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         using var _trace = StardustMonitorService.Instance.BeginTrace("ApplyHosts", "AllSources");
 
-        StatusMessage = "正在从全部数据源拉取 Hosts（并行）...";
-        XTrace.WriteLine("[ApplyHosts/All] 开始从全部源拉取 Hosts");
         var totalSteps = _settings.AutoFlushDns ? 5 : 4;
-        SetAccelerationProgress(0, totalSteps, "拉取数据源");
+        SetAccelerationProgress(0, totalSteps, "准备线路");
+        StatusMessage = "正在选出线路（10 分钟内选出的会直接复用），选好后立刻确认是否值得换…";
 
-        // 1. 并行拉取所有源
+        SelectionResult selection;
+        try
+        {
+            selection = await GetOrBuildSelectionAsync(
+                allowCache: true,
+                onStatus: msg =>
+                {
+                    if (_accelState.IsBusy && !IsCancelRequested) StatusMessage = msg;
+                },
+                cancellationToken: _applyCts?.Token ?? default);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (SelectionUnavailableException ex)
+        {
+            _applyIssue = "所有加速线路均不可用";
+            StatusMessage = "所有加速线路都获取失败，请检查网络或恢复原始访问";
+            AllSourcesFailureText = AllSourcesFailureReport.Build(DateTime.Now, ex.FetchResults);
+            HasAllSourcesFailure = true;
+            _notificationService.Error("Hosts 应用", "所有加速线路均不可用");
+
+            // 已应用加速但全部源挂掉：不能继续显示"已加速"，改为"已加速但源不可用"。
+            if (IsHostsApplied)
+            {
+                _accelState.MarkSourceUnavailable("全部加速线路不可达");
+                RaiseAccelerationStateChanged();
+            }
+
+            ShowFailureAdvice(FailureKind.AllMirrorsUnreachable);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            XTrace.WriteLine($"[ApplyHosts/All] 选出线路失败：{ex.GetType().Name}: {ex.Message}");
+            Log.Warning(ex, "选出线路失败");
+            StatusMessage = $"线路选取失败：{ex.Message}（没有修改 Hosts）";
+            _notificationService.Error("Hosts 应用", "线路选取失败，未修改 Hosts");
+            return null;
+        }
+
+        // 取消检查点：选出线路后、判定/写入之前
+        AbortIfCanceled();
+        if (!_accelState.IsBusy) return null;
+
+        var validCount = selection.ValidSources;
+        var totalSources = selection.TotalSources;
+        var mergedHosts = selection.MergedHosts;
+        var optimizedContent = selection.OptimizedHosts;
+
+        SetAccelerationProgress(2, totalSteps,
+            selection.FromCache
+                ? "使用最近选出的线路（缓存命中）"
+                : $"已选出线路（{validCount}/{totalSources} 个源）");
+        StatusMessage = selection.FromCache
+            ? "已选出线路（缓存命中），正在确认是否值得换…"
+            : "已选出线路，正在确认是否值得换…";
+        XTrace.WriteLine(
+            $"[ApplyHosts/All] 线路就绪：cache={selection.FromCache} 源={validCount}/{totalSources} " +
+            $"拉取={selection.FetchElapsed.TotalSeconds:0.0}s 优选={selection.OptimizeElapsed.TotalSeconds:0.0}s");
+
+        if (selection.OptimizeFailed)
+        {
+            _applyIssue = "IP 优选未完成（已应用原始合并内容）";
+            StatusMessage = "IP 优选未完成，使用原始合并内容，正在确认是否值得换…";
+        }
+
+        // 只读判定（先判后提权）：不建快照、不写 Hosts、不弹 UAC
+        if (!writeHosts)
+        {
+            var ticket = await PreflightGateAsync(optimizedContent, totalSteps);
+            if (ticket == null) return null;
+            SetAccelerationProgress(totalSteps, totalSteps, "准入门槛通过（等待管理员授权）");
+            StatusMessage = $"判定通过：候选 {ticket.CandidateIp} 比直连快 ≥20%，正在请求管理员权限写入…{TimingSuffix()}";
+            return ticket;
+        }
+
+        // 4. 写入 hosts 文件（先过 20% 准入门槛；不达标不写）
+        var outcome = await ApplyAcceleratedHostsAsync(optimizedContent);
+        if (outcome == AcceleratedWriteOutcome.Success) SetAccelerationProgress(4, totalSteps, "Hosts 写入完成");
+
+        if (outcome == AcceleratedWriteOutcome.Success)
+        {
+            IsHostsApplied = true;
+            CurrentHostsSource = "多源智能合并";
+
+            StardustMonitorService.Instance.ReportInfo("HostsApplied",
+                $"source=AllSources merged={validCount}/{totalSources} cache={selection.FromCache}");
+
+            try
+            {
+                if (_settings.AutoFlushDns)
+                {
+                    await _dnsFlusher.FlushDnsCacheAsync();
+                    SetAccelerationProgress(totalSteps, totalSteps, "DNS 缓存已刷新");
+                    StatusMessage = $"Hosts 已成功应用（多源智能合并 + IP优选，DNS缓存已刷新）{TimingSuffix()}";
+                }
+                else
+                {
+                    StatusMessage = $"Hosts 已成功应用（多源智能合并 + IP优选）{TimingSuffix()}";
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "刷新DNS缓存失败");
+                _applyIssue = "DNS 缓存刷新失败（Hosts 已写入，可手动 ipconfig /flushdns）";
+                StatusMessage = $"Hosts 已成功应用（多源智能合并 + IP优选，建议手动刷新DNS缓存）{TimingSuffix()}";
+            }
+
+            _historyService.Record(OperationType.HostsApplied,
+                $"多源智能合并：{validCount}源 → IP优选 → 应用成功", true);
+            _statsService.RecordSourceUsed("AllSources", "merged", 0, true);
+            _notificationService.Success("Hosts 应用",
+                $"已从 {validCount} 个源智能合并并优化 Hosts");
+
+            // 自动触发子域健康检查
+            _ = TriggerAutoHealthCheckAsync();
+        }
+        else if (outcome == AcceleratedWriteOutcome.GateRejected)
+        {
+            SetAccelerationProgress(3, totalSteps, "准入门槛未通过（未写入）");
+            XTrace.WriteLine("[ApplyHosts/All] 准入门槛未通过，未写入 Hosts");
+        }
+        else
+        {
+            _applyIssue = "Hosts 写入失败（权限不足或文件被占用）";
+            StatusMessage = "Hosts 应用失败，请以管理员身份运行";
+            _historyService.Record(OperationType.HostsApplied, "应用 Hosts 失败：权限不足", false);
+            _notificationService.Error("Hosts 应用", "应用失败，请以管理员身份运行");
+            StardustMonitorService.Instance.ReportError("HostsApplyFailed", "权限不足或写入失败");
+            ShowFailureAdvice(FailureKind.HostsWriteDenied);
+        }
+
+        return null;
+    }
+
+    /// <summary>端到端耗时拆分（拉取 / 优选 / 判定），用于状态栏与实测记录。</summary>
+    private string TimingSuffix()
+    {
+        var s = _lastSelectionTiming;
+        var total = s.FetchSeconds + s.OptimizeSeconds + _lastGateSeconds;
+        var cache = s.FromCache ? "，缓存命中" : "";
+        return $"（拉取 {s.FetchSeconds:0.0}s / 优选 {s.OptimizeSeconds:0.0}s / 判定 {_lastGateSeconds:0.0}s，合计 {total:0.0}s{cache}）";
+    }
+
+    /// <summary>
+    /// 取“已选出的线路”：10 分钟内命中缓存直接返回；否则复用同一个在途任务（启动预热与用户点击共享），
+    /// 避免用户点击时又从零拉取一遍。取消只停止等待，后台选线不写任何东西。
+    /// </summary>
+    private async Task<SelectionResult> GetOrBuildSelectionAsync(
+        bool allowCache,
+        Action<string>? onStatus,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.Now;
+        var snapshot = allowCache ? _selectionCache.GetFresh(now) : null;
+        if (snapshot != null)
+        {
+            _lastSelectionTiming = new SelectionTiming(0, 0, true);
+            XTrace.WriteLine($"[Selection] 缓存命中：{snapshot.SourceCount} 个源，{((now - snapshot.SelectedAt).TotalSeconds):0}s 前选出");
+            onStatus?.Invoke($"已选出线路（缓存命中，{((now - snapshot.SelectedAt).TotalMinutes):0} 分钟前的结果），正在确认是否值得换…");
+            return new SelectionResult(
+                snapshot.Content, snapshot.Content, snapshot.SourceCount,
+                GithubHostsService.HostsSources.Length, Array.Empty<(string, string?)>(),
+                false, TimeSpan.Zero, TimeSpan.Zero, true);
+        }
+
+        Task<SelectionResult> task;
+        lock (_pipelineGate)
+        {
+            _pipelineTask ??= RunPipelineAsync();
+            task = _pipelineTask;
+        }
+
+        _selectionStatusSink = onStatus;
+        try
+        {
+            var result = await task.WaitAsync(cancellationToken);
+            _lastSelectionTiming = new SelectionTiming(
+                result.FetchElapsed.TotalSeconds, result.OptimizeElapsed.TotalSeconds, false);
+            return result;
+        }
+        finally
+        {
+            if (_selectionStatusSink == onStatus) _selectionStatusSink = null;
+        }
+    }
+
+    /// <summary>在途选线任务：完成后写入缓存，并清空任务槽，失败后允许下次重试。</summary>
+    private async Task<SelectionResult> RunPipelineAsync()
+    {
+        try
+        {
+            var result = await BuildSelectionAsync();
+            _selectionCache.Set(result.OptimizedHosts, result.ValidSources, DateTimeOffset.Now);
+            return result;
+        }
+        finally
+        {
+            lock (_pipelineGate) _pipelineTask = null;
+        }
+    }
+
+    /// <summary>拉取全部源并优选出线路；只读网络，不写 Hosts、不提权。</summary>
+    private async Task<SelectionResult> BuildSelectionAsync()
+    {
+        var status = new Action<string>(msg => _selectionStatusSink?.Invoke(msg));
+        var fetchWatch = Stopwatch.StartNew();
+        status("正在从全部数据源拉取 Hosts（并行）...");
+        XTrace.WriteLine("[ApplyHosts/All] 开始从全部源拉取 Hosts");
+
         var sources = GithubHostsService.HostsSources;
         var fetchTasks = sources.Select(async source =>
         {
@@ -1966,173 +2223,69 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         });
 
         var fetchResults = await Task.WhenAll(fetchTasks);
+        fetchWatch.Stop();
 
-        // 取消检查点：拉取完成后不再继续（不会写入 Hosts）
-        AbortIfCanceled();
-        if (!_accelState.IsBusy) return null;
         var validContents = fetchResults
             .Where(r => !string.IsNullOrEmpty(r.Content))
             .Select(r => r.Content!)
             .ToList();
-
         if (validContents.Count == 0)
         {
-            _applyIssue = "所有加速线路均不可用";
-            StatusMessage = "所有加速线路都获取失败，请检查网络或恢复原始访问";
-            AllSourcesFailureText = AllSourcesFailureReport.Build(
-                DateTime.Now,
-                fetchResults.Select(r => (r.Name, r.Error)));
-            HasAllSourcesFailure = true;
-            _notificationService.Error("Hosts 应用", "所有加速线路均不可用");
-
-            // 已应用加速但全部源挂掉：不能继续显示"已加速"，改为"已加速但源不可用"。
-            if (IsHostsApplied)
-            {
-                _accelState.MarkSourceUnavailable("全部加速线路不可达");
-                RaiseAccelerationStateChanged();
-            }
-
-            ShowFailureAdvice(FailureKind.AllMirrorsUnreachable);
-            return null;
+            throw new SelectionUnavailableException(fetchResults.Select(r => (r.Name, r.Error)).ToList());
         }
 
-        XTrace.WriteLine($"[ApplyHosts/All] 成功拉取 {validContents.Count}/{sources.Length} 个源");
-        SetAccelerationProgress(1, totalSteps, $"拉取完成（{validContents.Count}/{sources.Length} 个源）");
-        StatusMessage = $"已拉取 {validContents.Count} 个源，正在合并并优化 IP（实时探测中，请稍候）...";
+        XTrace.WriteLine(
+            $"[ApplyHosts/All] 成功拉取 {validContents.Count}/{sources.Length} 个源，耗时 {fetchWatch.Elapsed.TotalSeconds:0.0}s");
+        status($"已拉取 {validContents.Count} 个源，正在选出线路；选好后立刻确认是否值得换…");
 
-        // 2. 合并所有 hosts 内容
         var mergedHosts = string.Join("\n", validContents);
-        SetAccelerationProgress(2, totalSteps, "合并完成");
-        XTrace.WriteLine($"[ApplyHosts/All] 合并后内容长度={mergedHosts.Length}");
-
-        // 3. IP 优化（DNS解析 + HTTPS探测 + 择优）
+        var optimizeWatch = Stopwatch.StartNew();
+        var optimizeFailed = false;
+        var optimized = mergedHosts;
         try
         {
             var optimizer = new HostsOptimizerService
             {
                 IncludeDnsResolvedIps = true, // DNS 实时解析获取新鲜 IP，避免源内 IP 被封锁
-                ProbeTimeoutSeconds = 5       // 放宽超时，减少间歇性 IP 假阴性
+                ProbeTimeoutSeconds = 5,      // 放宽超时，减少间歇性 IP 假阴性
+                FastMode = true,              // 只对 github.com 择优：用户要的是“能用”，写入前还有 20% 门槛把关
+                MaxConcurrentProbes = 24      // 候选一次探完，避免第二批再等一个超时周期
             };
             optimizer.OnLog += msg =>
             {
-                StatusMessage = msg;
+                status(msg);
                 XTrace.WriteLine($"[ApplyHosts/Optimizer] {msg}");
             };
-            var optimizedContent = await optimizer.OptimizeAsync(mergedHosts, _applyCts?.Token ?? default);
-            XTrace.WriteLine($"[ApplyHosts/All] 优化完成，内容长度={optimizedContent.Length}");
-            SetAccelerationProgress(3, totalSteps, "IP 优选完成");
-
-            // 取消检查点：优化完成后、写 Hosts 之前
-            AbortIfCanceled();
-            if (!_accelState.IsBusy) return null;
-
-            // 只读判定（先判后提权）：不建快照、不写 Hosts、不弹 UAC
-            if (!writeHosts)
-            {
-                var ticket = await PreflightGateAsync(optimizedContent, totalSteps);
-                if (ticket == null) return null;
-                SetAccelerationProgress(totalSteps, totalSteps, "准入门槛通过（等待管理员授权）");
-                StatusMessage = $"判定通过：候选 {ticket.CandidateIp} 比直连快 ≥20%，正在请求管理员权限写入…";
-                return ticket;
-            }
-
-            // 4. 写入 hosts 文件（先过 20% 准入门槛；不达标不写）
-            var outcome = await ApplyAcceleratedHostsAsync(optimizedContent);
-            if (outcome == AcceleratedWriteOutcome.Success) SetAccelerationProgress(4, totalSteps, "Hosts 写入完成");
-
-            if (outcome == AcceleratedWriteOutcome.Success)
-            {
-                IsHostsApplied = true;
-                CurrentHostsSource = "多源智能合并";
-
-                StardustMonitorService.Instance.ReportInfo("HostsApplied",
-                    $"source=AllSources merged={validContents.Count}/{sources.Length}");
-
-                try
-                {
-                    if (_settings.AutoFlushDns)
-                    {
-                        await _dnsFlusher.FlushDnsCacheAsync();
-                        SetAccelerationProgress(totalSteps, totalSteps, "DNS 缓存已刷新");
-                        StatusMessage = "Hosts 已成功应用（多源智能合并 + IP优选，DNS缓存已刷新）";
-                    }
-                    else
-                    {
-                        StatusMessage = "Hosts 已成功应用（多源智能合并 + IP优选）";
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Log.Warning(ex, "刷新DNS缓存失败");
-                    _applyIssue = "DNS 缓存刷新失败（Hosts 已写入，可手动 ipconfig /flushdns）";
-                    StatusMessage = "Hosts 已成功应用（多源智能合并 + IP优选，建议手动刷新DNS缓存）";
-                }
-
-                _historyService.Record(OperationType.HostsApplied,
-                    $"多源智能合并：{validContents.Count}源 → IP优选 → 应用成功", true);
-                _statsService.RecordSourceUsed("AllSources", "merged", 0, true);
-                _notificationService.Success("Hosts 应用",
-                    $"已从 {validContents.Count} 个源智能合并并优化 Hosts");
-
-                // 自动触发子域健康检查
-                _ = TriggerAutoHealthCheckAsync();
-            }
-            else if (outcome == AcceleratedWriteOutcome.GateRejected)
-            {
-                SetAccelerationProgress(3, totalSteps, "准入门槛未通过（未写入）");
-                XTrace.WriteLine("[ApplyHosts/All] 准入门槛未通过，未写入 Hosts");
-            }
-            else
-            {
-                _applyIssue = "Hosts 写入失败（权限不足或文件被占用）";
-                StatusMessage = "Hosts 应用失败，请以管理员身份运行";
-                _historyService.Record(OperationType.HostsApplied, "应用 Hosts 失败：权限不足", false);
-                _notificationService.Error("Hosts 应用", "应用失败，请以管理员身份运行");
-                StardustMonitorService.Instance.ReportError("HostsApplyFailed", "权限不足或写入失败");
-                ShowFailureAdvice(FailureKind.HostsWriteDenied);
-            }
+            optimized = await optimizer.OptimizeAsync(mergedHosts);
         }
         catch (Exception ex)
         {
-            XTrace.WriteLine($"[ApplyHosts/All] 优化异常：{ex.GetType().Name}: {ex.Message}");
-            XTrace.WriteLine(ex.ToString());
+            optimizeFailed = true;
+            XTrace.WriteLine($"[ApplyHosts/All] 优选异常：{ex.GetType().Name}: {ex.Message}");
             Log.Warning(ex, "Hosts IP 优化失败");
             StardustMonitorService.Instance.ReportError("HostsOptimizeFailed", ex.Message, ex);
-
-            // 优化失败，退化为直接应用合并后的原始内容
-            AbortIfCanceled();
-            if (!_accelState.IsBusy) return null;
-
-            if (!writeHosts)
-            {
-                StatusMessage = "IP 优化失败，改用原始合并内容做只读判定…";
-                var ticket = await PreflightGateAsync(mergedHosts, totalSteps);
-                if (ticket == null) return null;
-                StatusMessage = $"判定通过：候选 {ticket.CandidateIp} 比直连快 ≥20%，正在请求管理员权限写入…";
-                return ticket;
-            }
-
-            _applyIssue = "IP 优选未完成（已应用原始合并内容）";
-            StatusMessage = "IP 优化失败，使用原始合并内容...";
-            var outcome = await ApplyAcceleratedHostsAsync(mergedHosts);
-            if (outcome == AcceleratedWriteOutcome.Success)
-            {
-                IsHostsApplied = true;
-                CurrentHostsSource = "多源合并（未优化）";
-                StatusMessage = "Hosts 已应用（多源合并，未优化）";
-                _notificationService.Warning("Hosts 应用", "IP 优选跳过，已应用原始合并内容");
-
-                // 自动触发子域健康检查
-                _ = TriggerAutoHealthCheckAsync();
-            }
-            else if (outcome == AcceleratedWriteOutcome.WriteFailed)
-            {
-                _applyIssue = "Hosts 写入失败（权限不足或文件被占用）";
-                ShowFailureAdvice(FailureKind.HostsWriteDenied);
-            }
         }
+        optimizeWatch.Stop();
 
-        return null;
+        return new SelectionResult(
+            optimized, mergedHosts, validContents.Count, sources.Length,
+            fetchResults.Select(r => (r.Name, r.Error)).ToList(),
+            optimizeFailed, fetchWatch.Elapsed, optimizeWatch.Elapsed, false);
+    }
+
+    /// <summary>启动后台预热：把拉取+优选挪到用户还没点按钮的时候。失败静默，不影响界面。</summary>
+    public async Task PrewarmSelectionCacheAsync()
+    {
+        try
+        {
+            if (_selectionCache.GetFresh(DateTimeOffset.Now) != null) return;
+            await GetOrBuildSelectionAsync(allowCache: true, onStatus: null, cancellationToken: CancellationToken.None);
+            XTrace.WriteLine("[Prewarm] 线路预热完成，已写入 10 分钟缓存");
+        }
+        catch (Exception ex)
+        {
+            XTrace.WriteLine($"[Prewarm] 预热未完成：{ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -2155,6 +2308,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         });
 
         AcceleratedHostsGateResult gate;
+        var gateWatch = Stopwatch.StartNew();
         try
         {
             gate = await _acceleratedHostsWriter.EvaluateAsync(
@@ -2167,16 +2321,21 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             _applyIssue = $"准入判定没有完成：{ex.Message}";
-            StatusMessage = $"{_applyIssue}（未请求管理员权限，Hosts 未修改）";
+            StatusMessage = $"{_applyIssue}（未请求管理员权限，Hosts 未修改）{TimingSuffix()}";
             _historyService.Record(OperationType.HostsApplied, _applyIssue, false, ex.StackTrace);
             return null;
+        }
+        finally
+        {
+            gateWatch.Stop();
+            _lastGateSeconds = gateWatch.Elapsed.TotalSeconds;
         }
 
         if (gate.GateRejected || gate.CandidateIp == null)
         {
             _applyIssue = gate.Message;
-            StatusMessage = $"{gate.Message}（未请求管理员权限，Hosts 未修改）";
-            XTrace.WriteLine($"[Gate] 提权前判定未通过：{gate.Message}");
+            StatusMessage = $"{gate.Message}（未请求管理员权限，Hosts 未修改）{TimingSuffix()}";
+            XTrace.WriteLine($"[Gate] 提权前判定未通过：{gate.Message}（判定 {_lastGateSeconds:0.0}s，端到端 {_lastSelectionTiming.FetchSeconds + _lastSelectionTiming.OptimizeSeconds + _lastGateSeconds:0.0}s，缓存命中={_lastSelectionTiming.FromCache}）");
             _historyService.Record(OperationType.HostsApplied, $"提权前准入门槛拒绝：{gate.Message}", false);
             _notificationService.Warning("Hosts 未写入", gate.Message);
             return null;
@@ -2325,7 +2484,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// 统一的 Hosts 内容获取方法：处理 DNS 探测源和普通 HTTP 源（含镜像故障转移）。
+    /// 统一的 Hosts 内容获取方法：处理 DNS 探测源和普通 HTTP 源（主 URL 与镜像并行竞速）。
     /// 返回 (content, usedUrl, error)。usedUrl 用于日志记录实际使用的镜像 URL。
     /// </summary>
     private async Task<(string content, string? usedUrl, string? error)> FetchHostsContentAsync(
@@ -2340,36 +2499,46 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return (content, sourceUrl, null);
         }
 
-        // 普通 HTTP 源：主 URL + 镜像 URL 依次尝试
+        // 普通 HTTP 源：主 URL + 镜像并行竞速，谁先返回非空内容就用谁，其余立刻取消。
+        // 串行重试会把"主 URL 超时 15s + 镜像超时 15s"叠加成 30s，并行竞速把最坏等待压到单次超时。
         var candidates = new List<string> { sourceUrl };
         if (mirrorUrls != null && mirrorUrls.Length > 0)
         {
             candidates.AddRange(mirrorUrls.Where(u => !string.IsNullOrEmpty(u) && u != sourceUrl));
         }
 
-        using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+        using var raceCts = new CancellationTokenSource();
         Exception? lastException = null;
 
-        for (int i = 0; i < candidates.Count; i++)
+        async Task<(string? content, string? url, Exception? error)> RaceAsync(string url)
         {
-            var url = candidates[i];
             try
             {
-                if (i > 0)
-                {
-                    StatusMessage = $"主 URL 失败，正在尝试镜像 ({i}/{candidates.Count - 1})...";
-                }
-                var content = await httpClient.GetStringAsync(url);
-                if (!string.IsNullOrEmpty(content))
-                {
-                    return (content, url, null);
-                }
+                var text = await httpClient.GetStringAsync(url, raceCts.Token);
+                if (string.IsNullOrEmpty(text)) return (null, url, null);
+                return (text, url, null);
             }
             catch (Exception ex)
             {
-                lastException = ex;
+                if (ex is OperationCanceledException && raceCts.IsCancellationRequested) return (null, url, null);
                 Log.Warning(ex, "从 {SourceName} 获取 Hosts 失败 (URL: {Url})", sourceName, url);
+                return (null, url, ex);
             }
+        }
+
+        var pending = candidates.Select(RaceAsync).ToList();
+        while (pending.Count > 0)
+        {
+            var finished = await Task.WhenAny(pending);
+            pending.Remove(finished);
+            var (content, url, error) = await finished;
+            if (content != null)
+            {
+                raceCts.Cancel();
+                return (content, url, null);
+            }
+            if (error != null) lastException = error;
         }
 
         return (string.Empty, null, lastException?.Message ?? "所有 URL 均失败");
