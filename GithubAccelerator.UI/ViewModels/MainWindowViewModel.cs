@@ -212,8 +212,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _isGitHubAccessible;
 
+    /// <summary>是否已完成一次直连探测；未完成时首屏显示“正在检查”，不把 false 当成“不通”。</summary>
     [ObservableProperty]
-    private string _gitHubStatusText = "直连：未测试";
+    private bool _isGitHubTested;
 
     [ObservableProperty]
     private ObservableCollection<SourceStatusViewModel> _sources = new();
@@ -709,14 +710,19 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public string CurrentBestSourceText => string.IsNullOrEmpty(BestSourceName) ? "尚未探测完成" : BestSourceName;
 
-    /// <summary>第一层「能不能用」的唯一结论：不推断、不夸大。</summary>
+    /// <summary>首屏唯一结论：先回答“现在能不能用”，再说明是否已开启加速；不并列第二个信号。</summary>
     public string AvailabilityConclusion => IsHostsApplied
-        ? "GitHub 当前走本机加速（Hosts 已写入）"
-        : "GitHub 当前走原始直连（未写入加速）";
+        ? "已开启网页加速"
+        : !IsGitHubTested
+            ? "正在检查 GitHub 直连…"
+            : IsGitHubAccessible
+                ? "GitHub 直连可用，无需加速"
+                : "GitHub 直连不通，建议开启加速";
 
+    /// <summary>首屏唯一动作说明：写清点完会发生什么、不达标会怎样，不出现内部术语。</summary>
     public string AvailabilityDetail => IsHostsApplied
-        ? "可随时恢复原始访问。push、登录、issue 仍然直连 GitHub，不经过加速块。"
-        : "能否打开取决于本机网络。开启前会先把即将写入的 github.com 候选与直连交错配对：未快 20% 时提示「当前网络换 IP 改善不了」且不写入 Hosts。";
+        ? "可随时点「恢复原始访问」移除；push、登录、issue 始终直连，不经过加速。"
+        : "点「开启网页加速」会先测速比较：比直连至少快 20% 才写入，否则不改任何系统文件，也不会弹管理员确认。";
 
     partial void OnIsRefreshingSourcesChanged(bool value)
     {
@@ -1349,6 +1355,18 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(AvailabilityDetail));
     }
 
+    partial void OnIsGitHubAccessibleChanged(bool value)
+    {
+        OnPropertyChanged(nameof(AvailabilityConclusion));
+        OnPropertyChanged(nameof(AvailabilityDetail));
+    }
+
+    partial void OnIsGitHubTestedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(AvailabilityConclusion));
+        OnPropertyChanged(nameof(AvailabilityDetail));
+    }
+
     [RelayCommand(CanExecute = nameof(CanClearHosts))]
     private async Task ClearAppliedHosts()
     {
@@ -1503,31 +1521,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         WriteFailed
     }
 
-    [RelayCommand]
-    private async Task ToggleMonitoring()
-    {
-        if (IsMonitoring)
-        {
-            _performanceMonitor.StopMonitoring();
-            IsMonitoring = false;
-            _updateTimer?.Stop();
-            StatusMessage = "监控已停止";
-            _historyService.Record(OperationType.MonitoringStopped, "停止监控");
-        }
-        else
-        {
-            _performanceMonitor.StartMonitoring();
-            IsMonitoring = true;
-            if (_settings.TestInterval > 0)
-            {
-                _updateTimer?.Start();
-            }
-            StatusMessage = "监控已启动，正在测试所有加速线路...";
-            _historyService.Record(OperationType.MonitoringStarted, "启动监控");
-            _notificationService.Info("监控", "监控已启动，正在测试所有加速线路");
-        }
-    }
-
     [RelayCommand(CanExecute = nameof(CanRefreshSources))]
     private async Task RefreshSources()
     {
@@ -1575,19 +1568,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             var results = await _connectionService.TestAllConnectionsAsync();
             var successCount = results.Count(r => r.IsSuccess);
             var totalCount = results.Count;
-            
-            IsGitHubAccessible = successCount > 0;
-            
+
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                if (IsGitHubAccessible)
+                IsGitHubAccessible = successCount > 0;
+                IsGitHubTested = true;
+                if (!IsGitHubAccessible)
                 {
-                    var avgLatency = results.Where(r => r.IsSuccess).Average(r => r.LatencyMs);
-                    GitHubStatusText = $"直连：可访问 · 平均 {avgLatency:F0} ms";
-                }
-                else
-                {
-                    GitHubStatusText = "直连：无法访问";
                     if (showNotification)
                     {
                         StatusMessage = "⚠️ GitHub 无法访问！请检查网络或使用代理";
@@ -1595,13 +1582,18 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                         ShowFailureAdvice(FailureKind.NoNetwork);
                     }
                 }
+                else
+                {
+                    var avgLatency = results.Where(r => r.IsSuccess).Average(r => r.LatencyMs);
+                    Log.Information("[Connectivity] GitHub 直连可用，平均 {0:F0} ms", avgLatency);
+                }
             });
         }
         catch (Exception ex)
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                GitHubStatusText = "直连：测试失败";
+                IsGitHubTested = true;
                 if (showNotification)
                 {
                     StatusMessage = $"⚠️ GitHub 连接测试失败: {ex.Message}";

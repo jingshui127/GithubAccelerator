@@ -20,7 +20,6 @@
         <KeyBinding Gesture="Ctrl+R" Command="{Binding RefreshSourcesCommand}"/>
         <KeyBinding Gesture="Ctrl+S" Command="{Binding ApplyHostsCommand}"/>
         <KeyBinding Gesture="Ctrl+H" Command="{Binding ShowHostsAndBackupCommand}"/>
-        <KeyBinding Gesture="F5" Command="{Binding ToggleMonitoringCommand}"/>
         <KeyBinding Gesture="Ctrl+1" Command="{Binding ShowDashboardCommand}"/>
         <KeyBinding Gesture="Ctrl+2" Command="{Binding ShowCheckAndRepairCommand}"/>
         <KeyBinding Gesture="Ctrl+3" Command="{Binding ShowSettingsCommand}"/>

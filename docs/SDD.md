@@ -551,7 +551,6 @@ ApplyHostsAsync(records)
 ├─────────────────────────────────────────────┤
 │ + RefreshSourcesCommand: RelayCommand        │
 │ + ApplyHostsCommand: RelayCommand            │
-│ + ToggleMonitoringCommand: RelayCommand      │
 │ + ToggleThemeCommand: RelayCommand           │
 │ + ShowSettingsCommand: RelayCommand          │
 │ + ShowAboutCommand: RelayCommand             │
@@ -572,7 +571,6 @@ ApplyHostsAsync(records)
 | RefreshSourcesCommand | Ctrl+R | 刷新数据源 |
 | ApplyHostsCommand | Ctrl+S | 应用 Hosts |
 | ShowHostsAndBackupCommand | Ctrl+H | Hosts 与备份（含回到原始状态） |
-| ToggleMonitoringCommand | F5 | 切换监控状态 |
 
 ---
 
