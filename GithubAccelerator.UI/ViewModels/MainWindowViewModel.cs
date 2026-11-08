@@ -1402,8 +1402,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         AcceleratedHostsWriteResult write;
         try
         {
+            // 提权后的写入同样先跑分级判定（同一套门槛），这里只负责把进度显示出来。
+            var progress = new Progress<OfficialSiteAdmissionProgress>(p => StatusMessage = p.Message);
             write = await _acceleratedHostsWriter.WriteAsync(
-                hostsContent, "主链路优选", _hostsFileService, _applyCts?.Token ?? default);
+                hostsContent, "主链路优选", _hostsFileService, _applyCts?.Token ?? default, progress);
         }
         catch (OperationCanceledException)
         {
@@ -1774,6 +1776,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             await ApplyHostsFromAllSources();
         }
+        catch (OperationCanceledException) when (IsCancelRequested)
+        {
+            AbortIfCanceled();
+        }
         catch (Exception ex)
         {
             StatusMessage = $"Hosts 应用失败：{ex.Message}";
@@ -1800,6 +1806,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 try
                 {
                     return await ApplyHostsFromAllSources(writeHosts: false);
+                }
+                catch (OperationCanceledException) when (IsCancelRequested)
+                {
+                    // 取消：判定只读、尚未提权，直接回到“已取消：Hosts 未被修改”。
+                    AbortIfCanceled();
+                    return null;
                 }
                 catch (Exception ex)
                 {
@@ -2017,7 +2029,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             // 只读判定（先判后提权）：不建快照、不写 Hosts、不弹 UAC
             if (!writeHosts)
             {
-                var ticket = await PreflightGateAsync(optimizedContent);
+                var ticket = await PreflightGateAsync(optimizedContent, totalSteps);
                 if (ticket == null) return null;
                 SetAccelerationProgress(totalSteps, totalSteps, "准入门槛通过（等待管理员授权）");
                 StatusMessage = $"判定通过：候选 {ticket.CandidateIp} 比直连快 ≥20%，正在请求管理员权限写入…";
@@ -2094,7 +2106,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             if (!writeHosts)
             {
                 StatusMessage = "IP 优化失败，改用原始合并内容做只读判定…";
-                var ticket = await PreflightGateAsync(mergedHosts);
+                var ticket = await PreflightGateAsync(mergedHosts, totalSteps);
                 if (ticket == null) return null;
                 StatusMessage = $"判定通过：候选 {ticket.CandidateIp} 比直连快 ≥20%，正在请求管理员权限写入…";
                 return ticket;
@@ -2127,7 +2139,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// 只读门槛判定：调用与写入完全相同的 20% 准入门槛链路，但不写 Hosts、不建快照、不提权。
     /// 达标返回票据；不达标返回 null（此时一次也不写、不会请求 UAC）。
     /// </summary>
-    private async Task<PreflightTicket?> PreflightGateAsync(string hostsContent)
+    private async Task<PreflightTicket?> PreflightGateAsync(string hostsContent, int totalSteps)
     {
         var candidateIp = AcceleratedHostsWriter.ExtractFirstIp(
             hostsContent, AcceleratedHostsWriter.PrimaryDomain);
@@ -2135,11 +2147,18 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             ? "正在校验准入（候选里没有 github.com 映射）..."
             : $"正在比较候选 {candidateIp} 与直连（20% 门槛：候选需快 ≥20%）...";
 
+        // 分级判定的进度：快判 →（必要时）慢判，界面说明当前在做什么、大概还要多久。
+        var progress = new Progress<OfficialSiteAdmissionProgress>(p =>
+        {
+            StatusMessage = p.Message;
+            SetAccelerationProgress(3, totalSteps, p.Message);
+        });
+
         AcceleratedHostsGateResult gate;
         try
         {
             gate = await _acceleratedHostsWriter.EvaluateAsync(
-                hostsContent, "主链路优选", _applyCts?.Token ?? default);
+                hostsContent, "主链路优选", _applyCts?.Token ?? default, progress);
         }
         catch (OperationCanceledException)
         {
@@ -2286,6 +2305,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 StardustMonitorService.Instance.ReportError("HostsApplyFailed", "权限不足或写入失败");
                 ShowFailureAdvice(FailureKind.HostsWriteDenied);
             }
+        }
+        catch (OperationCanceledException) when (IsCancelRequested)
+        {
+            AbortIfCanceled();
         }
         catch (Exception ex)
         {
@@ -2472,6 +2495,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 _notificationService.Error("Hosts 应用", "应用失败，请以管理员身份运行");
                 ShowFailureAdvice(FailureKind.HostsWriteDenied);
             }
+        }
+        catch (OperationCanceledException) when (IsCancelRequested)
+        {
+            AbortIfCanceled();
         }
         catch (Exception ex)
         {

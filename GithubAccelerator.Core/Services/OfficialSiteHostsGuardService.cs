@@ -484,6 +484,9 @@ public sealed class OfficialSiteCandidateSelector
     /// <summary>供交错配对复用同一个整页度量器（口径必须一致）。</summary>
     public IOfficialSitePageLoader PageLoader => _pageLoader;
 
+    /// <summary>供准入快判复用同一套建连预筛（口径必须一致）。</summary>
+    public IOfficialSiteIpProbe Probe => _probe;
+
     public async Task<OfficialSiteSelection> SelectAsync(
         IEnumerable<OfficialSiteSeedEntry> entries,
         string domain,
@@ -617,15 +620,36 @@ public sealed record OfficialSitePairComparison(
     string? UnstableReason,
     DateTimeOffset MeasuredAt)
 {
+    /// <summary>准入阈值：候选需比直连快 ≥20%（快判与慢判共用的唯一阈值）。</summary>
+    public const double RequiredImprovementFraction = 0.20;
+
+    /// <summary>
+    /// 快判安全边际：初判改善不足阈值的一半（10 个百分点）才允许提前拒绝。
+    /// 依据：配对差值中位数在 2 组小样本下仍可能有 ±5% 左右的抖动，
+    /// 留出 10 个百分点（阈值 × 50%）可保证“初判明显够不着 20%”时，完整配对翻转结论的概率极低。
+    /// </summary>
+    public const double FastRejectImprovementFraction = RequiredImprovementFraction / 2;
+
     public bool HasValidPairs => ValidPairs > 0 && MedianDiffMs.HasValue;
 
     /// <summary>直连在配对窗口里是否基本可用（≥ 半数成功才认为能与候选比快慢）。</summary>
     public bool BaselineUsable => BaselineIp != null && BaselineSuccessCount > Groups / 2;
 
+    /// <summary>改善比例（负值表示候选更快）；直连中位无效时为 null。</summary>
+    public double? ImprovementFraction => HasValidPairs && MedianBaselineMs is > 0
+        ? (double)MedianDiffMs!.Value / MedianBaselineMs.Value
+        : null;
+
     /// <summary>20% 准入：配对差值中位数 ≤ −20% × 直连中位。</summary>
-    public bool MeetsThreshold => HasValidPairs && MedianBaselineMs.HasValue
-                                  && MedianBaselineMs.Value > 0
-                                  && MedianDiffMs!.Value * 5 <= -(MedianBaselineMs.Value * 1.0);
+    public bool MeetsThreshold =>
+        ImprovementFraction is { } improvement && improvement <= -RequiredImprovementFraction;
+
+    /// <summary>
+    /// 初判是否“明显够不着门槛”：改善幅度连阈值的一半都没到。
+    /// 只有该条件成立时才允许快判直接拒绝；否则一律继续完整配对，避免样本不足导致假拒绝。
+    /// </summary>
+    public bool ClearlyBelowThreshold =>
+        ImprovementFraction is { } improvement && improvement > -FastRejectImprovementFraction;
 
     public string MedianText
     {
@@ -696,16 +720,21 @@ public sealed class OfficialSitePairedComparer
         string? baselineIp,
         string domain,
         DateTimeOffset measuredAt,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int? targetGroups = null,
+        IReadOnlyList<OfficialSitePairRound>? seedRounds = null)
     {
+        // 快判先跑少量组，慢判在同一份 rounds 上继续补齐，避免重复测量、也避免两套算法。
+        var target = Math.Max(1, targetGroups ?? _groups);
         if (string.IsNullOrEmpty(baselineIp))
         {
-            return new OfficialSitePairComparison(candidateIp, null, _groups, Array.Empty<OfficialSitePairRound>(),
+            return new OfficialSitePairComparison(candidateIp, null, target, Array.Empty<OfficialSitePairRound>(),
                 0, null, null, null, 0, false, "没有直连 IP，无法配对", measuredAt);
         }
 
-        var rounds = new List<OfficialSitePairRound>();
-        for (var group = 1; group <= _groups; group++)
+        var rounds = seedRounds?.ToList() ?? new List<OfficialSitePairRound>();
+        target = Math.Max(target, rounds.Count);
+        for (var group = rounds.Count + 1; group <= target; group++)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -713,13 +742,20 @@ public sealed class OfficialSitePairedComparer
             // 紧接着测直连（数秒内相邻完成），两侧在同一个网络波动窗口里
             var baseline = await _pageLoader.MeasureAsync(domain, baselineIp, _pageTimeout, cancellationToken);
 
+            var note = candidate.Success && baseline.Success
+                ? null
+                : candidate.Success
+                    ? $"直连整页失败：{baseline.FailureReason ?? "未知原因"}"
+                    : baseline.Success
+                        ? $"候选整页失败：{candidate.FailureReason ?? "未知原因"}"
+                        : $"两侧整页均失败（候选：{candidate.FailureReason ?? "未知"}；直连：{baseline.FailureReason ?? "未知"}）";
             rounds.Add(new OfficialSitePairRound(
                 group,
                 candidate.TotalMs,
                 baseline.TotalMs,
                 candidate.Success,
                 baseline.Success,
-                candidate.Success && baseline.Success ? null : "有一侧失败，本组不计入差值"));
+                note));
         }
 
         var valid = rounds.Where(r => r.DiffMs.HasValue).ToList();
@@ -733,7 +769,7 @@ public sealed class OfficialSitePairedComparer
         var (stable, reason) = EvaluateStability(valid.Select(r => r.DiffMs!.Value).ToList());
 
         return new OfficialSitePairComparison(
-            candidateIp, baselineIp, _groups, rounds, valid.Count,
+            candidateIp, baselineIp, target, rounds, valid.Count,
             candidateMs, baselineMs, diffMs, baselineSuccess,
             stable, reason, measuredAt);
     }
@@ -1029,40 +1065,205 @@ public sealed class OfficialSiteHostsGuardService
     /// 复用同一套整页度量、交错配对（<see cref="OfficialSitePairedComparer"/>）、
     /// <see cref="OfficialSitePairComparison.MeetsThreshold"/> 与 <see cref="BuildAdmission"/>，不复制第二份阈值逻辑。
     /// 本方法只测不写，不保存状态、不碰 Hosts。
+    /// <para>
+    /// 分级判定：先用 <see cref="FastScreeningGroups"/> 组配对做快判，仅在“明显够不着门槛”
+    /// （<see cref="OfficialSitePairComparison.ClearlyBelowThreshold"/>）或连续两组整页都失败时提前拒绝；
+    /// 其余情况在同一份配对数据上补齐到 <see cref="OfficialSitePairedComparer.DefaultGroups"/> 组再出最终结论。
+    /// </para>
     /// </summary>
     public async Task<OfficialSiteAdmissionCheck> EvaluateAdmissionAsync(
         string candidateIp,
         string candidateSource,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IProgress<OfficialSiteAdmissionProgress>? progress = null)
     {
         var checkedAt = _clock();
-        var baseline = await MeasureBaselineAsync(checkedAt, cancellationToken);
-
         var entry = new OfficialSiteSeedEntry
         {
             Ip = candidateIp,
             Source = candidateSource,
             AddedAt = checkedAt
         };
-        var candidate = await _selector.MeasureAsync(entry, Domain, cancellationToken);
 
-        OfficialSitePairComparison? pairs = null;
-        if (baseline.Ip != null && candidate.MedianPageMs.HasValue)
+        // 0. 只解析直连 IP（不测整页）。没有直连基线时无法配对，直接给出与完整判定一致的拒绝理由。
+        var (baselineIp, baselineFailure) = await ResolveBaselineIpAsync(cancellationToken);
+        if (baselineIp == null)
         {
-            pairs = await ComparePairsAsync(candidateIp, baseline.Ip, cancellationToken);
+            var time = checkedAt.ToString("yyyy-MM-dd HH:mm:ss");
+            return new OfficialSiteAdmissionCheck(false,
+                $"拒绝应用：没有得到交错配对数据（{baselineFailure ?? "未知原因"}）；" +
+                $"顺序测法只作诊断，不能作为准入依据；检测时间 {time}。",
+                candidateIp, candidateSource, null, null,
+                SynthesizeCandidate(entry, null));
         }
 
-        var selection = new OfficialSiteSelection(
-            checkedAt, Domain, _selector.Rounds, _selector.MinSuccessRate,
-            new[] { candidate }, candidate);
+        // 1. 快判：先做建连预筛，再跑 2 组配对（最坏约 4 次整页加载），明显不达标立即出结论。
+        progress?.Report(new OfficialSiteAdmissionProgress(
+            OfficialSiteAdmissionStage.FastScreening,
+            $"第 1/2 步：先检查候选能否连接，再用 {FastScreeningGroups} 组配对快速初判（约 5–10 秒，可取消）",
+            EstimatedFastSeconds));
 
-        var decision = BuildAdmission(
-            selection, baseline.Ip, baseline.PageMs, baseline.Success, baseline.Rounds,
-            pairs, baseline.Failure, checkedAt);
+        var fastWatch = Stopwatch.StartNew();
+        var connectivityFailure = await CheckCandidateConnectivityAsync(candidateIp, cancellationToken);
+        if (connectivityFailure != null)
+        {
+            fastWatch.Stop();
+            progress?.Report(new OfficialSiteAdmissionProgress(
+                OfficialSiteAdmissionStage.FastRejected,
+                "初判已判定候选连接不可用，提前结束（不再做整页配对）",
+                0));
+            return new OfficialSiteAdmissionCheck(false,
+                BuildConnectivityRejectionText(connectivityFailure, fastWatch.Elapsed, checkedAt),
+                candidateIp, candidateSource, baselineIp, null,
+                SynthesizeCandidate(entry, null));
+        }
+
+        var fast = await ComparePairsWithGroupsAsync(
+            candidateIp, baselineIp, FastScreeningGroups, cancellationToken);
+        fastWatch.Stop();
+
+        var fastRejectText = BuildFastRejectionText(fast, fastWatch.Elapsed, checkedAt);
+        if (fastRejectText != null)
+        {
+            progress?.Report(new OfficialSiteAdmissionProgress(
+                OfficialSiteAdmissionStage.FastRejected,
+                "初判已判定明显不达标，提前结束（不再做完整配对）",
+                0));
+            return new OfficialSiteAdmissionCheck(false, fastRejectText, candidateIp, candidateSource,
+                baselineIp, fast, SynthesizeCandidate(entry, fast));
+        }
+
+        // 2. 慢判：在快判同一份 6 组配对数据上继续补齐，最终结论仍由同一个 BuildAdmission 给出。
+        var remainingGroups = OfficialSitePairedComparer.DefaultGroups - fast.Rounds.Count;
+        if (remainingGroups <= 0)
+        {
+            var decisionFastOnly = BuildAdmission(entry, baselineIp, baselineFailure, fast, checkedAt);
+            progress?.Report(new OfficialSiteAdmissionProgress(
+                OfficialSiteAdmissionStage.Completed, "判定完成", 0));
+            return new OfficialSiteAdmissionCheck(decisionFastOnly.Allowed, decisionFastOnly.Text,
+                candidateIp, candidateSource, baselineIp, fast, SynthesizeCandidate(entry, fast));
+        }
+
+        var estimatedSlowSeconds = Math.Max(EstimatedFastSeconds,
+            (int)Math.Ceiling(fastWatch.Elapsed.TotalSeconds * 2));
+        progress?.Report(new OfficialSiteAdmissionProgress(
+            OfficialSiteAdmissionStage.SlowComparison,
+            $"第 2/2 步：初判接近临界或有达标可能，正在做更精确的完整配对" +
+            $"（再补 {remainingGroups} 组，预计约 {estimatedSlowSeconds} 秒，可取消）",
+            estimatedSlowSeconds));
+
+        var pairs = await ComparePairsWithGroupsAsync(
+            candidateIp, baselineIp, OfficialSitePairedComparer.DefaultGroups, cancellationToken, fast.Rounds);
+
+        var decision = BuildAdmission(entry, baselineIp, baselineFailure, pairs, checkedAt);
+        progress?.Report(new OfficialSiteAdmissionProgress(
+            OfficialSiteAdmissionStage.Completed, "判定完成", 0));
 
         return new OfficialSiteAdmissionCheck(
             decision.Allowed, decision.Text, candidateIp, candidateSource,
-            baseline.Ip, pairs, candidate);
+            baselineIp, pairs, SynthesizeCandidate(entry, pairs));
+    }
+
+    /// <summary>快判样本组数：2 组（候选/直连各 2 次整页加载）。</summary>
+    public const int FastScreeningGroups = 2;
+
+    /// <summary>快判的预期耗时上限（仅用于进度文案）。</summary>
+    private const int EstimatedFastSeconds = 8;
+
+    /// <summary>
+    /// 快判第一步：复用完整判定同一套 TCP/TLS 预筛，连续两次失败才认定“连接直接不可用”。
+    /// 完整判定本身在预筛失败后就会跳过整页并拒绝，因此这里提前拒绝不会放宽任何标准，只是省掉整页等待。
+    /// </summary>
+    private async Task<string?> CheckCandidateConnectivityAsync(
+        string candidateIp,
+        CancellationToken cancellationToken)
+    {
+        var first = await _selector.Probe.MeasureAsync(
+            Domain, candidateIp, _selector.ProbeTimeout, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (first.Success) return null;
+
+        var second = await _selector.Probe.MeasureAsync(
+            Domain, candidateIp, _selector.ProbeTimeout, cancellationToken);
+        if (second.Success) return null;
+
+        return second.FailureReason ?? first.FailureReason ?? "未得到可用连接";
+    }
+
+    private static string BuildConnectivityRejectionText(
+        string failureReason, TimeSpan elapsed, DateTimeOffset checkedAt)
+    {
+        var time = checkedAt.ToString("yyyy-MM-dd HH:mm:ss");
+        var seconds = elapsed.TotalSeconds.ToString("0.0");
+        return $"拒绝应用：候选连接直接失败（连续 2 次 TCP/TLS 预筛失败：{failureReason}），" +
+               $"已提前结束；初判耗时 {seconds}s；检测时间 {time}。";
+    }
+
+    /// <summary>
+    /// 快判提前拒绝的唯一入口：理由必须写清“为什么不再等完整配对”。
+    /// 只有两种情况允许提前拒绝，且都不依赖“样本少”本身：
+    /// ① 连续 2 组候选整页都失败（连接直接不可用）；
+    /// ② 2 组都取得有效配对，且改善幅度还不到阈值的一半（<see cref="OfficialSitePairComparison.ClearlyBelowThreshold"/>）。
+    /// 有效配对不足 2 组时一律返回 null，交给慢判，避免小样本假拒绝。
+    /// </summary>
+    private static string? BuildFastRejectionText(
+        OfficialSitePairComparison fast, TimeSpan elapsed, DateTimeOffset checkedAt)
+    {
+        var time = checkedAt.ToString("yyyy-MM-dd HH:mm:ss");
+        var seconds = elapsed.TotalSeconds.ToString("0.0");
+
+        // ① 连接直接失败：必须两组都失败才下结论，单次抖动不拒绝。
+        if (fast.Rounds.Count >= FastScreeningGroups
+            && fast.Rounds.All(r => !r.CandidateSuccess))
+        {
+            var reason = fast.Rounds.Select(r => r.Note).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n))
+                         ?? "整页加载失败";
+            return $"拒绝应用：候选整页在初判 {fast.Rounds.Count} 组里全部失败（{reason}），" +
+                   $"按同一门槛已经不可能达标，已提前结束；初判耗时 {seconds}s；检测时间 {time}。";
+        }
+
+        // 样本不足（有效配对 < 2 组）→ 一律进入慢判，绝不用小样本拒绝。
+        if (fast.ValidPairs < FastScreeningGroups) return null;
+
+        // ② 差距远超门槛：改善连 10 个百分点都不到才允许提前拒；否则继续慢判。
+        if (!fast.ClearlyBelowThreshold) return null;
+
+        var gapPoints = (OfficialSitePairComparison.RequiredImprovementFraction
+                         + (fast.ImprovementFraction ?? 0)) * 100;
+        return $"拒绝应用：当前网络换 IP 改善不了（初判差距远超门槛：{fast.MedianText}，" +
+               $"距 20% 门槛还差 {gapPoints:0.#} 个百分点，已超过 " +
+               $"{OfficialSitePairComparison.FastRejectImprovementFraction * 100:0} 个百分点安全边际）；" +
+               $"已提前结束，不再做完整配对；初判耗时 {seconds}s；检测时间 {time}。";
+    }
+
+    /// <summary>把快判/慢判的配对结果转换成既有的候选结果结构，供同一个 <see cref="BuildAdmission"/> 使用。</summary>
+    private static OfficialSiteCandidateResult SynthesizeCandidate(
+        OfficialSiteSeedEntry entry, OfficialSitePairComparison? pairs)
+    {
+        var rounds = pairs?.Groups ?? 0;
+        var success = pairs?.Rounds.Count(r => r.CandidateSuccess) ?? 0;
+        var failure = pairs?.Rounds.FirstOrDefault(r => !r.CandidateSuccess)?.Note;
+        return new OfficialSiteCandidateResult(
+            entry, rounds, success, null, null, null,
+            pairs?.MedianCandidateMs, null, 0, failure);
+    }
+
+    /// <summary>用同一套 <see cref="BuildAdmission"/> 生成结论，只把“顺序诊断”信息改成配对数据里的等价信息。</summary>
+    private static (bool Allowed, string Text) BuildAdmission(
+        OfficialSiteSeedEntry entry,
+        string baselineIp,
+        string? baselineFailure,
+        OfficialSitePairComparison pairs,
+        DateTimeOffset checkedAt)
+    {
+        var candidate = SynthesizeCandidate(entry, pairs);
+        var selection = new OfficialSiteSelection(
+            checkedAt, OfficialSiteHostsPolicy.PrimaryDomain, pairs.Groups,
+            0.9, new[] { candidate }, candidate);
+
+        return BuildAdmission(
+            selection, baselineIp, pairs.MedianBaselineMs, pairs.BaselineSuccessCount, pairs.Groups,
+            pairs, baselineFailure, checkedAt);
     }
 
     /// <summary>系统 DNS 直连整页基线：预览与主链路准入门槛共用同一测量口径。</summary>
@@ -1070,17 +1271,13 @@ public sealed class OfficialSiteHostsGuardService
         DateTimeOffset checkedAt,
         CancellationToken cancellationToken)
     {
+        var (ip, failure) = await ResolveBaselineIpAsync(cancellationToken);
+        if (ip == null)
+            return new BaselineMeasurement(null, null, null, 0, _selector.Rounds, false,
+                failure ?? "系统 DNS 未解析到 IPv4 地址");
+
         try
         {
-            var resolution = await _dnsResolver.ResolveAsync(Domain, cancellationToken);
-            var ip = resolution.Ipv4Addresses.FirstOrDefault();
-            if (ip == null)
-            {
-                return new BaselineMeasurement(null,
-                    null, null, 0, _selector.Rounds, false,
-                    resolution.FailureReason ?? "系统 DNS 未解析到 IPv4 地址");
-            }
-
             var entry = new OfficialSiteSeedEntry
             {
                 Ip = ip,
@@ -1099,18 +1296,46 @@ public sealed class OfficialSiteHostsGuardService
         }
     }
 
+    /// <summary>只做 DNS 解析、不测整页：快判与完整判定共用。</summary>
+    private async Task<(string? Ip, string? Failure)> ResolveBaselineIpAsync(
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var resolution = await _dnsResolver.ResolveAsync(Domain, cancellationToken);
+            var ip = resolution.Ipv4Addresses.FirstOrDefault();
+            return ip == null
+                ? (null, resolution.FailureReason ?? "系统 DNS 未解析到 IPv4 地址")
+                : (ip, null);
+        }
+        catch (Exception ex)
+        {
+            return (null, ex.Message);
+        }
+    }
+
     /// <summary>交错配对实测；异常时不参与准入（Text 说明原因）。</summary>
     private async Task<OfficialSitePairComparison> ComparePairsAsync(
         string candidateIp,
         string baselineIp,
         CancellationToken cancellationToken)
+        => await ComparePairsWithGroupsAsync(
+            candidateIp, baselineIp, OfficialSitePairedComparer.DefaultGroups, cancellationToken);
+
+    /// <summary>按指定组数做交错配对；可从快判已有 rounds 继续补齐（同一套度量与判定）。</summary>
+    private async Task<OfficialSitePairComparison> ComparePairsWithGroupsAsync(
+        string candidateIp,
+        string baselineIp,
+        int groups,
+        CancellationToken cancellationToken,
+        IReadOnlyList<OfficialSitePairRound>? seedRounds = null)
     {
         try
         {
             var comparer = new OfficialSitePairedComparer(
-                _selector.PageLoader, OfficialSitePairedComparer.DefaultGroups, _selector.PageTimeout);
+                _selector.PageLoader, groups, _selector.PageTimeout);
             return await comparer.CompareAsync(
-                candidateIp, baselineIp, Domain, _clock(), cancellationToken);
+                candidateIp, baselineIp, Domain, _clock(), cancellationToken, groups, seedRounds);
         }
         catch (OperationCanceledException)
         {
@@ -1119,7 +1344,7 @@ public sealed class OfficialSiteHostsGuardService
         catch (Exception ex)
         {
             return new OfficialSitePairComparison(
-                candidateIp, baselineIp, 0, Array.Empty<OfficialSitePairRound>(),
+                candidateIp, baselineIp, groups, seedRounds ?? Array.Empty<OfficialSitePairRound>(),
                 0, null, null, null, 0, false, "配对实测异常：" + ex.Message, _clock());
         }
     }
@@ -1522,6 +1747,21 @@ public sealed record OfficialSiteAdmissionCheck(
     OfficialSitePairComparison? Pairs,
     OfficialSiteCandidateResult Candidate);
 
+/// <summary>分级判定的阶段，供界面显示“当前在做什么、大概还要多久”。</summary>
+public enum OfficialSiteAdmissionStage
+{
+    FastScreening = 0,
+    FastRejected = 1,
+    SlowComparison = 2,
+    Completed = 3
+}
+
+/// <summary>判定进度：可读文案 + 预计剩余秒数（null 表示无法预估）。</summary>
+public sealed record OfficialSiteAdmissionProgress(
+    OfficialSiteAdmissionStage Stage,
+    string Message,
+    int? EstimatedRemainingSeconds);
+
 /// <summary>
 /// 主链路“先判后写”的唯一写入器：把内容里将要写入的 github.com 映射交给
 /// <see cref="OfficialSiteHostsGuardService.EvaluateAdmissionAsync"/>（与防护版同一判定），
@@ -1545,7 +1785,8 @@ public sealed class AcceleratedHostsWriter
     public async Task<AcceleratedHostsGateResult> EvaluateAsync(
         string hostsContent,
         string candidateSource,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IProgress<OfficialSiteAdmissionProgress>? progress = null)
     {
         var candidateIp = ExtractFirstIp(hostsContent, PrimaryDomain);
         if (string.IsNullOrEmpty(candidateIp))
@@ -1556,7 +1797,8 @@ public sealed class AcceleratedHostsWriter
 
         try
         {
-            var check = await _guard.EvaluateAdmissionAsync(candidateIp, candidateSource, cancellationToken);
+            var check = await _guard.EvaluateAdmissionAsync(
+                candidateIp, candidateSource, cancellationToken, progress);
             return new AcceleratedHostsGateResult(check.Allowed, check.DecisionText, candidateIp);
         }
         catch (OperationCanceledException)
@@ -1574,9 +1816,10 @@ public sealed class AcceleratedHostsWriter
         string hostsContent,
         string candidateSource,
         IHostsFileService hosts,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IProgress<OfficialSiteAdmissionProgress>? progress = null)
     {
-        var gate = await EvaluateAsync(hostsContent, candidateSource, cancellationToken);
+        var gate = await EvaluateAsync(hostsContent, candidateSource, cancellationToken, progress);
         if (gate.GateRejected)
             return new AcceleratedHostsWriteResult(false, false, gate.Message, gate.CandidateIp);
 

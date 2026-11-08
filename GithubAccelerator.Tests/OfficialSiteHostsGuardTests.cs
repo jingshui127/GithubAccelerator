@@ -1064,6 +1064,190 @@ public class OfficialSiteHostsGuardTests
         Assert.Null(PreflightTicket.Parse("not-an-ip@123"));
     }
 
+    // ---------------------------------------------------------------- 分级判定（快判 + 慢判）
+
+    private sealed class CollectingProgress : IProgress<OfficialSiteAdmissionProgress>
+    {
+        private readonly List<OfficialSiteAdmissionProgress> _items = new();
+
+        public IReadOnlyList<OfficialSiteAdmissionProgress> Items
+        {
+            get { lock (_items) return _items.ToList(); }
+        }
+
+        public void Report(OfficialSiteAdmissionProgress value)
+        {
+            lock (_items) _items.Add(value);
+        }
+    }
+
+    private sealed class CancelOnFirstPageLoad : IOfficialSitePageLoader
+    {
+        private readonly CancellationTokenSource _cts;
+        private int _calls;
+
+        public CancelOnFirstPageLoad(CancellationTokenSource cts) => _cts = cts;
+
+        public Task<OfficialSitePageSample> MeasureAsync(
+            string domain, string ip, TimeSpan timeout, CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref _calls) == 1) _cts.Cancel();
+            return Task.FromCanceled<OfficialSitePageSample>(cancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task EvaluateAdmission_FastReject_WhenGapFarBelowThreshold_StopsAfterTwoGroups()
+    {
+        using var temp = new TempGuard();
+        // 候选比直连慢 60%：远超 10 个百分点的快判安全边际
+        SetAllHealthy(temp, fastPageMs: 1600, baselinePageMs: 1000);
+        var progress = new CollectingProgress();
+
+        var check = await temp.Service.EvaluateAdmissionAsync(
+            FastIp, "主链路测试", CancellationToken.None, progress);
+
+        Assert.False(check.Allowed);
+        Assert.Contains("提前结束", check.DecisionText);
+        Assert.Contains("安全边际", check.DecisionText);
+        Assert.Contains("改善不了", check.DecisionText);
+        Assert.Equal(4, temp.Page.Calls);   // 2 组 × (候选 + 直连)，没跑慢判
+        var items = progress.Items;
+        Assert.Contains(items, p => p.Stage == OfficialSiteAdmissionStage.FastScreening);
+        Assert.Contains(items, p => p.Stage == OfficialSiteAdmissionStage.FastRejected);
+        Assert.DoesNotContain(items, p => p.Stage == OfficialSiteAdmissionStage.SlowComparison);
+    }
+
+    [Fact]
+    public async Task EvaluateAdmission_FastReject_WhenCandidatePageFailsBothGroups()
+    {
+        using var temp = new TempGuard();
+        SetAllHealthy(temp);
+        temp.Page.SetDefault(FastIp, PageFail("整页加载超时（2s）"));
+
+        var check = await temp.Service.EvaluateAdmissionAsync(FastIp, "主链路测试");
+
+        Assert.False(check.Allowed);
+        Assert.Contains("候选整页", check.DecisionText);
+        Assert.Contains("提前结束", check.DecisionText);
+        Assert.Equal(4, temp.Page.Calls);
+    }
+
+    [Fact]
+    public async Task EvaluateAdmission_FastReject_WhenCandidateProbeFailsTwice()
+    {
+        using var temp = new TempGuard();
+        SetAllHealthy(temp);
+        temp.Probe.SetDefault(FastIp, Fail("TCP 443 连接超时（5s）"));
+
+        var check = await temp.Service.EvaluateAdmissionAsync(FastIp, "主链路测试");
+
+        Assert.False(check.Allowed);
+        Assert.Contains("候选连接直接失败", check.DecisionText);
+        Assert.Contains("连续 2 次", check.DecisionText);
+        Assert.Equal(2, temp.Probe.Calls);   // 连续两次预筛失败即拒绝
+        Assert.Equal(0, temp.Page.Calls);    // 不进入整页加载
+    }
+
+    [Fact]
+    public async Task EvaluateAdmission_NearThreshold_ContinuesToFullComparison_AndStillRejects()
+    {
+        using var temp = new TempGuard();
+        // 只快 15%：落在“10% 安全边际 ~ 20% 门槛”之间，必须转慢判
+        SetAllHealthy(temp, fastPageMs: 850, baselinePageMs: 1000);
+        var progress = new CollectingProgress();
+
+        var check = await temp.Service.EvaluateAdmissionAsync(
+            FastIp, "主链路测试", CancellationToken.None, progress);
+
+        Assert.False(check.Allowed);
+        Assert.DoesNotContain("提前结束", check.DecisionText);
+        Assert.Contains("改善不了", check.DecisionText);
+        Assert.Equal(12, temp.Page.Calls);   // 快判 2 组 + 慢判补齐到 6 组
+        var items = progress.Items;
+        Assert.Contains(items, p => p.Stage == OfficialSiteAdmissionStage.SlowComparison);
+        Assert.Contains(items, p => p.Stage == OfficialSiteAdmissionStage.Completed);
+    }
+
+    [Fact]
+    public async Task EvaluateAdmission_OnlyOneValidFastPair_DoesNotFastReject()
+    {
+        using var temp = new TempGuard();
+        SetAllHealthy(temp, fastPageMs: 1600, baselinePageMs: 1000);
+        // 快判第 1 组直连整页失败 → 有效配对仅 1 组，不得据此拒绝
+        temp.Page.Set(BaselineIp, PageFail("直连整页超时"), PageOk(1000));
+
+        var check = await temp.Service.EvaluateAdmissionAsync(FastIp, "主链路测试");
+
+        Assert.False(check.Allowed);
+        Assert.DoesNotContain("提前结束", check.DecisionText);   // 交给慢判，而不是用 1 组样本拒绝
+        Assert.Equal(12, temp.Page.Calls);
+    }
+
+    [Fact]
+    public async Task EvaluateAdmission_FastReject_AgreesWithFullSixGroupComparison()
+    {
+        using var temp = new TempGuard();
+        SetAllHealthy(temp, fastPageMs: 1600, baselinePageMs: 1000);
+
+        var check = await temp.Service.EvaluateAdmissionAsync(FastIp, "主链路测试");
+        Assert.False(check.Allowed);
+
+        // 同样的实测条件走完整 6 组配对，结论必须也是“不达标”，不得出现相反结论
+        var fullPage = new DelegatePageLoader((ip, _) => ip == FastIp ? PageOk(1600) : PageOk(1000));
+        var full = await new OfficialSitePairedComparer(fullPage, groups: 6)
+            .CompareAsync(FastIp, BaselineIp, "github.com", Now, CancellationToken.None);
+
+        Assert.True(full.Stable);
+        Assert.False(full.MeetsThreshold);
+    }
+
+    [Fact]
+    public async Task PreflightElevationFlow_FastReject_NeverRequestsElevation()
+    {
+        using var temp = new TempGuard();
+        SetAllHealthy(temp, fastPageMs: 1600, baselinePageMs: 1000);
+        var writer = new AcceleratedHostsWriter(temp.Service);
+        var before = temp.Sha256();
+        var elevationCalls = 0;
+        var rejectionText = string.Empty;
+
+        var flow = new PreflightElevationFlow(
+            preflight: async () =>
+            {
+                var gate = await writer.EvaluateAsync($"{FastIp} github.com\n", "主链路测试");
+                rejectionText = gate.Message;
+                return gate.AdmissionAllowed && gate.CandidateIp != null
+                    ? PreflightTicket.Create(gate.CandidateIp, "主链路测试", DateTimeOffset.Now)
+                    : null;
+            },
+            requestElevation: _ =>
+            {
+                elevationCalls++;
+                return Task.CompletedTask;
+            });
+
+        Assert.False(await flow.RunAsync());
+        Assert.Equal(0, elevationCalls);              // 快判拒绝后一次提权都没有发起
+        Assert.Contains("提前结束", rejectionText);
+        Assert.Equal(before, temp.Sha256());          // Hosts 指纹不变
+    }
+
+    [Fact]
+    public async Task EvaluateAdmission_CancelDuringFastScreening_LeavesHostsUntouched()
+    {
+        using var cts = new CancellationTokenSource();
+        using var temp = new TempGuard(pageLoader: new CancelOnFirstPageLoad(cts));
+        SetAllHealthy(temp);   // 预筛通过，保证取消发生在整页快判阶段
+        var before = temp.Sha256();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            temp.Service.EvaluateAdmissionAsync(FastIp, "主链路测试", cts.Token));
+
+        Assert.Equal(before, temp.Sha256());
+        Assert.DoesNotContain(HostsFileManager.StartMarker, await temp.Hosts.ReadAsync());
+    }
+
     // ---------------------------------------------------------------- 提权续做实例的二次校验
 
     [Fact]
