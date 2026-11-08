@@ -90,6 +90,8 @@ public class OfficialSiteHostsGuardTests
 
         public int Calls { get; private set; }
 
+        public List<TimeSpan> Timeouts { get; } = new();
+
         public void Set(string ip, params OfficialSitePageSample[] samples)
         {
             lock (_lock)
@@ -125,6 +127,7 @@ public class OfficialSiteHostsGuardTests
             lock (_lock)
             {
                 Calls++;
+                Timeouts.Add(timeout);
                 if (_samples.TryGetValue(ip, out var queue) && queue.Count > 0)
                     return Task.FromResult(queue.Dequeue());
                 if (_defaults.TryGetValue(ip, out var fallback))
@@ -784,7 +787,7 @@ public class OfficialSiteHostsGuardTests
     {
         var page = new DelegatePageLoader((ip, n) =>
             ip == FastIp
-                ? (n <= 3 ? PageFail("整页加载超时（2s）") : PageOk(300))
+                ? (n <= 3 || n == 6 ? PageFail("整页加载超时（2s）") : PageOk(300))
                 : PageOk(900));
         var comparer = new OfficialSitePairedComparer(page, groups: 6, pageTimeout: TimeSpan.FromSeconds(2));
         var result = await comparer.CompareAsync(FastIp, BaselineIp, "github.com", Now, CancellationToken.None);
@@ -827,6 +830,9 @@ public class OfficialSiteHostsGuardTests
         private readonly Dictionary<string, int> _calls = new();
         private readonly object _lock = new();
 
+        public List<TimeSpan> Timeouts { get; } = new();
+        public List<string> RequestedIps { get; } = new();
+
         public DelegatePageLoader(Func<string, int, OfficialSitePageSample> factory) => _factory = factory;
 
         public Task<OfficialSitePageSample> MeasureAsync(
@@ -835,6 +841,8 @@ public class OfficialSiteHostsGuardTests
             int callIndex;
             lock (_lock)
             {
+                Timeouts.Add(timeout);
+                RequestedIps.Add(ip);
                 callIndex = (_calls.TryGetValue(ip, out var previous) ? previous : 0) + 1;
                 _calls[ip] = callIndex;
             }
@@ -1130,7 +1138,93 @@ public class OfficialSiteHostsGuardTests
         Assert.False(check.Allowed);
         Assert.Contains("候选整页", check.DecisionText);
         Assert.Contains("提前结束", check.DecisionText);
-        Assert.Equal(4, temp.Page.Calls);
+        Assert.Equal(3, temp.Page.Calls);   // 1 次整页超时 + 2 路短确认；候选失败后不再空等直连
+        Assert.Equal(2, check.Pairs!.Rounds.Count); // 仍是“连续 2 组失败”，没有减少失败次数要求
+    }
+
+    [Fact]
+    public async Task PairedComparer_AfterCandidateTimeout_UsesShortDualConfirmation_AndSkipsBaseline()
+    {
+        var loader = new DelegatePageLoader((ip, _) =>
+            ip == FastIp ? PageFail("整页加载超时（10s）") : PageOk(1000));
+        var comparer = new OfficialSitePairedComparer(
+            loader, groups: 2,
+            pageTimeout: TimeSpan.FromSeconds(10),
+            failedCandidateConfirmationTimeout: TimeSpan.FromSeconds(4));
+
+        var result = await comparer.CompareAsync(
+            FastIp, BaselineIp, "github.com", Now, CancellationToken.None, targetGroups: 2);
+
+        // 第 1 组一次 10s；第 2 组两路并发 4s 短确认；候选失败后不再测直连。
+        Assert.Equal(3, loader.Timeouts.Count);
+        Assert.Equal(TimeSpan.FromSeconds(10), loader.Timeouts[0]);
+        Assert.Contains(TimeSpan.FromSeconds(4), loader.Timeouts);
+        Assert.DoesNotContain(BaselineIp, loader.RequestedIps);
+        Assert.Equal(2, result.Rounds.Count);
+        Assert.All(result.Rounds, r => Assert.False(r.CandidateSuccess));
+        Assert.Equal(0, result.ValidPairs);
+    }
+
+    [Fact]
+    public async Task PairedComparer_AfterCandidateTimeout_IfConfirmationSucceeds_DoesNotRejectCandidate()
+    {
+        // 第 1 次超时；短确认的两路里有一路成功 → 候选仍被视为可达，本轮不得按“全部失败”拒绝。
+        var loader = new DelegatePageLoader((ip, call) =>
+        {
+            if (ip != FastIp) return PageOk(1000);
+            return call == 1 ? PageFail("整页加载超时（10s）") : PageOk(1800);
+        });
+        var comparer = new OfficialSitePairedComparer(
+            loader, groups: 2,
+            pageTimeout: TimeSpan.FromSeconds(10),
+            failedCandidateConfirmationTimeout: TimeSpan.FromSeconds(4));
+
+        var result = await comparer.CompareAsync(
+            FastIp, BaselineIp, "github.com", Now, CancellationToken.None, targetGroups: 2);
+
+        Assert.Equal(2, result.Rounds.Count);
+        Assert.True(result.Rounds[1].CandidateSuccess);
+        Assert.True(result.ValidPairs >= 1);
+        Assert.False(result.Rounds.All(r => !r.CandidateSuccess));
+    }
+
+    [Fact]
+    public async Task PairedComparer_AfterBaselineTimeout_UsesShortDualConfirmation_AndRejects()
+    {
+        var loader = new DelegatePageLoader((ip, _) =>
+            ip == FastIp ? PageOk(700) : PageFail("整页加载超时（10s）"));
+        var comparer = new OfficialSitePairedComparer(
+            loader, groups: 2,
+            pageTimeout: TimeSpan.FromSeconds(10),
+            failedCandidateConfirmationTimeout: TimeSpan.FromSeconds(4));
+
+        var result = await comparer.CompareAsync(
+            FastIp, BaselineIp, "github.com", Now, CancellationToken.None, targetGroups: 2);
+
+        // 第 1 组：候选 + 直连（10s 超时）；第 2 组：直连双路 4s 短确认，不再测候选。
+        Assert.Equal(4, loader.Timeouts.Count);
+        Assert.Equal(TimeSpan.FromSeconds(10), loader.Timeouts[0]);
+        Assert.Equal(2, loader.Timeouts.Count(t => t == TimeSpan.FromSeconds(4)));
+        Assert.Equal(1, loader.RequestedIps.Count(ip => ip == FastIp));
+        Assert.Equal(2, result.Rounds.Count);
+        Assert.All(result.Rounds, r => Assert.True(r.CandidateSuccess));
+        Assert.All(result.Rounds, r => Assert.False(r.BaselineSuccess));
+        Assert.Equal(0, result.ValidPairs);
+    }
+
+    [Fact]
+    public async Task EvaluateAdmission_BaselinePageFailsBothGroups_FastRejectsWithoutSlowPath()
+    {
+        using var temp = new TempGuard();
+        SetAllHealthy(temp, fastPageMs: 1600, baselinePageMs: 1000);
+        temp.Page.SetDefault(BaselineIp, PageFail("直连整页超时"));
+
+        var check = await temp.Service.EvaluateAdmissionAsync(FastIp, "主链路测试");
+
+        Assert.False(check.Allowed);
+        Assert.Contains("没有可比基线", check.DecisionText);
+        Assert.Contains("提前结束", check.DecisionText);
+        Assert.Equal(4, temp.Page.Calls);   // 候选 1 次 + 直连首测 1 次 + 双路短确认 2 次
     }
 
     [Fact]
@@ -1181,7 +1275,7 @@ public class OfficialSiteHostsGuardTests
 
         Assert.False(check.Allowed);
         Assert.DoesNotContain("提前结束", check.DecisionText);   // 交给慢判，而不是用 1 组样本拒绝
-        Assert.Equal(12, temp.Page.Calls);
+        Assert.Equal(13, temp.Page.Calls);   // 第 1 组直连失败后，第 2 组用双路短确认补测基线
     }
 
     [Fact]

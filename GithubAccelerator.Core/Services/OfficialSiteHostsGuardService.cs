@@ -593,7 +593,9 @@ public sealed record OfficialSitePairRound(
     int? BaselinePageMs,
     bool CandidateSuccess,
     bool BaselineSuccess,
-    string? Note)
+    string? Note,
+    string? CandidateFailureReason = null,
+    string? BaselineFailureReason = null)
 {
     /// <summary>候选 − 直连（负值表示候选更快）；两侧都成功才有意义。</summary>
     public int? DiffMs => CandidateSuccess && BaselineSuccess
@@ -702,15 +704,19 @@ public sealed class OfficialSitePairedComparer
     private readonly IOfficialSitePageLoader _pageLoader;
     private readonly int _groups;
     private readonly TimeSpan _pageTimeout;
+    private readonly TimeSpan _failedCandidateConfirmationTimeout;
 
     public OfficialSitePairedComparer(
         IOfficialSitePageLoader pageLoader,
         int groups = DefaultGroups,
-        TimeSpan? pageTimeout = null)
+        TimeSpan? pageTimeout = null,
+        TimeSpan? failedCandidateConfirmationTimeout = null)
     {
         _pageLoader = pageLoader;
         _groups = Math.Max(1, groups);
         _pageTimeout = pageTimeout ?? TimeSpan.FromSeconds(10);
+        var confirm = failedCandidateConfirmationTimeout ?? TimeSpan.FromSeconds(4);
+        _failedCandidateConfirmationTimeout = confirm > _pageTimeout ? _pageTimeout : confirm;
     }
 
     public int Groups => _groups;
@@ -738,24 +744,99 @@ public sealed class OfficialSitePairedComparer
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var candidate = await _pageLoader.MeasureAsync(domain, candidateIp, _pageTimeout, cancellationToken);
-            // 紧接着测直连（数秒内相邻完成），两侧在同一个网络波动窗口里
-            var baseline = await _pageLoader.MeasureAsync(domain, baselineIp, _pageTimeout, cancellationToken);
+            var last = rounds.Count > 0 ? rounds[^1] : null;
+            // 上一组候选“整页超时”后，下一组只做短确认：候选在 10s 内都没返回 HTML，
+            // 再用同样长的超时等一遍没有新信息。双路并发确认，任一路成功即视为“仍可达”，
+            // 避免把刚好能恢复的候选误杀；两路都失败才继续按“连续失败”判定。
+            var confirmCandidate = last != null
+                                   && !last.CandidateSuccess
+                                   && IsTimeoutFailure(last.CandidateFailureReason);
+            // 直连整页连续超时同理：没有直连基线就无法计算 20% 改善，早停不会误杀，
+            // 只会把“注定无法比较”的等待砍掉。
+            var confirmBaseline = last != null
+                                  && last.CandidateSuccess
+                                  && !last.BaselineSuccess
+                                  && IsTimeoutFailure(last.BaselineFailureReason);
 
-            var note = candidate.Success && baseline.Success
+            OfficialSitePageSample candidate;
+            OfficialSitePageSample? baseline = null;
+
+            if (confirmBaseline)
+            {
+                baseline = await MeasureBaselineConfirmationAsync(
+                    domain, baselineIp, cancellationToken).ConfigureAwait(false);
+                if (baseline.Success)
+                {
+                    // 直连在短确认里恢复：补一次候选整页，仍按正常配对记录，不误判为不可用。
+                    candidate = await _pageLoader.MeasureAsync(
+                        domain, candidateIp, _pageTimeout, cancellationToken);
+                }
+                else
+                {
+                    rounds.Add(new OfficialSitePairRound(
+                        group,
+                        null,
+                        null,
+                        true,
+                        false,
+                        $"直连整页连续超时：{baseline.FailureReason ?? "未知原因"}（候选本轮未测）",
+                        null,
+                        baseline.FailureReason));
+                    continue;
+                }
+            }
+            else if (confirmCandidate)
+            {
+                var first = _pageLoader.MeasureAsync(
+                    domain, candidateIp, _failedCandidateConfirmationTimeout, cancellationToken);
+                var second = _pageLoader.MeasureAsync(
+                    domain, candidateIp, _failedCandidateConfirmationTimeout, cancellationToken);
+                var attempts = await Task.WhenAll(first, second).ConfigureAwait(false);
+                candidate = attempts.FirstOrDefault(a => a.Success) ?? attempts[0];
+                if (candidate.Success)
+                {
+                    baseline = await _pageLoader.MeasureAsync(
+                        domain, baselineIp, _pageTimeout, cancellationToken);
+                }
+            }
+            else
+            {
+                candidate = await _pageLoader.MeasureAsync(
+                    domain, candidateIp, _pageTimeout, cancellationToken);
+                if (candidate.Success)
+                {
+                    baseline = await _pageLoader.MeasureAsync(
+                        domain, baselineIp, _pageTimeout, cancellationToken);
+                }
+            }
+
+            if (!candidate.Success)
+            {
+                // 候选整页已失败：该组不可能形成有效配对，直连不必再测。
+                // 这样烂网络窗口里不会在“注定失败”的候选上再叠加一次整页等待。
+                rounds.Add(new OfficialSitePairRound(
+                    group,
+                    candidate.TotalMs,
+                    baseline?.TotalMs,
+                    false,
+                    baseline?.Success ?? false,
+                    $"候选整页失败：{candidate.FailureReason ?? "未知原因"}（{(baseline == null ? "直连未测" : "直连已测")}）",
+                    candidate.FailureReason));
+                continue;
+            }
+
+            var note = baseline!.Success
                 ? null
-                : candidate.Success
-                    ? $"直连整页失败：{baseline.FailureReason ?? "未知原因"}"
-                    : baseline.Success
-                        ? $"候选整页失败：{candidate.FailureReason ?? "未知原因"}"
-                        : $"两侧整页均失败（候选：{candidate.FailureReason ?? "未知"}；直连：{baseline.FailureReason ?? "未知"}）";
+                : $"直连整页失败：{baseline.FailureReason ?? "未知原因"}";
             rounds.Add(new OfficialSitePairRound(
                 group,
                 candidate.TotalMs,
                 baseline.TotalMs,
-                candidate.Success,
+                true,
                 baseline.Success,
-                note));
+                note,
+                null,
+                baseline.FailureReason));
         }
 
         var valid = rounds.Where(r => r.DiffMs.HasValue).ToList();
@@ -773,6 +854,22 @@ public sealed class OfficialSitePairedComparer
             candidateMs, baselineMs, diffMs, baselineSuccess,
             stable, reason, measuredAt);
     }
+
+    /// <summary>直连整页超时后，用双路并发短确认；任一路成功即视为“直连仍可用”。</summary>
+    private async Task<OfficialSitePageSample> MeasureBaselineConfirmationAsync(
+        string domain, string baselineIp, CancellationToken cancellationToken)
+    {
+        var first = _pageLoader.MeasureAsync(
+            domain, baselineIp, _failedCandidateConfirmationTimeout, cancellationToken);
+        var second = _pageLoader.MeasureAsync(
+            domain, baselineIp, _failedCandidateConfirmationTimeout, cancellationToken);
+        var attempts = await Task.WhenAll(first, second).ConfigureAwait(false);
+        return attempts.FirstOrDefault(a => a.Success) ?? attempts[0];
+    }
+
+    /// <summary>只有“整页超时”才降级为短确认；其它失败（TLS/HTTP/内容校验）仍按原超时复测。</summary>
+    private static bool IsTimeoutFailure(string? reason)
+        => reason != null && reason.Contains("超时", StringComparison.Ordinal);
 
     /// <summary>
     /// 稳定性：有效配对不足 4 组，或差值符号在组间翻转 ≥2 次，都视为“波动过大”，不作准入依据。
@@ -1100,7 +1197,7 @@ public sealed class OfficialSiteHostsGuardService
         // 1. 快判：先做建连预筛，再跑 2 组配对（最坏约 4 次整页加载），明显不达标立即出结论。
         progress?.Report(new OfficialSiteAdmissionProgress(
             OfficialSiteAdmissionStage.FastScreening,
-            $"第 1/2 步：先检查候选能否连接，再用 {FastScreeningGroups} 组配对快速初判（约 5–10 秒，可取消）",
+            $"第 1/2 步：先检查候选能否连接，再用 {FastScreeningGroups} 组配对快速初判（约 5–15 秒，可取消）",
             EstimatedFastSeconds));
 
         var fastWatch = Stopwatch.StartNew();
@@ -1178,16 +1275,17 @@ public sealed class OfficialSiteHostsGuardService
         string candidateIp,
         CancellationToken cancellationToken)
     {
-        var first = await _selector.Probe.MeasureAsync(
+        // 两路并发探测：任一路成功即视为可达；两路都失败才算“连续 2 次失败”。
+        // 并发只压缩“确定不可达”的等待，不降低失败次数要求，也不影响后续配对。
+        var first = _selector.Probe.MeasureAsync(
             Domain, candidateIp, _selector.ProbeTimeout, cancellationToken);
+        var second = _selector.Probe.MeasureAsync(
+            Domain, candidateIp, _selector.ProbeTimeout, cancellationToken);
+        var results = await Task.WhenAll(first, second).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        if (first.Success) return null;
+        if (results.Any(r => r.Success)) return null;
 
-        var second = await _selector.Probe.MeasureAsync(
-            Domain, candidateIp, _selector.ProbeTimeout, cancellationToken);
-        if (second.Success) return null;
-
-        return second.FailureReason ?? first.FailureReason ?? "未得到可用连接";
+        return results[1].FailureReason ?? results[0].FailureReason ?? "未得到可用连接";
     }
 
     private static string BuildConnectivityRejectionText(
@@ -1201,8 +1299,8 @@ public sealed class OfficialSiteHostsGuardService
 
     /// <summary>
     /// 快判提前拒绝的唯一入口：理由必须写清“为什么不再等完整配对”。
-    /// 只有两种情况允许提前拒绝，且都不依赖“样本少”本身：
-    /// ① 连续 2 组候选整页都失败（连接直接不可用）；
+    /// 只有三种情况允许提前拒绝，且都不依赖“样本少”本身：
+    /// ① 连续 2 组候选整页都失败（候选连接直接不可用），或连续 2 组直连整页都失败（没有基线可比）；
     /// ② 2 组都取得有效配对，且改善幅度还不到阈值的一半（<see cref="OfficialSitePairComparison.ClearlyBelowThreshold"/>）。
     /// 有效配对不足 2 组时一律返回 null，交给慢判，避免小样本假拒绝。
     /// </summary>
@@ -1220,6 +1318,16 @@ public sealed class OfficialSiteHostsGuardService
                          ?? "整页加载失败";
             return $"拒绝应用：候选整页在初判 {fast.Rounds.Count} 组里全部失败（{reason}），" +
                    $"按同一门槛已经不可能达标，已提前结束；初判耗时 {seconds}s；检测时间 {time}。";
+        }
+
+        // ①-b 直连整页连续失败：没有基线就算不出 20% 改善，继续等也不会得到可比结果。
+        if (fast.Rounds.Count >= FastScreeningGroups
+            && fast.Rounds.All(r => r.CandidateSuccess && !r.BaselineSuccess))
+        {
+            var reason = fast.Rounds.Select(r => r.BaselineFailureReason)
+                .FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)) ?? "直连整页加载失败";
+            return $"拒绝应用：直连整页在初判 {fast.Rounds.Count} 组里连续失败（{reason}），" +
+                   $"没有可比基线，已提前结束；初判耗时 {seconds}s；检测时间 {time}。";
         }
 
         // 样本不足（有效配对 < 2 组）→ 一律进入慢判，绝不用小样本拒绝。
