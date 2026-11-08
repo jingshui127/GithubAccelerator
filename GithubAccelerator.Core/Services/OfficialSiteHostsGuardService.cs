@@ -1538,23 +1538,26 @@ public sealed class AcceleratedHostsWriter
         _guard = guard;
     }
 
-    public async Task<AcceleratedHostsWriteResult> WriteAsync(
+    /// <summary>
+    /// 只做准入门槛判定（只读：不发提权、不写 Hosts、不落状态文件）。
+    /// 用于“先判后提权”：非管理员也能完整跑完，判定不达标时连 UAC 都不弹。
+    /// </summary>
+    public async Task<AcceleratedHostsGateResult> EvaluateAsync(
         string hostsContent,
         string candidateSource,
-        IHostsFileService hosts,
         CancellationToken cancellationToken = default)
     {
         var candidateIp = ExtractFirstIp(hostsContent, PrimaryDomain);
         if (string.IsNullOrEmpty(candidateIp))
         {
-            return new AcceleratedHostsWriteResult(false, false,
+            return new AcceleratedHostsGateResult(false,
                 "候选内容里没有 github.com 映射，无法判断换 IP 是否有用，未写入 Hosts。", null);
         }
 
-        OfficialSiteAdmissionCheck check;
         try
         {
-            check = await _guard.EvaluateAdmissionAsync(candidateIp, candidateSource, cancellationToken);
+            var check = await _guard.EvaluateAdmissionAsync(candidateIp, candidateSource, cancellationToken);
+            return new AcceleratedHostsGateResult(check.Allowed, check.DecisionText, candidateIp);
         }
         catch (OperationCanceledException)
         {
@@ -1562,17 +1565,25 @@ public sealed class AcceleratedHostsWriter
         }
         catch (Exception ex)
         {
-            return new AcceleratedHostsWriteResult(false, false,
+            return new AcceleratedHostsGateResult(false,
                 $"准入校验没有跑完（{ex.Message}），未写入 Hosts。", candidateIp);
         }
+    }
 
-        if (!check.Allowed)
-            return new AcceleratedHostsWriteResult(false, false, check.DecisionText, candidateIp);
+    public async Task<AcceleratedHostsWriteResult> WriteAsync(
+        string hostsContent,
+        string candidateSource,
+        IHostsFileService hosts,
+        CancellationToken cancellationToken = default)
+    {
+        var gate = await EvaluateAsync(hostsContent, candidateSource, cancellationToken);
+        if (gate.GateRejected)
+            return new AcceleratedHostsWriteResult(false, false, gate.Message, gate.CandidateIp);
 
         var written = await hosts.ApplyGithubHostsAsync(hostsContent);
         return new AcceleratedHostsWriteResult(true, written,
-            written ? check.DecisionText : "准入通过，但 Hosts 写入失败（权限不足或文件被占用）。",
-            candidateIp);
+            written ? gate.Message : "准入通过，但 Hosts 写入失败（权限不足或文件被占用）。",
+            gate.CandidateIp);
     }
 
     /// <summary>从 hosts 内容里取某个域名的第一条映射 IP；忽略注释与行尾注释。</summary>
@@ -1611,3 +1622,84 @@ public sealed record AcceleratedHostsWriteResult(
 {
     public bool GateRejected => !AdmissionAllowed;
 }
+
+/// <summary>只读门槛判定结果（不提权、不写 Hosts）。</summary>
+public sealed record AcceleratedHostsGateResult(
+    bool AdmissionAllowed,
+    string Message,
+    string? CandidateIp)
+{
+    public bool GateRejected => !AdmissionAllowed;
+}
+
+/// <summary>
+/// 提权前判定票据：把“判过的候选 IP + 判定时间”带给提权后的实例。
+/// 续做实例先做新鲜度/一致性校验，再重新跑一次完整判定（不直接信任旧结论）。
+/// </summary>
+public sealed record PreflightTicket(
+    string CandidateIp,
+    string Source,
+    DateTimeOffset CheckedAt)
+{
+    public static readonly TimeSpan DefaultMaxAge = TimeSpan.FromMinutes(10);
+
+    public static PreflightTicket Create(string candidateIp, string source, DateTimeOffset checkedAt) =>
+        new(candidateIp, source, checkedAt);
+
+    /// <summary>命令行携带格式：<c>ip@unixSeconds</c>。</summary>
+    public string ToToken() => $"{CandidateIp}@{CheckedAt.ToUnixTimeSeconds()}";
+
+    public static PreflightTicket? Parse(string? token, string source = "主链路优选")
+    {
+        if (string.IsNullOrWhiteSpace(token)) return null;
+        var at = token.IndexOf('@');
+        if (at <= 0 || at == token.Length - 1) return null;
+
+        var ip = token[..at];
+        if (!IPAddress.TryParse(ip, out _)) return null;
+        if (!long.TryParse(token[(at + 1)..], out var seconds)) return null;
+
+        return new PreflightTicket(ip, source, DateTimeOffset.FromUnixTimeSeconds(seconds));
+    }
+
+    /// <summary>时间窗校验：判定不能太旧（默认 10 分钟）。</summary>
+    public bool IsFresh(DateTimeOffset now, TimeSpan? maxAge = null)
+    {
+        var age = now - CheckedAt;
+        return age >= TimeSpan.FromSeconds(-60) && age <= (maxAge ?? DefaultMaxAge);
+    }
+
+    /// <summary>内容一致性校验：新内容里即将写入的 github.com IP 必须仍是判过的那个。</summary>
+    public bool MatchesContent(string hostsContent) =>
+        string.Equals(
+            AcceleratedHostsWriter.ExtractFirstIp(hostsContent, AcceleratedHostsWriter.PrimaryDomain),
+            CandidateIp,
+            StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 续做实例的二次校验：票据是否仍然新鲜、候选是否仍是同一个。
+    /// 这一步只判断“旧结论还能不能当参考”；真正写入前仍会再跑一次完整判定。
+    /// </summary>
+    public PreflightValidation Validate(string hostsContent, DateTimeOffset now, TimeSpan? maxAge = null)
+    {
+        if (!IsFresh(now, maxAge))
+        {
+            return new PreflightValidation(false,
+                $"提权前的判定已过期（判定于 {CheckedAt:HH:mm:ss}），已重新判定");
+        }
+
+        if (!MatchesContent(hostsContent))
+        {
+            var current = AcceleratedHostsWriter.ExtractFirstIp(
+                hostsContent, AcceleratedHostsWriter.PrimaryDomain) ?? "（无 github.com 映射）";
+            return new PreflightValidation(false,
+                $"候选已变化（判定时 {CandidateIp}，现在是 {current}），已重新判定");
+        }
+
+        return new PreflightValidation(true,
+            $"判定仍有效（候选 {CandidateIp}，判定于 {CheckedAt:HH:mm:ss}）");
+    }
+}
+
+/// <summary>续做实例二次校验的结论；<see cref="IsUsable"/> 为 false 时只表示需要重新判定，不阻止写入。</summary>
+public sealed record PreflightValidation(bool IsUsable, string Text);

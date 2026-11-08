@@ -425,6 +425,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private string? _applyIssue;
     private ElevationResult? _lastElevationResult;
 
+    /// <summary>提权前判定票据：仅由提权续做实例使用，用于二次校验。</summary>
+    private PreflightTicket? _pendingPreflight;
+
     /// <summary>进行中（可取消）：由状态机派生，避免"按钮灰着但后台在跑"。</summary>
     public bool IsApplyingHosts => _accelState.IsBusy;
 
@@ -613,7 +616,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             case FailureKind.ElevationDenied:
             case FailureKind.HostsWriteDenied:
-                await RequestElevationAsync(LaunchIntent.ApplyHosts);
+                // 重试也走同一条“先判后提权”路径：管理员直接写，非管理员先判定再提权。
+                await ApplyHosts();
                 break;
             case FailureKind.AllMirrorsUnreachable:
                 await UseDirectConnection();
@@ -1363,6 +1367,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// </summary>
     private async Task<AcceleratedWriteOutcome> ApplyAcceleratedHostsAsync(string hostsContent)
     {
+        // 续做实例的二次校验：核对提权前的判定票据是否仍新鲜、候选是否未变。
+        ValidatePendingPreflight(hostsContent);
+
         try
         {
             await _backupService.EnsureFirstRunSnapshotAsync();
@@ -1423,6 +1430,21 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         return write.Written ? AcceleratedWriteOutcome.Success : AcceleratedWriteOutcome.WriteFailed;
+    }
+
+    /// <summary>
+    /// 续做实例的二次校验：核对提权前票据是否仍新鲜、候选是否仍是同一个。
+    /// 无论结论如何都不直接信任旧结论 —— 紧接着的写入仍会再跑一次完整门槛判定。
+    /// </summary>
+    private void ValidatePendingPreflight(string hostsContent)
+    {
+        var ticket = _pendingPreflight;
+        if (ticket == null) return;
+        _pendingPreflight = null;
+
+        var validation = ticket.Validate(hostsContent, DateTimeOffset.Now);
+        Log.Information("[Elevation] 续做二次校验：usable={Usable}，{Text}", validation.IsUsable, validation.Text);
+        XTrace.WriteLine($"[Elevation] 续做二次校验：{validation.Text}");
     }
 
     private enum AcceleratedWriteOutcome
@@ -1738,12 +1760,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanApplyHosts))]
     private async Task ApplyHosts()
     {
-        // 写系统 Hosts 需要管理员权限：按需提权，提权后由新实例接续本操作
+        // 写系统 Hosts 需要管理员权限。非管理员先做只读门槛判定（全程不弹 UAC），
+        // 判定达标后才请求提权；不达标直接结束，不写 Hosts。
         if (!IsAdmin)
         {
-            _accelState.BeginElevation();
-            RaiseAccelerationStateChanged();
-            await RequestElevationAsync(LaunchIntent.ApplyHosts);
+            await PreflightThenElevateAsync();
             return;
         }
 
@@ -1766,15 +1787,61 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// 需要管理员权限时按需提权：以管理员身份重启自身，并带上原操作意图。
+    /// 先判后提权：以当前（非管理员）身份跑完拉取/优选与 20% 准入判定；
+    /// 不达标直接结束（不弹 UAC、不写 Hosts），达标才携带判定票据进入提权。
+    /// </summary>
+    private async Task PreflightThenElevateAsync()
+    {
+        if (!BeginAcceleration()) return;
+
+        var flow = new PreflightElevationFlow(
+            preflight: async () =>
+            {
+                try
+                {
+                    return await ApplyHostsFromAllSources(writeHosts: false);
+                }
+                catch (Exception ex)
+                {
+                    _applyIssue = $"准入判定没有完成：{ex.Message}";
+                    StatusMessage = $"{_applyIssue}（未请求管理员权限，Hosts 未修改）";
+                    _historyService.Record(OperationType.HostsApplied, _applyIssue, false, ex.StackTrace);
+                    _notificationService.Error("准入判定", $"{_applyIssue}，未请求管理员权限：{ex.Message}");
+                    return null;
+                }
+                finally
+                {
+                    // 先回到稳定状态，状态机才允许从稳定态进入"等待提权"
+                    FinishAcceleration();
+                }
+            },
+            requestElevation: async ticket =>
+            {
+                _accelState.BeginElevation();
+                RaiseAccelerationStateChanged();
+                await RequestElevationAsync(LaunchIntent.ApplyHosts, ticket);
+            });
+
+        if (!await flow.RunAsync())
+        {
+            Log.Information("[Gate] 提权前判定未通过，未请求管理员权限，Hosts 未修改");
+            XTrace.WriteLine("[Gate] 提权前判定未通过，未请求 UAC");
+        }
+    }
+
+    /// <summary>
+    /// 需要管理员权限时按需提权：以管理员身份重启自身，并带上原操作意图（以及提权前的判定票据）。
     /// 用户取消 UAC 时保持当前进程可用，并明确告知系统 Hosts 未被修改。
     /// </summary>
-    private Task RequestElevationAsync(LaunchIntent intent)
+    private Task RequestElevationAsync(LaunchIntent intent, PreflightTicket? preflight = null)
     {
-        StatusMessage = "需要管理员权限写入系统 Hosts，正在请求提权…";
-        Log.Information("[Elevation] 按需提权，intent={Intent}", intent);
+        StatusMessage = preflight == null
+            ? "需要管理员权限写入系统 Hosts，正在请求提权…"
+            : $"判定通过（候选 {preflight.CandidateIp} 比直连快 ≥20%），正在请求管理员权限写入…";
+        Log.Information("[Elevation] 按需提权，intent={Intent}，preflight={Preflight}",
+            intent, preflight?.ToToken());
 
-        var result = ElevationService.RelaunchElevated(intent);
+        var result = ElevationService.RelaunchElevated(intent, preflight);
         _lastElevationResult = result;
         switch (result)
         {
@@ -1826,6 +1893,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         var intent = LaunchContext.ConsumeIntent();
         if (intent == LaunchIntent.None) return;
 
+        // 提权前的只读判定票据：只作为参考，写入前会重新准备候选并完整重判一次（二次校验）。
+        var preflight = intent == LaunchIntent.ApplyHosts ? LaunchContext.ConsumePreflight() : null;
+        _pendingPreflight = preflight;
+
         if (!IsAdmin)
         {
             Log.Warning("[Elevation] 接续意图 {Intent} 失败：仍未获得管理员权限", intent);
@@ -1834,7 +1905,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         StatusMessage = "已获得管理员权限，正在继续上次操作…";
-        Log.Information("[Elevation] 接续提权前的操作：{Intent}", intent);
+        Log.Information("[Elevation] 接续提权前的操作：{Intent}，判定票据={Ticket}",
+            intent, preflight?.ToToken() ?? "无");
 
         switch (intent)
         {
@@ -1850,8 +1922,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>
     /// 一键智能优化：自动拉取全部 3 个数据源，合并所有 IP 候选，
     /// DNS 实时解析 + HTTPS 探测，为每个域名选择最优 IP。
+    /// <para>
+    /// <paramref name="writeHosts"/> 为 false 时只做只读准入门槛判定并返回票据（供“先判后提权”），
+    /// 不写 Hosts、不建快照、不弹 UAC。
+    /// </para>
     /// </summary>
-    private async Task ApplyHostsFromAllSources()
+    private async Task<PreflightTicket?> ApplyHostsFromAllSources(bool writeHosts = true)
     {
         using var _trace = StardustMonitorService.Instance.BeginTrace("ApplyHosts", "AllSources");
 
@@ -1881,7 +1957,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         // 取消检查点：拉取完成后不再继续（不会写入 Hosts）
         AbortIfCanceled();
-        if (!_accelState.IsBusy) return;
+        if (!_accelState.IsBusy) return null;
         var validContents = fetchResults
             .Where(r => !string.IsNullOrEmpty(r.Content))
             .Select(r => r.Content!)
@@ -1905,7 +1981,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             }
 
             ShowFailureAdvice(FailureKind.AllMirrorsUnreachable);
-            return;
+            return null;
         }
 
         XTrace.WriteLine($"[ApplyHosts/All] 成功拉取 {validContents.Count}/{sources.Length} 个源");
@@ -1936,7 +2012,17 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
             // 取消检查点：优化完成后、写 Hosts 之前
             AbortIfCanceled();
-            if (!_accelState.IsBusy) return;
+            if (!_accelState.IsBusy) return null;
+
+            // 只读判定（先判后提权）：不建快照、不写 Hosts、不弹 UAC
+            if (!writeHosts)
+            {
+                var ticket = await PreflightGateAsync(optimizedContent);
+                if (ticket == null) return null;
+                SetAccelerationProgress(totalSteps, totalSteps, "准入门槛通过（等待管理员授权）");
+                StatusMessage = $"判定通过：候选 {ticket.CandidateIp} 比直连快 ≥20%，正在请求管理员权限写入…";
+                return ticket;
+            }
 
             // 4. 写入 hosts 文件（先过 20% 准入门槛；不达标不写）
             var outcome = await ApplyAcceleratedHostsAsync(optimizedContent);
@@ -2003,7 +2089,16 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
             // 优化失败，退化为直接应用合并后的原始内容
             AbortIfCanceled();
-            if (!_accelState.IsBusy) return;
+            if (!_accelState.IsBusy) return null;
+
+            if (!writeHosts)
+            {
+                StatusMessage = "IP 优化失败，改用原始合并内容做只读判定…";
+                var ticket = await PreflightGateAsync(mergedHosts);
+                if (ticket == null) return null;
+                StatusMessage = $"判定通过：候选 {ticket.CandidateIp} 比直连快 ≥20%，正在请求管理员权限写入…";
+                return ticket;
+            }
 
             _applyIssue = "IP 优选未完成（已应用原始合并内容）";
             StatusMessage = "IP 优化失败，使用原始合并内容...";
@@ -2024,6 +2119,52 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 ShowFailureAdvice(FailureKind.HostsWriteDenied);
             }
         }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 只读门槛判定：调用与写入完全相同的 20% 准入门槛链路，但不写 Hosts、不建快照、不提权。
+    /// 达标返回票据；不达标返回 null（此时一次也不写、不会请求 UAC）。
+    /// </summary>
+    private async Task<PreflightTicket?> PreflightGateAsync(string hostsContent)
+    {
+        var candidateIp = AcceleratedHostsWriter.ExtractFirstIp(
+            hostsContent, AcceleratedHostsWriter.PrimaryDomain);
+        StatusMessage = candidateIp == null
+            ? "正在校验准入（候选里没有 github.com 映射）..."
+            : $"正在比较候选 {candidateIp} 与直连（20% 门槛：候选需快 ≥20%）...";
+
+        AcceleratedHostsGateResult gate;
+        try
+        {
+            gate = await _acceleratedHostsWriter.EvaluateAsync(
+                hostsContent, "主链路优选", _applyCts?.Token ?? default);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _applyIssue = $"准入判定没有完成：{ex.Message}";
+            StatusMessage = $"{_applyIssue}（未请求管理员权限，Hosts 未修改）";
+            _historyService.Record(OperationType.HostsApplied, _applyIssue, false, ex.StackTrace);
+            return null;
+        }
+
+        if (gate.GateRejected || gate.CandidateIp == null)
+        {
+            _applyIssue = gate.Message;
+            StatusMessage = $"{gate.Message}（未请求管理员权限，Hosts 未修改）";
+            XTrace.WriteLine($"[Gate] 提权前判定未通过：{gate.Message}");
+            _historyService.Record(OperationType.HostsApplied, $"提权前准入门槛拒绝：{gate.Message}", false);
+            _notificationService.Warning("Hosts 未写入", gate.Message);
+            return null;
+        }
+
+        XTrace.WriteLine($"[Gate] 提权前判定通过：候选 {gate.CandidateIp}");
+        return PreflightTicket.Create(gate.CandidateIp, "主链路优选", DateTimeOffset.Now);
     }
     
     private async Task ApplyHostsFromSource(string sourceName, string sourceUrl, string[]? mirrorUrls = null)

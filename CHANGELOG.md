@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.2] - 2026-11-08
+
+### Changed
+- 非管理员点主按钮的顺序改为「先判、后提权」：先用当前身份跑完只读的 20% 准入门槛判定，达标后才请求管理员权限并写入；判定不通过时明确提示「当前网络换 IP 改善不了」，全程不弹 UAC、不写 Hosts
+- 提权续做实例携带判定票据（`--prechecked=ip@时间戳`），写入前先做新鲜度/候选一致性校验，再重新跑一次完整门槛判定（不信任旧结论）
+- 判定链路本身只读（不建快照、不写 Hosts、不提权），非管理员可完整执行
+
+### Added
+- 测试覆盖：不达标不触发提权且 Hosts 指纹不变、达标才提权并写入、续做票据的过期/候选变化二次校验
+
 ## [1.6.1] - 2026-11-07
 
 ### Fixed

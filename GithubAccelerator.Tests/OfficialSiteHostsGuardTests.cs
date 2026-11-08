@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using GithubAccelerator.Core.Services;
 using GithubAccelerator.Services;
+using PreflightElevationFlow = GithubAccelerator.UI.Services.PreflightElevationFlow;
 using Xunit;
 
 namespace GithubAccelerator.Tests;
@@ -954,5 +955,151 @@ public class OfficialSiteHostsGuardTests
 
         Assert.Equal("140.82.112.3", AcceleratedHostsWriter.ExtractFirstIp(content, "github.com"));
         Assert.Null(AcceleratedHostsWriter.ExtractFirstIp("# only comments\n", "github.com"));
+    }
+
+    // ---------------------------------------------------------------- 先判后提权（UAC 顺序）
+
+    [Fact]
+    public async Task PreflightElevationFlow_Rejected_DoesNotRequestElevationOrWriteHosts()
+    {
+        using var temp = new TempGuard();
+        // 候选比直连慢：不达标
+        SetAllHealthy(temp, fastPageMs: 1600, slowPageMs: 800, baselinePageMs: 1000);
+        var hosts = new CountingHostsFileService();
+        var writer = new AcceleratedHostsWriter(temp.Service);
+        var before = temp.Sha256();
+        var elevationCalls = 0;
+        var rejectionText = string.Empty;
+
+        var flow = new PreflightElevationFlow(
+            preflight: async () =>
+            {
+                var gate = await writer.EvaluateAsync($"{FastIp} github.com\n", "主链路测试");
+                rejectionText = gate.Message;
+                return gate.AdmissionAllowed && gate.CandidateIp != null
+                    ? PreflightTicket.Create(gate.CandidateIp, "主链路测试", DateTimeOffset.Now)
+                    : null;
+            },
+            requestElevation: _ =>
+            {
+                elevationCalls++;
+                return Task.CompletedTask;
+            });
+
+        var elevated = await flow.RunAsync();
+
+        Assert.False(elevated);
+        Assert.Equal(0, elevationCalls);              // 未调用提权、未启动新进程
+        Assert.Equal(0, hosts.ApplyCalls);            // 未写 Hosts
+        Assert.Equal(before, temp.Sha256());          // Hosts 指纹不变
+        Assert.Contains("改善不了", rejectionText);
+    }
+
+    [Fact]
+    public async Task PreflightElevationFlow_Admitted_ThenRequestsElevationAndWritesOnce()
+    {
+        using var temp = new TempGuard();
+        // 候选比直连快 ≥20%：达标
+        SetAllHealthy(temp, fastPageMs: 500, slowPageMs: 1200, baselinePageMs: 1000);
+        var hosts = new CountingHostsFileService();
+        var writer = new AcceleratedHostsWriter(temp.Service);
+        const string content = "20.27.177.113 github.com\n";
+        var elevationCalls = 0;
+        PreflightTicket? carried = null;
+
+        var flow = new PreflightElevationFlow(
+            preflight: async () =>
+            {
+                var gate = await writer.EvaluateAsync(content, "主链路测试");
+                return gate.AdmissionAllowed && gate.CandidateIp != null
+                    ? PreflightTicket.Create(gate.CandidateIp, "主链路测试", DateTimeOffset.Now)
+                    : null;
+            },
+            requestElevation: async ticket =>
+            {
+                elevationCalls++;
+                carried = ticket;
+                // 提权实例真正写入前会再跑一次完整判定（不信任旧结论）
+                await writer.WriteAsync(content, "主链路测试", hosts);
+            });
+
+        var elevated = await flow.RunAsync();
+
+        Assert.True(elevated);
+        Assert.Equal(1, elevationCalls);              // 达标才提权
+        Assert.Equal(1, hosts.ApplyCalls);            // 提权后才写入
+        Assert.Equal(content, hosts.LastContent);
+        Assert.Equal(FastIp, carried!.CandidateIp);
+    }
+
+    [Fact]
+    public async Task AcceleratedHostsWriter_EvaluateAsync_IsReadOnly_AndAdmitsWithoutWriting()
+    {
+        using var temp = new TempGuard();
+        SetAllHealthy(temp, fastPageMs: 500, slowPageMs: 1200, baselinePageMs: 1000);
+        var writer = new AcceleratedHostsWriter(temp.Service);
+        var before = temp.Sha256();
+
+        var gate = await writer.EvaluateAsync($"{FastIp} github.com\n", "主链路测试");
+
+        Assert.True(gate.AdmissionAllowed);
+        Assert.Equal(FastIp, gate.CandidateIp);
+        Assert.Equal(before, temp.Sha256());          // 只读判定不改 Hosts
+        Assert.DoesNotContain(HostsFileManager.StartMarker, await temp.Hosts.ReadAsync());
+    }
+
+    [Fact]
+    public void PreflightTicket_Token_RoundTripsIpAndTimestamp()
+    {
+        var checkedAt = new DateTimeOffset(2026, 11, 8, 10, 0, 0, TimeSpan.FromHours(8));
+        var ticket = PreflightTicket.Create(FastIp, "主链路优选", checkedAt);
+
+        var token = ticket.ToToken();
+        Assert.Equal($"{FastIp}@{checkedAt.ToUnixTimeSeconds()}", token);
+
+        var parsed = PreflightTicket.Parse(token);
+        Assert.NotNull(parsed);
+        Assert.Equal(FastIp, parsed!.CandidateIp);
+        Assert.Equal(checkedAt, parsed.CheckedAt);
+        Assert.Null(PreflightTicket.Parse("not-an-ip@123"));
+    }
+
+    // ---------------------------------------------------------------- 提权续做实例的二次校验
+
+    [Fact]
+    public void PreflightTicket_Validate_AcceptsFreshMatchingCandidate()
+    {
+        var now = new DateTimeOffset(2026, 11, 8, 10, 0, 0, TimeSpan.FromHours(8));
+        var ticket = PreflightTicket.Create(FastIp, "主链路优选", now.AddMinutes(-2));
+
+        var validation = ticket.Validate($"{FastIp} github.com\n", now);
+
+        Assert.True(validation.IsUsable);
+        Assert.Contains("仍有效", validation.Text);
+    }
+
+    [Fact]
+    public void PreflightTicket_Validate_RejectsExpiredTicket()
+    {
+        var now = new DateTimeOffset(2026, 11, 8, 10, 0, 0, TimeSpan.FromHours(8));
+        var ticket = PreflightTicket.Create(FastIp, "主链路优选", now.AddMinutes(-30));
+
+        var validation = ticket.Validate($"{FastIp} github.com\n", now);
+
+        Assert.False(validation.IsUsable);
+        Assert.Contains("已过期", validation.Text);
+    }
+
+    [Fact]
+    public void PreflightTicket_Validate_RejectsChangedCandidate()
+    {
+        var now = new DateTimeOffset(2026, 11, 8, 10, 0, 0, TimeSpan.FromHours(8));
+        var ticket = PreflightTicket.Create(FastIp, "主链路优选", now);
+
+        var validation = ticket.Validate($"{SlowIp} github.com\n", now);
+
+        Assert.False(validation.IsUsable);
+        Assert.Contains("候选已变化", validation.Text);
+        Assert.Contains(SlowIp, validation.Text);
     }
 }

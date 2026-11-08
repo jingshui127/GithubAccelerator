@@ -1,6 +1,8 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Threading.Tasks;
+using GithubAccelerator.Core.Services;
 
 namespace GithubAccelerator.UI.Services;
 
@@ -30,6 +32,9 @@ public static class LaunchContext
 
     public static bool IsElevatedRelaunch { get; private set; }
 
+    /// <summary>提权前已完成的只读判定票据（候选 IP + 判定时间），供续做实例做有效性校验。</summary>
+    public static PreflightTicket? PendingPreflight { get; private set; }
+
     public static void Parse(string[] args)
     {
         foreach (var arg in args)
@@ -46,6 +51,10 @@ public static class LaunchContext
                     PendingIntent = intent;
                 }
             }
+            else if (arg.StartsWith("--prechecked=", StringComparison.OrdinalIgnoreCase))
+            {
+                PendingPreflight = PreflightTicket.Parse(arg["--prechecked=".Length..]);
+            }
         }
     }
 
@@ -58,6 +67,43 @@ public static class LaunchContext
         PendingIntent = LaunchIntent.None;
         return intent;
     }
+
+    /// <summary>取走并清空提权前判定票据。</summary>
+    public static PreflightTicket? ConsumePreflight()
+    {
+        var ticket = PendingPreflight;
+        PendingPreflight = null;
+        return ticket;
+    }
+}
+
+/// <summary>
+/// “先判后提权”的最小编排：只有只读判定返回票据时才调用提权回调；
+/// 判定为 null（不达标 / 无候选 / 判定失败）时一次都不启动新进程。
+/// 之所以单独抽出来，是为了能用假回调断言“不达标不触发提权”。
+/// </summary>
+public sealed class PreflightElevationFlow
+{
+    private readonly Func<Task<PreflightTicket?>> _preflight;
+    private readonly Func<PreflightTicket, Task> _requestElevation;
+
+    public PreflightElevationFlow(
+        Func<Task<PreflightTicket?>> preflight,
+        Func<PreflightTicket, Task> requestElevation)
+    {
+        _preflight = preflight;
+        _requestElevation = requestElevation;
+    }
+
+    /// <summary>返回 true 表示已进入提权；false 表示判定未通过、提权回调未被调用。</summary>
+    public async Task<bool> RunAsync()
+    {
+        var ticket = await _preflight();
+        if (ticket == null) return false;
+
+        await _requestElevation(ticket);
+        return true;
+    }
 }
 
 /// <summary>
@@ -68,7 +114,8 @@ public static class ElevationService
     public static string? LastError { get; private set; }
 
     /// <param name="intent">提权后要继续执行的操作</param>
-    public static ElevationResult RelaunchElevated(LaunchIntent intent)
+    /// <param name="preflight">提权前已完成的只读判定票据（可选）</param>
+    public static ElevationResult RelaunchElevated(LaunchIntent intent, PreflightTicket? preflight = null)
     {
         LastError = null;
 
@@ -97,6 +144,10 @@ public static class ElevationService
 
         psi.ArgumentList.Add("--elevated");
         psi.ArgumentList.Add($"--intent={intent}");
+        if (preflight != null)
+        {
+            psi.ArgumentList.Add($"--prechecked={preflight.ToToken()}");
+        }
 
         try
         {

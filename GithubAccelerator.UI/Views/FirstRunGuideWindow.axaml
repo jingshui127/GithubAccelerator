@@ -102,7 +102,7 @@
                 </StackPanel>
 
                 <!-- 权限说明 -->
-                <TextBlock Text="点击后会开始写入系统网络设置。若当前账号没有管理员权限，系统会弹出一次确认，允许即可；在你点击之前，不会修改任何系统文件。"
+                <TextBlock Text="点击后会先做只读检查：当前网络换 IP 也快不了就不写入、不弹权限确认；只有检查通过、确实需要写入系统网络设置时，才会弹出一次管理员授权。在你点击之前，不会修改任何系统文件。"
                            FontSize="11" TextWrapping="Wrap"
                            Foreground="{DynamicResource SecondaryTextBrush}"/>
 
