@@ -133,7 +133,7 @@
                                 <!-- 错误信息（仅失败时显示） -->
                                 <Border IsVisible="{Binding IsFail}" Margin="0,8,0,0" Padding="10,6" CornerRadius="6"
                                         Background="#FFFFEBEE" BorderBrush="#FF5722" BorderThickness="1">
-                                    <TextBlock Text="{Binding ErrorMessage}" FontSize="11" Foreground="#C62828"
+                                    <TextBlock Text="{Binding ErrorMessageText}" FontSize="11" Foreground="#C62828"
                                                TextWrapping="Wrap"/>
                                 </Border>
                                 </StackPanel>

@@ -42,7 +42,7 @@ public partial class HealthCheckViewModel : ObservableObject
     private string _statusMessage = "点击「开始检测」诊断 GitHub 依赖站点可达性";
 
     [ObservableProperty]
-    private string _overallStatus = "未知";
+    private string _overallStatus = "尚未检测";
 
     [ObservableProperty]
     private bool _canCopy = false;

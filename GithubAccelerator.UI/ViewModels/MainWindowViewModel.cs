@@ -152,7 +152,7 @@ public partial class SourceStatusViewModel : ObservableObject
             await SourcePreviewWindow.ShowLoadingAsync(
                 topLevel,
                 $"📄 预览 - {Name}",
-                "正在通过多源 DNS 查询 GitHub IP...",
+                "正在用多个 DNS 源查询 GitHub 地址...",
                 async () =>
                 {
                     var chinaz = ChinazDnsService.Instance;
@@ -1455,15 +1455,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         var candidateIp = AcceleratedHostsWriter.ExtractFirstIp(
             hostsContent, AcceleratedHostsWriter.PrimaryDomain);
         StatusMessage = candidateIp == null
-            ? "正在校验准入（候选里没有 github.com 映射）..."
-            : $"正在比较候选 {candidateIp} 与直连（20% 门槛：候选需快 ≥20%）...";
+            ? "正在校验准入（备选 IP 里没有 github.com 映射）..."
+            : $"正在比较备选 IP {candidateIp} 与直连（备选 IP 需快 ≥20%）...";
 
         AcceleratedHostsWriteResult write;
         var gateWatch = Stopwatch.StartNew();
         try
         {
             // 提权后的写入同样先跑分级判定（同一套门槛），这里只负责把进度显示出来。
-            var progress = new Progress<OfficialSiteAdmissionProgress>(p => StatusMessage = p.Message);
+            var progress = new Progress<OfficialSiteAdmissionProgress>(p => StatusMessage = UiText.Plain(p.Message));
             write = await _acceleratedHostsWriter.WriteAsync(
                 hostsContent, "主链路优选", _hostsFileService, _applyCts?.Token ?? default, progress);
         }
@@ -1488,11 +1488,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         if (write.GateRejected)
         {
-            _applyIssue = write.Message;
-            StatusMessage = $"{write.Message}{TimingSuffix()}";
+            _applyIssue = UiText.Plain(write.Message);
+            StatusMessage = $"{_applyIssue}{TimingSuffix()}";
             XTrace.WriteLine($"[Gate] 拒绝写入 Hosts：{write.Message}");
             _historyService.Record(OperationType.HostsApplied, $"准入门槛拒绝写入：{write.Message}", false);
-            _notificationService.Warning("Hosts 未写入", write.Message);
+            _notificationService.Warning("Hosts 未写入", _applyIssue);
             return AcceleratedWriteOutcome.GateRejected;
         }
 
@@ -1658,12 +1658,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 await ApplyBestHostsForSpeedTestAsync();
                 if (!IsHostsApplied)
                 {
-                    // 候选被 20% 门槛拒绝：没有“应用后”状态可测，如实中止，不用直连数据冒充“加速后”。
+                    // 备选 IP 被 20% 门槛拒绝：没有“应用后”状态可测，如实中止，不用直连数据冒充“加速后”。
                     StatusMessage = string.IsNullOrEmpty(_applyIssue)
-                        ? "候选未通过 20% 准入门槛，未写入 Hosts，无法比较应用后耗时"
+                        ? "备选 IP 未通过 20% 准入门槛，未写入 Hosts，无法比较应用后耗时"
                         : $"未写入 Hosts，无法比较应用后耗时：{_applyIssue}";
-                    PostApplyLatency = "未应用（候选未达标）";
-                    _historyService.Record(OperationType.HostsApplied, "测速中止：候选未通过 20% 准入门槛", false);
+                    PostApplyLatency = "未应用（备选 IP 未达标）";
+                    _historyService.Record(OperationType.HostsApplied, "测速中止：备选 IP 未通过 20% 准入门槛", false);
                     return;
                 }
             }
@@ -1888,7 +1888,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         StatusMessage = preflight == null
             ? "需要管理员权限写入系统 Hosts，正在请求提权…"
-            : $"判定通过（候选 {preflight.CandidateIp} 比直连快 ≥20%），正在请求管理员权限写入…";
+            : $"判定通过（备选 IP {preflight.CandidateIp} 比直连快 ≥20%），正在请求管理员权限写入…";
         Log.Information("[Elevation] 按需提权，intent={Intent}，preflight={Preflight}",
             intent, preflight?.ToToken());
 
@@ -2060,7 +2060,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             var ticket = await PreflightGateAsync(optimizedContent, totalSteps);
             if (ticket == null) return null;
             SetAccelerationProgress(totalSteps, totalSteps, "准入门槛通过（等待管理员授权）");
-            StatusMessage = $"判定通过：候选 {ticket.CandidateIp} 比直连快 ≥20%，正在请求管理员权限写入…{TimingSuffix()}";
+            StatusMessage = $"判定通过：备选 IP {ticket.CandidateIp} 比直连快 ≥20%，正在请求管理员权限写入…{TimingSuffix()}";
             return ticket;
         }
 
@@ -2289,14 +2289,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         var candidateIp = AcceleratedHostsWriter.ExtractFirstIp(
             hostsContent, AcceleratedHostsWriter.PrimaryDomain);
         StatusMessage = candidateIp == null
-            ? "正在校验准入（候选里没有 github.com 映射）..."
-            : $"正在比较候选 {candidateIp} 与直连（20% 门槛：候选需快 ≥20%）...";
+            ? "正在校验准入（备选 IP 里没有 github.com 映射）..."
+            : $"正在比较备选 IP {candidateIp} 与直连（备选 IP 需快 ≥20%）...";
 
         // 分级判定的进度：快判 →（必要时）慢判，界面说明当前在做什么、大概还要多久。
         var progress = new Progress<OfficialSiteAdmissionProgress>(p =>
         {
-            StatusMessage = p.Message;
-            SetAccelerationProgress(3, totalSteps, p.Message);
+            StatusMessage = UiText.Plain(p.Message);
+            SetAccelerationProgress(3, totalSteps, UiText.Plain(p.Message));
         });
 
         AcceleratedHostsGateResult gate;
@@ -2325,11 +2325,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         if (gate.GateRejected || gate.CandidateIp == null)
         {
-            _applyIssue = gate.Message;
-            StatusMessage = $"{gate.Message}（未请求管理员权限，Hosts 未修改）{TimingSuffix()}";
+            _applyIssue = UiText.Plain(gate.Message);
+            StatusMessage = $"{_applyIssue}（未请求管理员权限，Hosts 未修改）{TimingSuffix()}";
             XTrace.WriteLine($"[Gate] 提权前判定未通过：{gate.Message}（判定 {_lastGateSeconds:0.0}s，端到端 {_lastSelectionTiming.FetchSeconds + _lastSelectionTiming.OptimizeSeconds + _lastGateSeconds:0.0}s，缓存命中={_lastSelectionTiming.FromCache}）");
             _historyService.Record(OperationType.HostsApplied, $"提权前准入门槛拒绝：{gate.Message}", false);
-            _notificationService.Warning("Hosts 未写入", gate.Message);
+            _notificationService.Warning("Hosts 未写入", _applyIssue);
             return null;
         }
 
@@ -2485,7 +2485,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         // DNS 探测源走特殊路径
         if (sourceUrl.StartsWith("dns:") || sourceUrl == "chinaz:dns")
         {
-            StatusMessage = $"正在通过多源 DNS 查询 GitHub IP...";
+            StatusMessage = $"正在用多个 DNS 源查询 GitHub 地址...";
             var chinazService = ChinazDnsService.Instance;
             var content = await chinazService.GenerateHostsContentAsync();
             return (content, sourceUrl, null);

@@ -52,13 +52,21 @@ namespace GithubAccelerator.UI.ViewModels
         private string _statusMessage = "未启动监控";
 
         [ObservableProperty]
-        private string _latencyStatus = "正常";
+        private string _latencyStatus = "等待数据";
 
         [ObservableProperty]
         private IList<double> _chartValues = new List<double>();
 
         [ObservableProperty]
         private double _chartMaxY = 1000;
+
+        /// <summary>是否已有成功采样：没有时统计值显示“—”，不显示会误导的 0 ms。</summary>
+        public bool HasSamples => ChartValues.Count > 0;
+
+        public string CurrentLatencyText => HasSamples ? $"{CurrentLatency} ms" : "—";
+        public string AverageLatencyText => HasSamples ? $"{AverageLatency} ms" : "—";
+        public string MinLatencyText => HasSamples ? $"{MinLatency} ms" : "—";
+        public string MaxLatencyText => HasSamples ? $"{MaxLatency} ms" : "—";
 
         public GitHubLatencyViewModel()
         {
@@ -140,6 +148,12 @@ namespace GithubAccelerator.UI.ViewModels
             }
 
             ChartValues = latencyValues;
+
+            OnPropertyChanged(nameof(HasSamples));
+            OnPropertyChanged(nameof(CurrentLatencyText));
+            OnPropertyChanged(nameof(AverageLatencyText));
+            OnPropertyChanged(nameof(MinLatencyText));
+            OnPropertyChanged(nameof(MaxLatencyText));
 
             if (latencyValues.Count > 0)
             {

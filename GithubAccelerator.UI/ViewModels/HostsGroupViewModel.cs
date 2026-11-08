@@ -332,16 +332,16 @@ public partial class HostsGroupViewModel : ObservableObject
                 content, AcceleratedHostsWriter.PrimaryDomain);
             if (!string.IsNullOrEmpty(githubIp))
             {
-                StatusMessage = $"正在比较分组里的 github.com 候选 {githubIp} 与直连（20% 门槛）...";
+                StatusMessage = $"正在比较分组里的 github.com 备选 IP {githubIp} 与直连（备选 IP 需快 ≥20%）...";
                 var guard = _admissionGuard ??= OfficialSiteHostsGuardService.CreateDefault();
                 var check = await guard.EvaluateAdmissionAsync(
                     githubIp, "分组规则", System.Threading.CancellationToken.None);
                 if (!check.Allowed)
                 {
-                    StatusMessage = check.DecisionText;
+                    StatusMessage = UiText.Plain(check.DecisionText);
                     _historyService.Record(OperationType.HostsApplied,
                         $"分组规则未通过 20% 准入：{check.DecisionText}", false);
-                    _notificationService.Warning("分组管理", check.DecisionText);
+                    _notificationService.Warning("分组管理", UiText.Plain(check.DecisionText));
                     return;
                 }
             }

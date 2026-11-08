@@ -67,7 +67,7 @@
         </Border>
 
         <!-- Description -->
-        <TextBlock Text="GitHub 加速器 Pro 是一款专为国内用户设计的 GitHub 访问加速工具。&#10;通过比较候选与直连的页面加载耗时，自动更新 Hosts 文件，&#10;帮助您快速、稳定地访问 GitHub 资源。" 
+        <TextBlock Text="GitHub 加速器 Pro 是一款专为国内用户设计的 GitHub 访问加速工具。&#10;通过比较备选 IP 与当前直连的整页打开耗时，自动更新 Hosts 文件，&#10;帮助您快速、稳定地访问 GitHub 资源。" 
                    FontSize="12" TextAlignment="Center" TextWrapping="Wrap"
                    HorizontalAlignment="Center"/>
 

@@ -82,6 +82,10 @@
                     <TextBlock Text="📋" FontSize="48" HorizontalAlignment="Center"/>
                     <TextBlock Text="暂无日志" FontSize="16" HorizontalAlignment="Center"
                                Foreground="{DynamicResource SecondaryTextBrush}"/>
+                    <TextBlock Text="执行检查、修复或恢复操作后，这里会出现记录；也可用上方类型和级别筛选。"
+                               FontSize="12" HorizontalAlignment="Center"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center" MaxWidth="380"/>
                 </StackPanel>
             </Panel>
         </Border>

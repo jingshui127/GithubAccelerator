@@ -41,6 +41,11 @@ public partial class HealthCheckItem : ObservableObject
     [ObservableProperty]
     private string _errorMessage = string.Empty;
 
+    /// <summary>失败时保证有一句可读说明，不出现空白或裸红叉。</summary>
+    public string ErrorMessageText => string.IsNullOrWhiteSpace(ErrorMessage)
+        ? "探测失败，但没有返回具体原因；可重试或换线路。"
+        : ErrorMessage;
+
     public string LatencyText => IsCanceled
         ? "已取消"
         : IsPending
@@ -90,6 +95,11 @@ public partial class HealthCheckItem : ObservableObject
     partial void OnLatencyMsChanged(long value)
     {
         OnPropertyChanged(nameof(LatencyText));
+    }
+
+    partial void OnErrorMessageChanged(string value)
+    {
+        OnPropertyChanged(nameof(ErrorMessageText));
     }
 }
 

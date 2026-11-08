@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GithubAccelerator.Core.Services;
 using GithubAccelerator.UI.Models;
+using GithubAccelerator.UI.Services;
 
 namespace GithubAccelerator.UI.ViewModels;
 
@@ -58,13 +59,13 @@ public partial class OfficialSiteDiagnosticsViewModel : ObservableObject
     private string _resolutionText = "解析耗时：—";
 
     [ObservableProperty]
-    private string _settingsText = "单次超时 5s · 并发上限 4 · 每 IP 采样 3 次取中位数";
+    private string _settingsText = "单次超时 5s · 并发上限 4 · 每个 IP 测 3 次取中间值";
 
     [ObservableProperty]
     private string _scopeText = string.Empty;
 
     [ObservableProperty]
-    private string _dohSourceText = "DoH 源状态：尚未查询";
+    private string _dohSourceText = "加密 DNS（DoH）源状态：尚未查询";
 
     [ObservableProperty]
     private string _directStatusText = "直连状态：尚未检测";
@@ -120,13 +121,13 @@ public partial class OfficialSiteDiagnosticsViewModel : ObservableObject
         _hasAttempted = true;
         IsRunning = true;
         ProgressText = string.Empty;
-        StatusMessage = "正在查询 DoH 并对候选 IP 做 TCP 443 + TLS 握手（只读）…";
+        StatusMessage = "正在用加密 DNS（DoH）查询备选 IP，并逐个测试能否建立加密连接（只读）…";
 
         try
         {
             var progress = new Progress<DiagnosticsProgress>(p =>
             {
-                ProgressText = $"已完成 {p.CompletedIpCount} / 共 {p.TotalIpCount} 个候选/基线 IP";
+                ProgressText = $"已完成 {p.CompletedIpCount} / 共 {p.TotalIpCount} 个备选 IP / 当前直连 IP";
             });
 
             var report = await _service.RunAsync(forceRefresh, progress);
@@ -152,13 +153,13 @@ public partial class OfficialSiteDiagnosticsViewModel : ObservableObject
     private void ApplyReport(OfficialSiteDiagnosticsReport report)
     {
         CheckedAtText = report.CheckedAt.ToString("yyyy-MM-dd HH:mm:ss");
-        ResolutionText = $"解析耗时：{report.ResolutionElapsedMs} ms（DoH 并行查询）";
-        SettingsText = $"单次超时 {report.TimeoutMs / 1000}s · 并发上限 {report.MaxConcurrency} · 每 IP 采样 {report.SampleCount} 次取中位数";
-        DirectStatusText = report.DirectUsableText;
+        ResolutionText = $"解析耗时：{report.ResolutionElapsedMs} ms（DoH 加密 DNS 并行查询）";
+        SettingsText = $"单次超时 {report.TimeoutMs / 1000}s · 并发上限 {report.MaxConcurrency} · 每个 IP 测 {report.SampleCount} 次取中间值";
+        DirectStatusText = UiText.Plain(report.DirectUsableText);
         IsDirectUsable = report.DirectUsable;
-        DohSourceText = BuildDohSourceText(report);
-        ConclusionTitle = report.ConclusionTitle;
-        ConclusionDetail = report.ConclusionDetail;
+        DohSourceText = UiText.Plain(BuildDohSourceText(report));
+        ConclusionTitle = UiText.Plain(report.ConclusionTitle);
+        ConclusionDetail = UiText.Plain(report.ConclusionDetail);
         ConclusionKind = report.ConclusionKind;
         ConclusionBadge = report.ConclusionKind switch
         {
@@ -188,7 +189,7 @@ public partial class OfficialSiteDiagnosticsViewModel : ObservableObject
             .Distinct()
             .ToList();
 
-        if (sourceNames.Count == 0) return "DoH 源状态：本次未执行查询";
+        if (sourceNames.Count == 0) return "加密 DNS（DoH）源状态：本次未执行查询";
 
         var parts = sourceNames.Select(name =>
         {
@@ -211,6 +212,6 @@ public partial class OfficialSiteDiagnosticsViewModel : ObservableObject
             return $"{name}：{ok}/{total} 成功（{string.Join("；", failures)}）";
         });
 
-        return "DoH 源状态：" + string.Join(" ｜ ", parts);
+        return "加密 DNS（DoH）源状态：" + string.Join(" ｜ ", parts);
     }
 }

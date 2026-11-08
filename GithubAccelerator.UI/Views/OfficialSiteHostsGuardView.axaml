@@ -37,7 +37,7 @@
                     Background="{DynamicResource ControlFillColorSecondaryBrush}">
                 <StackPanel Spacing="6">
                     <Grid ColumnDefinitions="80,*" ColumnSpacing="6">
-                        <TextBlock Grid.Column="0" Text="选中 IP（整页实测）" FontSize="10" Classes="SecondaryText"/>
+                        <TextBlock Grid.Column="0" Text="选中的 IP（整页打开实测）" FontSize="10" Classes="SecondaryText"/>
                         <TextBlock Grid.Column="1" Text="{Binding PreviewIpText}" FontSize="12" FontWeight="SemiBold"
                                    TextWrapping="Wrap"/>
                     </Grid>
@@ -47,7 +47,7 @@
                                    TextWrapping="Wrap" Classes="SecondaryText"/>
                     </Grid>
                     <Grid ColumnDefinitions="80,*" ColumnSpacing="6">
-                        <TextBlock Grid.Column="0" Text="候选/达标" FontSize="10" Classes="SecondaryText"/>
+                        <TextBlock Grid.Column="0" Text="备选 IP / 达标" FontSize="10" Classes="SecondaryText"/>
                         <TextBlock Grid.Column="1" Text="{Binding PreviewCountsText}" FontSize="10.5"
                                    TextWrapping="Wrap" Classes="SecondaryText"/>
                     </Grid>
@@ -62,7 +62,9 @@
                     IsVisible="{Binding HasPairingText}"
                     Background="{DynamicResource ControlFillColorSecondaryBrush}">
                 <StackPanel Spacing="4">
-                    <TextBlock Text="整页加载耗时对比（候选 vs 直连，不执行 JS）" FontSize="10" Classes="SecondaryText"/>
+                    <TextBlock Text="整页打开耗时对比（换 IP vs 直连，不执行页面脚本）" FontSize="10" Classes="SecondaryText"/>
+                    <TextBlock Text="怎么读：同一时段轮流测「换 IP」和「直连」，共 6 组；差值为负表示换 IP 更快。"
+                               FontSize="9.5" Classes="SecondaryText" TextWrapping="Wrap"/>
                     <TextBlock Text="{Binding PreviewPairingText}" FontSize="10.5"
                                FontFamily="Consolas" TextWrapping="Wrap"/>
                 </StackPanel>

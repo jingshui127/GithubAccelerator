@@ -46,7 +46,7 @@
                     <Border Grid.Column="1" Padding="10,6" CornerRadius="8"
                             Background="{DynamicResource ControlFillColorSecondaryBrush}">
                         <StackPanel Spacing="2">
-                            <TextBlock Text="解析耗时（DoH 并行查询）" FontSize="10" Classes="SecondaryText"/>
+                            <TextBlock Text="解析耗时（DoH 加密 DNS 并行查询）" FontSize="10" Classes="SecondaryText"/>
                             <TextBlock Text="{Binding ResolutionText}" FontSize="13" FontWeight="SemiBold"
                                        TextWrapping="Wrap"/>
                         </StackPanel>
@@ -111,7 +111,7 @@
                         BorderThickness="1"
                         BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                         IsVisible="{Binding !HasResult}">
-                    <TextBlock Text="尚无检测结果。点击右上角「重新检测」开始只读诊断；上方诊断不会写入 Hosts，也不需要管理员权限。"
+                    <TextBlock Text="尚无检测结果。点击右上角「重新检测」开始；本次检测不会写入 Hosts，也不需要管理员权限。"
                                FontSize="12" TextWrapping="Wrap" Classes="SecondaryText"/>
                 </Border>
 
@@ -127,10 +127,10 @@
                             <TextBlock Grid.Column="0" Text="域名" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"/>
                             <TextBlock Grid.Column="1" Text="IP" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"/>
                             <TextBlock Grid.Column="2" Text="来源" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"/>
-                            <TextBlock Grid.Column="3" Text="建立连接耗时（中位数）" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"
-                                       ToolTip.Tip="TLS 握手耗时，不含页面内容；每个 IP 采样 3 次取中位数"/>
+                            <TextBlock Grid.Column="3" Text="建立连接耗时（3 次取中间值）" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"
+                                       ToolTip.Tip="建立加密连接的耗时，不含页面内容；每个 IP 测 3 次取中间值"/>
                             <TextBlock Grid.Column="4" Text="可用性" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"/>
-                            <TextBlock Grid.Column="5" Text="与基线对比" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"/>
+                            <TextBlock Grid.Column="5" Text="与当前直连对比" FontSize="10" FontWeight="SemiBold" Classes="SecondaryText"/>
                         </Grid>
 
                         <Border Height="1" Background="{DynamicResource ControlStrokeColorDefaultBrush}"/>
@@ -147,7 +147,7 @@
                                                 <Border Grid.Column="1" Padding="4,1" CornerRadius="4"
                                                         Background="{DynamicResource ControlFillColorDisabledBrush}"
                                                         IsVisible="{Binding IsBaseline}" VerticalAlignment="Center">
-                                                    <TextBlock Text="基线" FontSize="9" Classes="SecondaryText"/>
+                                                    <TextBlock Text="当前直连" FontSize="9" Classes="SecondaryText"/>
                                                 </Border>
                                             </Grid>
                                             <TextBlock Grid.Column="1" Text="{Binding Ip}" FontSize="11"
@@ -172,7 +172,7 @@
                         <Border Padding="12,8" BorderThickness="0,1,0,0"
                                 BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
                             <TextBlock FontSize="10" TextWrapping="Wrap" Classes="SecondaryText"
-                                       Text="基线 = 系统当前解析（OS DNS）的 IP 实测结果；候选 = DoH 返回的 IP。对比阈值 20%：候选比基线快 20% 以上记为“更快”，慢 20% 以上记为“更慢”，其余为“相近”。每个 IP 采样 3 次取中位数，失败样本不参与排序。"/>
+                                       Text="怎么读：当前直连 = 系统现在解析到的 IP；备选 IP = 通过加密 DNS（DoH）查到的其他 IP。比当前直连快 20% 以上记「更快」，慢 20% 以上记「更慢」，其余记「相近」。每个 IP 测 3 次取中间值，失败样本不参与排序。"/>
                         </Border>
                     </StackPanel>
                 </Border>

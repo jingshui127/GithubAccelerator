@@ -77,6 +77,10 @@
                         <TextBlock Text="📋" FontSize="48" HorizontalAlignment="Center"/>
                         <TextBlock Text="无匹配行" FontSize="16" HorizontalAlignment="Center"
                                    Foreground="{DynamicResource SecondaryTextBrush}"/>
+                        <TextBlock Text="可能 Hosts 为空，或当前搜索没有匹配；点「刷新」或清空搜索再试。"
+                                   FontSize="12" HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   TextWrapping="Wrap" TextAlignment="Center" MaxWidth="380"/>
                     </StackPanel>
                 </Panel>
             </Border>

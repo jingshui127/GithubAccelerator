@@ -1,5 +1,6 @@
 using Avalonia.Media;
 using GithubAccelerator.Core.Services;
+using GithubAccelerator.UI.Services;
 
 namespace GithubAccelerator.UI.Models;
 
@@ -20,11 +21,11 @@ public sealed class OfficialSiteDiagnosticsRow
     {
         Domain = row.Domain;
         Ip = row.Ip;
-        Source = row.Source;
+        Source = UiText.Plain(row.Source);
         IsBaseline = row.IsBaseline;
         MedianText = row.MedianMs.HasValue ? $"{row.MedianMs.Value} ms" : "—";
-        AvailabilityText = row.AvailabilityText;
-        ComparisonText = row.ComparisonText;
+        AvailabilityText = UiText.Plain(row.AvailabilityText);
+        ComparisonText = UiText.Plain(row.ComparisonText);
         Comparison = row.Comparison;
         IsAvailable = row.Available;
     }
@@ -40,7 +41,7 @@ public sealed class OfficialSiteDiagnosticsRow
     public bool IsAvailable { get; }
     public BaselineComparison Comparison { get; }
 
-    public string RowTag => IsBaseline ? "基线" : "候选";
+    public string RowTag => IsBaseline ? "当前直连" : "备选 IP";
 
     public IBrush RowBackground => IsBaseline ? BaselineBackground : Transparent;
 

@@ -93,13 +93,13 @@
                                 BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                                 BorderThickness="1">
                             <StackPanel Spacing="5">
-                                <TextBlock Text="整页打开耗时（不执行 JS）" FontSize="13" FontWeight="SemiBold"/>
+                                <TextBlock Text="整页打开耗时（页面基本加载完）" FontSize="13" FontWeight="SemiBold"/>
                                 <TextBlock Text="{Binding OfficialSiteDiagnostics.Guard.PreviewPairingText}"
                                            IsVisible="{Binding OfficialSiteDiagnostics.Guard.HasPairingText}"
                                            FontSize="12" TextWrapping="Wrap"/>
                                 <TextBlock Text="尚未实测 — 点下方「去实测」" FontSize="12" Classes="SecondaryText"
                                            IsVisible="{Binding !OfficialSiteDiagnostics.Guard.HasPairingText}"/>
-                                <TextBlock Text="秒 · 页面基本加载完（不执行 JS）· 手动实测；只作相对比较，不是绝对真值。"
+                                <TextBlock Text="秒 · 页面基本加载完（不执行页面脚本）· 手动实测；只作相对比较，不是绝对真值。"
                                            FontSize="10" Classes="SecondaryText" TextWrapping="Wrap"/>
                                 <Button Content="去实测 ›" Command="{Binding ShowCheckAndRepairCommand}"
                                         Padding="10,4" FontSize="11" HorizontalAlignment="Left"/>
@@ -118,7 +118,7 @@
                                     <TextBlock Text="{Binding CurrentBestSourceText}" FontSize="11" Classes="SecondaryText"
                                                VerticalAlignment="Bottom"/>
                                 </StackPanel>
-                                <TextBlock Text="ms · 一次请求到首字节 · 最快线路 3 次中位数 · 每 10 秒"
+                                <TextBlock Text="ms · 一次请求到首字节 · 最快线路测 3 次取中间值 · 每 10 秒"
                                            FontSize="10" Classes="SecondaryText" TextWrapping="Wrap"/>
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <TextBlock Text="{Binding PreApplyLatency}" FontSize="11" Classes="SecondaryText" VerticalAlignment="Center"/>
@@ -178,7 +178,7 @@
                             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                                 <Button Content="重新开启加速" Command="{Binding ApplyHostsCommand}"
                                         Padding="10,4" FontSize="11"
-                                        ToolTip.Tip="先做只读判定（候选未快 20% 不写、不弹 UAC）；达标后才请求管理员权限写入 Hosts"/>
+                                        ToolTip.Tip="先做只读判定（备选 IP 未快 20% 不写、不弹 UAC）；达标后才请求管理员权限写入 Hosts"/>
                                 <Button Content="✕ 关闭" Command="{Binding DismissAllSourcesFailureCommand}"
                                         Padding="10,4" FontSize="11"
                                         Background="Transparent" BorderThickness="0"/>

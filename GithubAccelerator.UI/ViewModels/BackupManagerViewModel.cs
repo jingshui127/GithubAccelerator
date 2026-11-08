@@ -44,7 +44,7 @@ public partial class BackupItemViewModel : ObservableObject
         _onRefresh = onRefresh;
         _onStatusUpdate = onStatusUpdate;
 
-        BackupTimeText = backup.BackupTime.ToString("yyyy-MM-dd HH:mm:ss");
+        BackupTimeText = BackupManagerViewModel.FormatTime(backup.BackupTime);
         Note = backup.Note ?? string.Empty;
         HasNote = !string.IsNullOrEmpty(Note);
     }
@@ -185,6 +185,12 @@ public partial class BackupManagerViewModel : ObservableObject
         OnPropertyChanged(nameof(HasBackups));
     }
 
+    /// <summary>时间缺失时给出可读说明，不显示 0001-01-01 这类未初始化值。</summary>
+    internal static string FormatTime(DateTime value) =>
+        value == default || value.Year < 1970
+            ? "时间未知（文件可能已缺失）"
+            : value.ToString("yyyy-MM-dd HH:mm:ss");
+
     public BackupManagerViewModel()
     {
         _hostsFileService = new WindowsHostsFileService();
@@ -279,7 +285,7 @@ public partial class BackupManagerViewModel : ObservableObject
 
         var summary = await BuildRestoreSummaryAsync(backup);
         return await ConfirmAsync(
-            $"恢复到快照 {backup.BackupTime:yyyy-MM-dd HH:mm:ss}", summary);
+            $"恢复到快照 {FormatTime(backup.BackupTime)}", summary);
     }
 
     internal async Task<string> BuildRestoreSummaryAsync(HostsBackup backup)
@@ -303,7 +309,7 @@ public partial class BackupManagerViewModel : ObservableObject
         var hasBlock = _hostsFileService.IsGithubHostsApplied(current);
 
         var builder = new StringBuilder();
-        builder.AppendLine($"快照时间：{backup.BackupTime:yyyy-MM-dd HH:mm:ss}");
+        builder.AppendLine($"快照时间：{FormatTime(backup.BackupTime)}");
         builder.AppendLine($"快照内容：{backupLines} 行 / 当前 Hosts：{currentLines} 行");
         builder.AppendLine($"将被覆盖：约 {changedLines} 行与快照不同");
         builder.AppendLine(hasBlock

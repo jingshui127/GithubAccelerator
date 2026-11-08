@@ -67,7 +67,7 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
     private string _previewCountsText = "—";
 
     [ObservableProperty]
-    private string _previewBenefitText = "点击「预览并检测」查看将写入的域名、选中 IP 与预计收益；默认关闭，未确认不会写 Hosts。";
+    private string _previewBenefitText = "点击「预览整页实测」查看将写入的域名、选中的 IP 与预计收益；默认关闭，未确认不会写 Hosts。";
 
     /// <summary>交错配对表：每组两侧数值、配对差值、中位差值与稳定性判定。</summary>
     [ObservableProperty]
@@ -103,8 +103,8 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
 
     public string ScopeWarning =>
         "只写 github.com；不写 githubassets/avatars/camo 等 CDN 域；不改 DNS/代理/证书；" +
-        "不做后台常驻轮询。选优与准入看整页耗时：准入用 6 组交错配对的差值中位数，顺序测法仅作诊断、不作依据；" +
-        "配对符号反复翻转时明确标注“结果不稳定，不作准入依据”。整页度量不执行 JS，不等同浏览器。";
+        "不做后台常驻轮询。是否值得换，看 6 组「换 IP / 直连」交替对比的差值中间值；顺序测法只作诊断、不作依据；" +
+        "两组结果反复翻转时会标注“结果不稳定，不作依据”。整页打开只加载页面和主要样式/脚本，不执行页面里的脚本，不等同浏览器。";
 
     /// <summary>打开面板时读取状态；不联网、不写 Hosts（复测需要手动点击）。</summary>
     public async Task EnsureLoadedAsync()
@@ -160,40 +160,40 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
         _applyArmed = false;
         ApplyButtonText = "确认写入 Hosts";
         if (!IsEnabled) SetToggleSilently(true);
-        StatusText = "正在对候选与直连做交错配对整页实测（每轮 A/B 相邻完成，共 6 组；另含 3 轮顺序诊断，仅参考）…";
+        StatusText = "正在对「换 IP」和「直连」轮流做整页打开实测（共 6 组，每组 A/B 紧挨着测；另含 3 轮顺序诊断，仅参考）…";
 
         try
         {
             _lastPlan = await _service.PreviewAsync();
             HasPreview = true;
-            PreviewPairingText = _lastPlan.PairingText;
+            PreviewPairingText = UiText.Plain(_lastPlan.PairingText);
             var selected = _lastPlan.Selection.Selected;
             var qualified = _service.CountQualified(_lastPlan.Selection.Candidates);
             var baselineText = _lastPlan.BaselineIp == null
                 ? "直连：未解析到 IPv4"
-                : $"直连 {_lastPlan.BaselineIp}：{(_lastPlan.BaselinePageMedianMs.HasValue ? _lastPlan.BaselinePageMedianMs + "ms" : "整页不可用")}" +
+                : $"直连 {_lastPlan.BaselineIp}：{(_lastPlan.BaselinePageMedianMs.HasValue ? _lastPlan.BaselinePageMedianMs + "ms" : "整页打不开")}" +
                   $"（{_lastPlan.BaselinePageSuccessCount}/{_lastPlan.BaselinePageRounds}）";
 
             if (selected == null)
             {
                 CanApply = false;
-                PreviewIpText = "无整页可达候选";
+                PreviewIpText = "没有备选 IP 能整页打开";
                 PreviewSourceText = "—";
-                PreviewCountsText = $"候选 {_lastPlan.Selection.Candidates.Count} 个，达标 0 个；{baselineText}";
-                PreviewBenefitText = _lastPlan.ExpectedBenefitText;
-                StatusText = _lastPlan.DecisionText;
+                PreviewCountsText = $"备选 IP {_lastPlan.Selection.Candidates.Count} 个，达标 0 个；{baselineText}";
+                PreviewBenefitText = UiText.Plain(_lastPlan.ExpectedBenefitText);
+                StatusText = UiText.Plain(_lastPlan.DecisionText);
                 return;
             }
 
             CanApply = _lastPlan.CanApply;
-            PreviewIpText = $"{selected.Entry.Ip}（{selected.PageMetricText}；诊断 {selected.DiagnosticText}）";
-            PreviewSourceText = selected.Entry.Source + $"（加入时间 {selected.Entry.AddedAt:yyyy-MM-dd HH:mm}）";
-            PreviewCountsText = $"候选 {_lastPlan.Selection.Candidates.Count} 个，达标 {qualified} 个；" +
-                                $"选中 {selected.SuccessRateText}；{baselineText}；检测 {_lastPlan.PreviewedAt:yyyy-MM-dd HH:mm:ss}";
-            PreviewBenefitText = _lastPlan.ExpectedBenefitText;
+            PreviewIpText = $"{selected.Entry.Ip}（{UiText.Plain(selected.PageMetricText)}；诊断 {UiText.Plain(selected.DiagnosticText)}）";
+            PreviewSourceText = selected.Entry.Source + $"（加入时间 {(selected.Entry.AddedAt == default ? "时间未知" : selected.Entry.AddedAt.ToString("yyyy-MM-dd HH:mm"))}）";
+            PreviewCountsText = $"备选 IP {_lastPlan.Selection.Candidates.Count} 个，达标 {qualified} 个；" +
+                                $"选中 {UiText.Plain(selected.SuccessRateText)}；{baselineText}；检测 {(_lastPlan.PreviewedAt == default ? "时间未知" : _lastPlan.PreviewedAt.ToString("yyyy-MM-dd HH:mm:ss"))}";
+            PreviewBenefitText = UiText.Plain(_lastPlan.ExpectedBenefitText);
             StatusText = _lastPlan.CanApply
                 ? "预览完成，准入通过但尚未写入。确认域名、IP 与两侧实测后，再点击「确认写入 Hosts」。"
-                : _lastPlan.DecisionText;
+                : UiText.Plain(_lastPlan.DecisionText);
         }
         catch (Exception ex)
         {
@@ -240,7 +240,7 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
         {
             var result = await _service.ApplyAsync(_lastPlan);
             NeedsElevation = result.NeedsElevation;
-            StatusText = result.Message;
+            StatusText = UiText.Plain(result.Message);
             if (result.Success)
             {
                 IsApplied = true;
@@ -273,11 +273,11 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
     {
         if (IsBusy) return;
         IsBusy = true;
-        StatusText = "正在复测已应用 IP；失败会自动尝试下一候选，全部失效则回退…";
+        StatusText = "正在复测已应用的 IP；失败会自动尝试下一个备选 IP，全部失效则恢复原始状态…";
         try
         {
             var result = await _service.VerifyAndHealAsync();
-            StatusText = result.Message;
+            StatusText = UiText.Plain(result.Message);
             IsApplied = result.Outcome != OfficialSiteGuardHealOutcome.NotApplied
                         && result.Outcome != OfficialSiteGuardHealOutcome.RolledBack
                         && result.Ip != null;
@@ -322,7 +322,7 @@ public partial class OfficialSiteHostsGuardViewModel : ObservableObject
         try
         {
             var result = await _service.UndoAsync();
-            StatusText = result.Message;
+            StatusText = UiText.Plain(result.Message);
             IsApplied = false;
             SetToggleSilently(false);
             ApplyStateToUi(_service.GetState());
