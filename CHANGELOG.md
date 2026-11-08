@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.8] - 2026-11-08
+
+### Changed
+- 开启加速的判定过程会逐步说明进度：每完成一组对比就告诉你「目前比直连快/慢多少、距 20% 门槛还差几个百分点、还需再测几组」
+- 第 2 组出结果后立刻给出阶段性结论，并说明「再补几组确认」，不用再干等 20 多秒却没有反馈
+- 等待期间每秒刷新「已等待 N 秒」，长判定过程中不再有超过一秒的空档
+- 「中止本次加速」在判定全程都可以点；取消后不写入 Hosts、不请求管理员权限
+
 ## [1.6.7] - 2026-11-08
 
 ### Changed

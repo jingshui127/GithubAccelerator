@@ -728,7 +728,8 @@ public sealed class OfficialSitePairedComparer
         DateTimeOffset measuredAt,
         CancellationToken cancellationToken,
         int? targetGroups = null,
-        IReadOnlyList<OfficialSitePairRound>? seedRounds = null)
+        IReadOnlyList<OfficialSitePairRound>? seedRounds = null,
+        Action<IReadOnlyList<OfficialSitePairRound>, int>? onGroupCompleted = null)
     {
         // 快判先跑少量组，慢判在同一份 rounds 上继续补齐，避免重复测量、也避免两套算法。
         var target = Math.Max(1, targetGroups ?? _groups);
@@ -782,6 +783,7 @@ public sealed class OfficialSitePairedComparer
                         $"直连整页连续超时：{baseline.FailureReason ?? "未知原因"}（候选本轮未测）",
                         null,
                         baseline.FailureReason));
+                    onGroupCompleted?.Invoke(rounds, target);
                     continue;
                 }
             }
@@ -822,6 +824,7 @@ public sealed class OfficialSitePairedComparer
                     baseline?.Success ?? false,
                     $"候选整页失败：{candidate.FailureReason ?? "未知原因"}（{(baseline == null ? "直连未测" : "直连已测")}）",
                     candidate.FailureReason));
+                onGroupCompleted?.Invoke(rounds, target);
                 continue;
             }
 
@@ -837,6 +840,7 @@ public sealed class OfficialSitePairedComparer
                 note,
                 null,
                 baseline.FailureReason));
+            onGroupCompleted?.Invoke(rounds, target);
         }
 
         var valid = rounds.Where(r => r.DiffMs.HasValue).ToList();
@@ -1216,7 +1220,16 @@ public sealed class OfficialSiteHostsGuardService
         }
 
         var fast = await ComparePairsWithGroupsAsync(
-            candidateIp, baselineIp, FastScreeningGroups, cancellationToken);
+            candidateIp, baselineIp, FastScreeningGroups, cancellationToken,
+            onGroupCompleted: (roundsSoFar, target) =>
+            {
+                // 最后一组的结论由下一阶段（快判拒绝 / 慢判说明）统一给出，避免先报“还要再测”又立刻拒绝。
+                if (roundsSoFar.Count >= target) return;
+                progress?.Report(new OfficialSiteAdmissionProgress(
+                    OfficialSiteAdmissionStage.FastScreening,
+                    BuildFastGroupProgressText(roundsSoFar, target),
+                    EstimatedFastSeconds));
+            });
         fastWatch.Stop();
 
         var fastRejectText = BuildFastRejectionText(fast, fastWatch.Elapsed, checkedAt);
@@ -1243,14 +1256,32 @@ public sealed class OfficialSiteHostsGuardService
 
         var estimatedSlowSeconds = Math.Max(EstimatedFastSeconds,
             (int)Math.Ceiling(fastWatch.Elapsed.TotalSeconds * 2));
+        var (fastGapText, fastGapPoints) = DescribeRunningGap(fast.Rounds);
+        var fastGapClause = GapClause(fastGapPoints);
+        // 第 2 组出结果后就把“目前差多少、还要再测几组”讲清楚；后续每组再更新一次。
         progress?.Report(new OfficialSiteAdmissionProgress(
             OfficialSiteAdmissionStage.SlowComparison,
-            $"第 2/2 步：初判接近临界或有达标可能，正在做更精确的完整配对" +
-            $"（再补 {remainingGroups} 组，预计约 {estimatedSlowSeconds} 秒，可取消）",
+            $"初判 {fast.Rounds.Count}/{FastScreeningGroups} 组完成：{fastGapText}{fastGapClause}；" +
+            $"这一差距不够定论，再补 {remainingGroups} 组确认（预计约 {estimatedSlowSeconds} 秒，可随时中止）",
             estimatedSlowSeconds));
 
+        var slowWatch = Stopwatch.StartNew();
+        var slowSeedGroups = fast.Rounds.Count;
         var pairs = await ComparePairsWithGroupsAsync(
-            candidateIp, baselineIp, OfficialSitePairedComparer.DefaultGroups, cancellationToken, fast.Rounds);
+            candidateIp, baselineIp, OfficialSitePairedComparer.DefaultGroups, cancellationToken, fast.Rounds,
+            onGroupCompleted: (roundsSoFar, target) =>
+            {
+                var completedInSlow = roundsSoFar.Count - slowSeedGroups;
+                var remaining = Math.Max(0, target - roundsSoFar.Count);
+                var estimatedRemaining = remaining > 0 && completedInSlow > 0
+                    ? (int)Math.Ceiling(slowWatch.Elapsed.TotalSeconds / completedInSlow * remaining)
+                    : remaining * 6;
+                progress?.Report(new OfficialSiteAdmissionProgress(
+                    OfficialSiteAdmissionStage.SlowComparison,
+                    BuildSlowGroupProgressText(roundsSoFar, target, remaining),
+                    estimatedRemaining));
+            });
+        slowWatch.Stop();
 
         var decision = BuildAdmission(entry, baselineIp, baselineFailure, pairs, checkedAt);
         progress?.Report(new OfficialSiteAdmissionProgress(
@@ -1342,6 +1373,56 @@ public sealed class OfficialSiteHostsGuardService
                $"距 20% 门槛还差 {gapPoints:0.#} 个百分点，已超过 " +
                $"{OfficialSitePairComparison.FastRejectImprovementFraction * 100:0} 个百分点安全边际）；" +
                $"已提前结束，不再做完整配对；初判耗时 {seconds}s；检测时间 {time}。";
+    }
+
+    /// <summary>
+    /// 用已完成的组实时算“目前差多少”：只读展示，不参与任何判定。
+    /// 返回文案 + 距 20% 门槛还差几个百分点（null 表示这组还没形成有效对比）。
+    /// </summary>
+    private static (string Text, double? GapPoints) DescribeRunningGap(
+        IReadOnlyList<OfficialSitePairRound> rounds)
+    {
+        var valid = rounds.Where(r => r.DiffMs.HasValue).ToList();
+        var baselineMedian = OfficialSiteDiagnosticsService.ComputeMedian(
+            rounds.Where(r => r.BaselineSuccess).Select(r => (int?)r.BaselinePageMs));
+        var diffMedian = OfficialSiteDiagnosticsService.ComputeMedian(valid.Select(r => r.DiffMs));
+        if (!baselineMedian.HasValue || !diffMedian.HasValue || baselineMedian.Value <= 0)
+            return ("本组还没形成有效对比", null);
+
+        var fraction = (double)diffMedian.Value / baselineMedian.Value;
+        var gapPoints = (OfficialSitePairComparison.RequiredImprovementFraction + fraction) * 100;
+        var text = diffMedian.Value == 0
+            ? "目前与直连速度持平"
+            : fraction < 0
+                ? $"目前比直连快 {Math.Abs(fraction) * 100:0.#}%"
+                : $"目前比直连慢 {fraction * 100:0.#}%";
+        return (text, gapPoints);
+    }
+
+    private static string GapClause(double? gapPoints) =>
+        gapPoints.HasValue
+            ? gapPoints.Value <= 0
+                ? "，已达到“比直连快 20%”门槛"
+                : $"，距“比直连快 20%”还差 {gapPoints.Value:0.#} 个百分点"
+            : string.Empty;
+
+    private static string BuildFastGroupProgressText(
+        IReadOnlyList<OfficialSitePairRound> rounds, int target)
+    {
+        var (text, gapPoints) = DescribeRunningGap(rounds);
+        return $"初判 {rounds.Count}/{target} 组完成：{text}{GapClause(gapPoints)}；" +
+               $"还需 {target - rounds.Count} 组初判（可随时中止）";
+    }
+
+    private static string BuildSlowGroupProgressText(
+        IReadOnlyList<OfficialSitePairRound> rounds, int target, int remaining)
+    {
+        var (text, gapPoints) = DescribeRunningGap(rounds);
+        if (remaining <= 0)
+            return $"{target}/{target} 组已测完：{text}；正在汇总结论…";
+
+        return $"第 {rounds.Count}/{target} 组完成：{text}{GapClause(gapPoints)}；" +
+               $"还需 {remaining} 组确认（可随时中止）";
     }
 
     /// <summary>把快判/慢判的配对结果转换成既有的候选结果结构，供同一个 <see cref="BuildAdmission"/> 使用。</summary>
@@ -1436,14 +1517,16 @@ public sealed class OfficialSiteHostsGuardService
         string baselineIp,
         int groups,
         CancellationToken cancellationToken,
-        IReadOnlyList<OfficialSitePairRound>? seedRounds = null)
+        IReadOnlyList<OfficialSitePairRound>? seedRounds = null,
+        Action<IReadOnlyList<OfficialSitePairRound>, int>? onGroupCompleted = null)
     {
         try
         {
             var comparer = new OfficialSitePairedComparer(
                 _selector.PageLoader, groups, _selector.PageTimeout);
             return await comparer.CompareAsync(
-                candidateIp, baselineIp, Domain, _clock(), cancellationToken, groups, seedRounds);
+                candidateIp, baselineIp, Domain, _clock(), cancellationToken, groups, seedRounds,
+                onGroupCompleted);
         }
         catch (OperationCanceledException)
         {
@@ -1930,6 +2013,9 @@ public sealed class AcceleratedHostsWriter
         var gate = await EvaluateAsync(hostsContent, candidateSource, cancellationToken, progress);
         if (gate.GateRejected)
             return new AcceleratedHostsWriteResult(false, false, gate.Message, gate.CandidateIp);
+
+        // 用户在中止判定后又点了一次“中止”：即使判定刚好完成，也绝不写入 Hosts。
+        cancellationToken.ThrowIfCancellationRequested();
 
         var written = await hosts.ApplyGithubHostsAsync(hostsContent);
         return new AcceleratedHostsWriteResult(true, written,

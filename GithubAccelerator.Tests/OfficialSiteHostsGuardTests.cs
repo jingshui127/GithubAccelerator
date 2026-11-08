@@ -1104,6 +1104,49 @@ public class OfficialSiteHostsGuardTests
         }
     }
 
+    /// <summary>第 N 次整页加载时取消，用来锁定“慢判途中取消也不写 Hosts”。</summary>
+    private sealed class CancelOnNthPageLoad : IOfficialSitePageLoader
+    {
+        private readonly CancellationTokenSource _cts;
+        private readonly int _cancelAt;
+        private readonly Func<string, OfficialSitePageSample> _factory;
+        private int _calls;
+
+        public CancelOnNthPageLoad(
+            CancellationTokenSource cts, int cancelAt, Func<string, OfficialSitePageSample> factory)
+        {
+            _cts = cts;
+            _cancelAt = cancelAt;
+            _factory = factory;
+        }
+
+        public Task<OfficialSitePageSample> MeasureAsync(
+            string domain, string ip, TimeSpan timeout, CancellationToken cancellationToken)
+        {
+            var call = Interlocked.Increment(ref _calls);
+            if (call >= _cancelAt)
+            {
+                _cts.Cancel();
+                return Task.FromCanceled<OfficialSitePageSample>(cancellationToken);
+            }
+
+            return Task.FromResult(_factory(ip));
+        }
+    }
+
+    /// <summary>在“判定完成”这条进度上取消，锁定“判定刚结束也不会写入”的窗口。</summary>
+    private sealed class CancelOnCompletedProgress : IProgress<OfficialSiteAdmissionProgress>
+    {
+        private readonly CancellationTokenSource _cts;
+
+        public CancelOnCompletedProgress(CancellationTokenSource cts) => _cts = cts;
+
+        public void Report(OfficialSiteAdmissionProgress value)
+        {
+            if (value.Stage == OfficialSiteAdmissionStage.Completed) _cts.Cancel();
+        }
+    }
+
     [Fact]
     public async Task EvaluateAdmission_FastReject_WhenGapFarBelowThreshold_StopsAfterTwoGroups()
     {
@@ -1261,6 +1304,107 @@ public class OfficialSiteHostsGuardTests
         var items = progress.Items;
         Assert.Contains(items, p => p.Stage == OfficialSiteAdmissionStage.SlowComparison);
         Assert.Contains(items, p => p.Stage == OfficialSiteAdmissionStage.Completed);
+    }
+
+    [Fact]
+    public async Task PairedComparer_ReportsEveryCompletedGroup()
+    {
+        var loader = new DelegatePageLoader((ip, _) => ip == FastIp ? PageOk(850) : PageOk(1000));
+        var comparer = new OfficialSitePairedComparer(
+            loader, groups: 4, pageTimeout: TimeSpan.FromSeconds(2));
+        var snapshots = new List<(int Completed, int Target)>();
+
+        var result = await comparer.CompareAsync(
+            FastIp, BaselineIp, "github.com", Now, CancellationToken.None, targetGroups: 4,
+            onGroupCompleted: (rounds, target) => snapshots.Add((rounds.Count, target)));
+
+        Assert.Equal(4, result.Rounds.Count);
+        Assert.Equal(new[] { 1, 2, 3, 4 }, snapshots.Select(s => s.Completed).ToArray());
+        Assert.All(snapshots, s => Assert.Equal(4, s.Target));
+
+        // 回调只加进度，不改判定：结果与不传回调时一致。
+        var plain = await comparer.CompareAsync(
+            FastIp, BaselineIp, "github.com", Now, CancellationToken.None, targetGroups: 4);
+        Assert.Equal(plain.MedianDiffMs, result.MedianDiffMs);
+        Assert.Equal(plain.ValidPairs, result.ValidPairs);
+        Assert.Equal(plain.Stable, result.Stable);
+    }
+
+    [Fact]
+    public async Task EvaluateAdmission_NearThreshold_ReportsGapAfterSecondGroup_ThenPerGroup()
+    {
+        using var temp = new TempGuard();
+        // 只快 15%：落入门槛附近，必须转慢判（最慢、也最常见的结局）。
+        SetAllHealthy(temp, fastPageMs: 850, baselinePageMs: 1000);
+        var progress = new CollectingProgress();
+
+        var check = await temp.Service.EvaluateAdmissionAsync(
+            FastIp, "主链路测试", CancellationToken.None, progress);
+
+        Assert.False(check.Allowed);
+        Assert.Contains("改善不了", check.DecisionText);
+
+        var texts = progress.Items.Select(p => p.Message).ToList();
+
+        // 第 1 组完成即给出“目前差多少 + 还需几组”，不留无反馈空档。
+        Assert.Contains(texts, t => t.Contains("初判 1/2 组完成")
+                                    && t.Contains("目前比直连快 15%")
+                                    && t.Contains("还需 1 组初判"));
+
+        // 第 2 组出结果后立刻给出阶段性结论与剩余组数。
+        Assert.Contains(texts, t => t.Contains("初判 2/2 组完成")
+                                    && t.Contains("目前比直连快 15%")
+                                    && t.Contains("还差 5 个百分点")
+                                    && t.Contains("再补 4 组确认"));
+
+        // 慢判每完成一组更新一次，剩余组数逐组递减。
+        Assert.Contains(texts, t => t.Contains("第 3/6 组完成") && t.Contains("还需 3 组确认"));
+        Assert.Contains(texts, t => t.Contains("第 4/6 组完成") && t.Contains("还需 2 组确认"));
+        Assert.Contains(texts, t => t.Contains("第 5/6 组完成") && t.Contains("还需 1 组确认"));
+        Assert.Contains(texts, t => t.Contains("6/6 组已测完") && t.Contains("正在汇总结论"));
+
+        // 组数没变、门槛没变：仍是 12 次整页加载（快判 2 组 + 慢判补齐到 6 组）。
+        Assert.Equal(12, temp.Page.Calls);
+    }
+
+    [Fact]
+    public async Task EvaluateAdmission_CancelDuringSlowComparison_LeavesHostsUntouched()
+    {
+        using var cts = new CancellationTokenSource();
+        // 快判 4 次整页都正常；第 5 次（慢判第 1 组）取消。
+        var loader = new CancelOnNthPageLoad(
+            cts, cancelAt: 5, ip => ip == FastIp ? PageOk(850) : PageOk(1000));
+        using var temp = new TempGuard(pageLoader: loader);
+        SetAllHealthy(temp, fastPageMs: 850, baselinePageMs: 1000);
+        var before = temp.Sha256();
+        var progress = new CollectingProgress();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            temp.Service.EvaluateAdmissionAsync(FastIp, "主链路测试", cts.Token, progress));
+
+        Assert.Equal(before, temp.Sha256());
+        Assert.DoesNotContain(HostsFileManager.StartMarker, await temp.Hosts.ReadAsync());
+        Assert.Contains(progress.Items, p => p.Stage == OfficialSiteAdmissionStage.SlowComparison
+                                            && p.Message.Contains("再补 4 组确认"));
+    }
+
+    [Fact]
+    public async Task AcceleratedHostsWriter_WriteAsync_WhenCanceledRightAfterGate_DoesNotWrite()
+    {
+        using var temp = new TempGuard();
+        SetAllHealthy(temp, fastPageMs: 500, baselinePageMs: 1000);
+        var hosts = new CountingHostsFileService();
+        var writer = new AcceleratedHostsWriter(temp.Service);
+        using var cts = new CancellationTokenSource();
+        var before = temp.Sha256();
+
+        // 判定刚好完成（Completed 进度）时取消：不得写入 Hosts。
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            writer.WriteAsync($"{FastIp} github.com\n", "主链路测试", hosts, cts.Token,
+                new CancelOnCompletedProgress(cts)));
+
+        Assert.Equal(0, hosts.ApplyCalls);
+        Assert.Equal(before, temp.Sha256());
     }
 
     [Fact]

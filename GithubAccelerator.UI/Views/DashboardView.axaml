@@ -59,8 +59,9 @@
                         <TextBlock Text="{Binding AvailabilityConclusion}" FontSize="20" FontWeight="Bold" TextWrapping="Wrap"/>
                         <TextBlock Text="{Binding AvailabilityDetail}" FontSize="12" Classes="SecondaryText" TextWrapping="Wrap"/>
                         <TextBlock Text="{Binding AccelerationProgressText}" FontSize="11" FontWeight="SemiBold"
+                                   TextWrapping="Wrap" MinHeight="30"
                                    IsVisible="{Binding IsApplyingHosts}"
-                                   ToolTip.Tip="确定进度：只报已完成项数，不猜百分比"/>
+                                   ToolTip.Tip="确定进度：只报已完成的组数与项数，不猜百分比；等待秒数每秒刷新"/>
 
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Button Content="🚀 开启网页加速" Command="{Binding ApplyHostsCommand}"

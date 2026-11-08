@@ -12,6 +12,7 @@ using System.Windows.Input;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GithubAccelerator.Core.Services;
@@ -511,7 +512,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _applyCts?.Dispose();
         _applyCts = new CancellationTokenSource();
         _applyIssue = null;
-        AccelerationProgressText = "已完成 0 项，准备开始…";
+        _progressTotal = 0;
+        _progressDone = 0;
+        _progressPhase = "已完成 0 项，准备开始…";
+        AccelerationProgressText = _progressPhase;
+        _progressWatch.Restart();
+        StartProgressTicker();
         HasAllSourcesFailure = false;
         AllSourcesFailureText = string.Empty;
         RaiseAccelerationStateChanged();
@@ -538,16 +544,54 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _applyIssue = null;
         _applyCts?.Dispose();
         _applyCts = null;
+        StopProgressTicker();
+        _progressTotal = 0;
+        _progressPhase = string.Empty;
         AccelerationProgressText = string.Empty;
         RaiseAccelerationStateChanged();
     }
 
     private bool IsCancelRequested => _applyCts?.IsCancellationRequested == true;
 
-    /// <summary>设置确定进度：只报已完成的项数，不猜百分比。</summary>
+    /// <summary>
+    /// 每秒刷新一次“已等待 N 秒”，保证长判定过程中没有超过一秒的无反馈空档。
+    /// 这里只改显示，不改任何判定或写入行为。
+    /// </summary>
+    private void StartProgressTicker()
+    {
+        StopProgressTicker();
+        _progressTicker = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _progressTicker.Tick += (_, _) => RefreshAccelerationProgressText();
+        _progressTicker.Start();
+    }
+
+    private void StopProgressTicker()
+    {
+        if (_progressTicker == null) return;
+        _progressTicker.Stop();
+        _progressTicker = null;
+    }
+
+    /// <summary>设置确定进度：只报已完成的项数，不猜百分比；等待秒数由计时器刷新。</summary>
     private void SetAccelerationProgress(int done, int total, string phase)
     {
-        AccelerationProgressText = $"已完成 {done}/共 {total} 项（{phase}）";
+        _progressDone = done;
+        _progressTotal = total;
+        _progressPhase = phase;
+        RefreshAccelerationProgressText();
+    }
+
+    private void RefreshAccelerationProgressText()
+    {
+        if (_progressTotal <= 0)
+        {
+            AccelerationProgressText = _progressPhase;
+            return;
+        }
+
+        var seconds = (int)Math.Max(0, _progressWatch.Elapsed.TotalSeconds);
+        AccelerationProgressText =
+            $"已完成 {_progressDone}/共 {_progressTotal} 项 · {_progressPhase} · 已等待 {seconds} 秒";
     }
 
     /// <summary>取消当前进行中的任务：不会写入 Hosts，回到上一个稳定状态。</summary>
@@ -566,6 +610,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         _accelState.Cancel();
         _applyIssue = null;
+        StopProgressTicker();
+        _progressTotal = 0;
+        _progressPhase = string.Empty;
         AccelerationProgressText = string.Empty;
         RaiseAccelerationStateChanged();
         StatusMessage = "已取消：Hosts 未被修改";
@@ -592,6 +639,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>进行中任务的确定进度：已完成 X/共 N 项（不编造百分比）。</summary>
     [ObservableProperty]
     private string _accelerationProgressText = string.Empty;
+
+    /// <summary>进度文案的当前阶段，供每秒刷新“已等待 N 秒”时复用。</summary>
+    private string _progressPhase = string.Empty;
+    private int _progressDone;
+    private int _progressTotal;
+    private readonly Stopwatch _progressWatch = new();
+    private DispatcherTimer? _progressTicker;
 
     /// <summary>全部数据源失败详情：检测时间 + 每个源的原因 + 直连动作。</summary>
     [ObservableProperty]
@@ -1467,7 +1521,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         try
         {
             // 提权后的写入同样先跑分级判定（同一套门槛），这里只负责把进度显示出来。
-            var progress = new Progress<OfficialSiteAdmissionProgress>(p => StatusMessage = UiText.Plain(p.Message));
+            var progress = new Progress<OfficialSiteAdmissionProgress>(p =>
+            {
+                // 取消后不再接受迟到的进度，避免把“已取消”覆盖回“还在测”。
+                if (!IsApplyingHosts || IsCancelRequested) return;
+                StatusMessage = UiText.Plain(p.Message);
+            });
             write = await _acceleratedHostsWriter.WriteAsync(
                 hostsContent, "主链路优选", _hostsFileService, _applyCts?.Token ?? default, progress);
         }
@@ -1876,6 +1935,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             },
             requestElevation: async ticket =>
             {
+                // 判定刚结束、UAC 还没弹出的瞬间用户点了“中止”：不再提权。
+                if (IsCancelRequested)
+                {
+                    AbortIfCanceled();
+                    return;
+                }
+
                 _accelState.BeginElevation();
                 RaiseAccelerationStateChanged();
                 await RequestElevationAsync(LaunchIntent.ApplyHosts, ticket);
@@ -2303,6 +2369,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         // 分级判定的进度：快判 →（必要时）慢判，界面说明当前在做什么、大概还要多久。
         var progress = new Progress<OfficialSiteAdmissionProgress>(p =>
         {
+            // 取消后不再接受迟到的进度，避免把“已取消”覆盖回“还在测”。
+            if (!IsApplyingHosts || IsCancelRequested) return;
             StatusMessage = UiText.Plain(p.Message);
             SetAccelerationProgress(3, totalSteps, UiText.Plain(p.Message));
         });
@@ -2330,6 +2398,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             gateWatch.Stop();
             _lastGateSeconds = gateWatch.Elapsed.TotalSeconds;
         }
+
+        // 判定完成与点击“中止”几乎同时发生时，以取消为准：不生成票据、不进入提权。
+        if (IsCancelRequested) throw new OperationCanceledException();
 
         if (gate.GateRejected || gate.CandidateIp == null)
         {
@@ -2990,6 +3061,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _githubConnectivityTimer?.Dispose();
         _periodicHostsRefreshTimer?.Stop();
         _periodicHostsRefreshTimer?.Dispose();
+        StopProgressTicker();
 
         // 3. Dispose 持有的子 ViewModel（如果实现了 IDisposable）
         //    NetworkMonitorViewModel 持有 GitHubLatencyViewModel，后者已实现 IDisposable
