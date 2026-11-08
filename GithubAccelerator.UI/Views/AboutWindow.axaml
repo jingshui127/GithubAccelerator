@@ -5,7 +5,7 @@
         mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="300"
         x:Class="GithubAccelerator.UI.Views.AboutWindow"
         Title="关于 GitHub 加速器 Pro"
-        Width="450" Height="470"
+        Width="450" Height="560"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         CanResize="False">
@@ -67,7 +67,7 @@
         </Border>
 
         <!-- Description -->
-        <TextBlock Text="GitHub 加速器 Pro 是一款专为国内用户设计的 GitHub 访问加速工具。&#10;通过比较备选 IP 与当前直连的整页打开耗时，自动更新 Hosts 文件，&#10;帮助您快速、稳定地访问 GitHub 资源。" 
+        <TextBlock Text="GitHub 加速器 Pro 是一款专为国内用户设计的 GitHub 访问加速工具。&#10;通过比较备选 IP 与当前直连的整页打开耗时，只在至少快 20% 且你确认后更新 Hosts 文件，&#10;帮助你更稳定地访问 GitHub 资源。" 
                    FontSize="12" TextAlignment="Center" TextWrapping="Wrap"
                    HorizontalAlignment="Center"/>
 

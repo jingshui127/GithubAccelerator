@@ -10,6 +10,13 @@
     <UserControl.DataContext>
     </UserControl.DataContext>
 
+    <UserControl.Styles>
+        <Style Selector="ToggleSwitch">
+            <Setter Property="OnContent" Value="开"/>
+            <Setter Property="OffContent" Value="关"/>
+        </Style>
+    </UserControl.Styles>
+
     <Grid RowDefinitions="*,Auto">
         <ScrollViewer Grid.Row="0" Padding="24" Background="{DynamicResource BackgroundColor}" VerticalScrollBarVisibility="Auto">
             <StackPanel Spacing="24" MaxWidth="600">

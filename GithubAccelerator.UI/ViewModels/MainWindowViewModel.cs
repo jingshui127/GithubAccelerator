@@ -370,6 +370,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _latencyImprovement = "--";
 
+    /// <summary>只有真正完成“应用前 → 应用后”测速后才显示对比行，避免首屏出现“-- ms”。</summary>
+    [ObservableProperty]
+    private bool _hasLatencyComparison;
+
     [ObservableProperty]
     private Avalonia.Media.Color _improvementColor = Avalonia.Media.Color.Parse("#FFFFFF");
 
@@ -1613,6 +1617,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         StatusMessage = "正在进行真正的应用前后对比测速...";
+        HasLatencyComparison = false;
         StardustMonitorService.Instance.ReportInfo("SpeedTestStart", "用户启动测速对比");
         using var _trace = StardustMonitorService.Instance.BeginTrace("SpeedTest");
 
@@ -1663,6 +1668,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                         ? "备选 IP 未通过 20% 准入门槛，未写入 Hosts，无法比较应用后耗时"
                         : $"未写入 Hosts，无法比较应用后耗时：{_applyIssue}";
                     PostApplyLatency = "未应用（备选 IP 未达标）";
+                    HasLatencyComparison = false;
                     _historyService.Record(OperationType.HostsApplied, "测速中止：备选 IP 未通过 20% 准入门槛", false);
                     return;
                 }
@@ -1676,6 +1682,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
             PreApplyLatency = FormatLatency(beforeLatency);
             PostApplyLatency = FormatLatency(afterLatency);
+            HasLatencyComparison = true;
 
             if (beforeLatency > 0 && afterLatency > 0)
             {
@@ -1718,6 +1725,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             PreApplyLatency = "-- ms";
             PostApplyLatency = "-- ms";
             LatencyImprovement = "--";
+            HasLatencyComparison = false;
 
             // 出现异常时尝试恢复原始 hosts（整体还原，不走标记块路径）
             if (!string.IsNullOrEmpty(originalHostsContent))

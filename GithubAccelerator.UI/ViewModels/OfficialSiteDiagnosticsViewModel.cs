@@ -50,7 +50,7 @@ public partial class OfficialSiteDiagnosticsViewModel : ObservableObject
     private bool _hasResult;
 
     [ObservableProperty]
-    private string _statusMessage = "点击「重新检测」开始只读诊断（不会修改任何系统设置）";
+    private string _statusMessage = "点击「重新检查」开始只读诊断（不会修改任何系统设置）";
 
     [ObservableProperty]
     private string _checkedAtText = "尚未检测";

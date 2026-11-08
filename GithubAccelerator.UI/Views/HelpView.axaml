@@ -39,7 +39,7 @@
                             <Button Content="ℹ️ 关于本程序" Command="{Binding ShowAboutCommand}"
                                     Padding="14,8" FontSize="12"/>
                         </StackPanel>
-                        <TextBlock Text="{Binding VersionText}" FontSize="11" Classes="SecondaryText"/>
+                        <TextBlock Text="{Binding VersionText, StringFormat='当前版本：{0}'}" FontSize="11" Classes="SecondaryText"/>
                     </StackPanel>
                 </Border>
 

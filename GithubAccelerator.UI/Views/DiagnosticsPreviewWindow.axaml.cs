@@ -25,9 +25,15 @@ public partial class DiagnosticsPreviewWindow : Window
         try
         {
             StatusText.Text = "正在生成预览…已完成 0 项";
+            var completed = false;
             _preview = await _service.CreatePreviewAsync(
-                (done, total) => Avalonia.Threading.Dispatcher.UIThread.Post(
-                    () => StatusText.Text = $"正在生成预览…已完成 {done}/共 {total} 项"));
+                (done, total) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    // 完成后的“预览已生成”不能被最后一条进度回调覆盖，避免看起来一直卡在 8/8。
+                    if (!completed)
+                        StatusText.Text = $"正在生成预览…已完成 {done}/共 {total} 项";
+                }));
+            completed = true;
             DataContext = new PreviewBinding(_preview);
             StatusText.Text = "预览已生成。核对无误后可保存 zip。";
             SaveButton.IsEnabled = true;
