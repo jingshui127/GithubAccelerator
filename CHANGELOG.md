@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.10] - 2026-11-09
+
+### Fixed
+- 首启引导勾选「开机自启」只保存偏好，不再立即写 `HKCU\...\Run`；跳过引导不留下任何系统级改动
+- Run 项改由加速真正生效时写入；关闭加速或回到原始 Hosts 时清理，用户偏好保留，下次开启加速自动补写
+
 ## [1.6.9] - 2026-11-08
 
 ### Fixed

@@ -209,6 +209,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private System.Timers.Timer? _updateTimer;
     private System.Timers.Timer? _githubConnectivityTimer;
     private System.Timers.Timer? _periodicHostsRefreshTimer;
+    /// <summary>测速对比临时切换 Hosts 时，抑制自启 Run 项跟着开关。</summary>
+    private bool _suppressStartupSync;
 
     [ObservableProperty]
     private bool _isGitHubAccessible;
@@ -1294,13 +1296,21 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         await ApplyHosts();
 
         if (_lastElevationResult == ElevationResult.Started)
+        {
+            // 加速确实生效：此时才把引导里的"开机自启"偏好写入 Run 项。
+            _settings.ApplyStartupPreference();
             return new FirstRunStartResult(FirstRunStartKind.Success);
+        }
         if (_lastElevationResult == ElevationResult.Cancelled)
             return new FirstRunStartResult(FirstRunStartKind.ElevationDenied);
         if (_lastElevationResult == ElevationResult.Failed)
             return new FirstRunStartResult(FirstRunStartKind.WriteFailed, ElevationService.LastError);
 
-        if (IsHostsApplied) return new FirstRunStartResult(FirstRunStartKind.Success);
+        if (IsHostsApplied)
+        {
+            _settings.ApplyStartupPreference();
+            return new FirstRunStartResult(FirstRunStartKind.Success);
+        }
         if (_applyIssue == "所有加速线路均不可用")
             return new FirstRunStartResult(FirstRunStartKind.MirrorUnavailable, _applyIssue);
         if (!string.IsNullOrEmpty(_applyIssue))
@@ -1309,10 +1319,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         return new FirstRunStartResult(FirstRunStartKind.Incomplete, StatusMessage);
     }
 
-    /// <summary>引导里的两个勾选项（默认都关闭）落到设置里，并立即生效。</summary>
+    /// <summary>
+    /// 引导里的两个勾选项（默认都关闭）只落到设置里。
+    /// "开机自启"不在这里写注册表：跳过引导不留下任何系统级改动，Run 项在加速生效时才补写。
+    /// </summary>
     private void SaveFirstRunGuideOptions(bool autoStart, bool diagnosticsEnabled)
     {
-        _settings.AutoStart = autoStart;
+        _settings.SetAutoStartPreference(autoStart);
         _settings.DiagnosticsEnabled = diagnosticsEnabled;
         SaveSettings();
     }
@@ -1417,6 +1430,22 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(AvailabilityConclusion));
         OnPropertyChanged(nameof(AvailabilityDetail));
+        SyncStartupWithAcceleration(value);
+    }
+
+    /// <summary>
+    /// 开机自启的 Run 项跟着加速状态走：加速生效才写，关闭加速/回到原始状态就清理。
+    /// 用户勾选的偏好保存在设置里，不会被清理动作丢掉，下次开启加速会重新写入。
+    /// </summary>
+    private void SyncStartupWithAcceleration(bool applied)
+    {
+        // 测速对比会临时移除再恢复 Hosts，这段来回切换不代表用户关闭/开启加速。
+        if (_suppressStartupSync) return;
+
+        if (applied)
+            _settings.ApplyStartupPreference();
+        else
+            _settings.ClearStartupEntry();
     }
 
     partial void OnIsGitHubTestedChanged(bool value)
@@ -1683,6 +1712,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         var hostsWasApplied = IsHostsApplied;
         string? originalHostsBlock = null;
         string? originalHostsContent = null;
+        _suppressStartupSync = true;
 
         try
         {
@@ -1799,6 +1829,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     StatusMessage = $"测速失败，且恢复 Hosts 失败：{restoreEx.Message}";
                 }
             }
+        }
+        finally
+        {
+            _suppressStartupSync = false;
         }
     }
 

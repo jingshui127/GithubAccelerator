@@ -1,5 +1,6 @@
 using System.IO;
 using System.Threading.Tasks;
+using GithubAccelerator.Services;
 using GithubAccelerator.UI.Services;
 using GithubAccelerator.UI.ViewModels;
 
@@ -85,6 +86,37 @@ public class FirstRunGuideTests
 
         Assert.False(vm.AutoStart);
         Assert.False(vm.DiagnosticsEnabled);
+    }
+
+    /// <summary>引导勾选只落设置：不动注册表；加速生效才写 Run 项，清理时偏好仍在。</summary>
+    [Fact]
+    public void GuideAutoStartPreference_IsSavedWithoutRegistryWrite()
+    {
+        var startup = new RecordingStartupManager();
+        var settings = new SettingsViewModel(startup);
+
+        settings.SetAutoStartPreference(true);
+
+        Assert.True(settings.AutoStart);
+        Assert.Equal(0, startup.EnableCalls);
+        Assert.Equal(0, startup.DisableCalls);
+
+        settings.ApplyStartupPreference();
+        Assert.Equal(1, startup.EnableCalls);
+
+        settings.ClearStartupEntry();
+        Assert.Equal(1, startup.DisableCalls);
+        Assert.True(settings.AutoStart);
+    }
+
+    private sealed class RecordingStartupManager : IStartupManager
+    {
+        public int EnableCalls { get; private set; }
+        public int DisableCalls { get; private set; }
+        public bool IsStartupEnabled { get; set; }
+
+        public void EnableStartup() => EnableCalls++;
+        public void DisableStartup() => DisableCalls++;
     }
 
     [Fact]

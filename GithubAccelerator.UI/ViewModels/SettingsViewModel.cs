@@ -27,6 +27,7 @@ public partial class SettingsViewModel : ObservableObject
         "settings.json");
 
     private readonly IStartupManager? _startupManager;
+    private bool _suppressStartupWrite;
     private readonly GitUrlRewriteService _gitRewriteService = new();
     private readonly ObservableCollection<string> _legacyProxyEntryLines = new();
     private IReadOnlyList<LegacyGitProxyEntry> _legacyProxyEntries = Array.Empty<LegacyGitProxyEntry>();
@@ -93,13 +94,39 @@ public partial class SettingsViewModel : ObservableObject
 
     partial void OnAutoStartChanged(bool value)
     {
-        if (_isLoading) return;
-        
+        if (_isLoading || _suppressStartupWrite) return;
+
         if (value)
             _startupManager?.EnableStartup();
         else
             _startupManager?.DisableStartup();
     }
+
+    /// <summary>
+    /// 只记录"开机自启"偏好，不写 HKCU 注册表。首启引导的勾选走这里：
+    /// 真正的 Run 项推迟到加速确实生效时由主流程写入，跳过引导不会留下任何系统级改动。
+    /// </summary>
+    public void SetAutoStartPreference(bool value)
+    {
+        _suppressStartupWrite = true;
+        try
+        {
+            AutoStart = value;
+        }
+        finally
+        {
+            _suppressStartupWrite = false;
+        }
+    }
+
+    /// <summary>偏好为开启时把 Run 项补写到注册表（加速生效路径调用）。</summary>
+    public void ApplyStartupPreference()
+    {
+        if (AutoStart) _startupManager?.EnableStartup();
+    }
+
+    /// <summary>清除本程序写入的 Run 项（关闭加速 / 回到原始状态时调用）；偏好本身保留。</summary>
+    public void ClearStartupEntry() => _startupManager?.DisableStartup();
 
     [ObservableProperty]
     private bool _autoApplyHosts = false;
