@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -50,5 +51,71 @@ public partial class CheckAndRepairViewModel : ObservableObject
         {
             IsRunningAll = false;
         }
+    }
+
+    // ---------- Hosts 写入自检 ----------
+
+    /// <summary>由主窗口注入：内部走提权 + 临时副本写入 + 校验 + 回滚。</summary>
+    public Func<Task>? RunWriteSelfTestAsync { get; set; }
+
+    public Func<string, Task>? SetClipboardTextAsync { get; set; }
+
+    /// <summary>自检进行/完成时把“写入自检”页签自动切到前台，让逐阶段进展可见。</summary>
+    [ObservableProperty]
+    private bool _isSelfTestTabSelected;
+
+    [ObservableProperty]
+    private bool _isSelfTestRunning;
+
+    [ObservableProperty]
+    private string? _selfTestStatus;
+
+    [ObservableProperty]
+    private string? _selfTestReport;
+
+    public bool IsSelfTestNotRunning => !IsSelfTestRunning;
+
+    public bool HasSelfTestStatus => !string.IsNullOrWhiteSpace(SelfTestStatus);
+
+    public bool HasSelfTestReport => !string.IsNullOrWhiteSpace(SelfTestReport);
+
+    partial void OnIsSelfTestRunningChanged(bool value) => OnPropertyChanged(nameof(IsSelfTestNotRunning));
+
+    partial void OnSelfTestStatusChanged(string? value) => OnPropertyChanged(nameof(HasSelfTestStatus));
+
+    partial void OnSelfTestReportChanged(string? value) => OnPropertyChanged(nameof(HasSelfTestReport));
+
+    [RelayCommand]
+    private async Task RunWriteSelfTest()
+    {
+        if (IsSelfTestRunning || RunWriteSelfTestAsync == null) return;
+
+        IsSelfTestRunning = true;
+        try
+        {
+            await RunWriteSelfTestAsync();
+        }
+        catch (Exception ex)
+        {
+            SelfTestStatus = $"自检异常：{ex.Message}";
+        }
+        finally
+        {
+            IsSelfTestRunning = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task CopySelfTestReport()
+    {
+        if (string.IsNullOrWhiteSpace(SelfTestReport)) return;
+        if (SetClipboardTextAsync == null)
+        {
+            SelfTestStatus = "剪贴板未初始化，无法复制";
+            return;
+        }
+
+        await SetClipboardTextAsync(SelfTestReport);
+        SelfTestStatus = "自检报告已复制到剪贴板";
     }
 }

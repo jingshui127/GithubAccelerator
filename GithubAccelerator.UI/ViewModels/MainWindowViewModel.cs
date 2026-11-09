@@ -1087,6 +1087,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         NetworkMonitor ??= new NetworkMonitorViewModel();
     }
 
+    private CheckAndRepairViewModel EnsureCheckAndRepairViewModel()
+    {
+        EnsureCheckAndRepairViewModels();
+        CheckAndRepair ??= new CheckAndRepairViewModel(
+            HealthCheck!, OfficialSiteDiagnostics!, NetworkMonitor!);
+        CheckAndRepair.RunWriteSelfTestAsync = RunHostsWriteSelfTestAsync;
+        return CheckAndRepair;
+    }
+
     /// <summary>「Hosts 文件」复用 Hosts 内容 + 备份 / 分组 / 回到原始状态。</summary>
     private void EnsureHostsAndBackupViewModels()
     {
@@ -1106,12 +1115,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void ShowCheckAndRepair()
     {
-        EnsureCheckAndRepairViewModels();
-        CheckAndRepair ??= new CheckAndRepairViewModel(
-            HealthCheck!, OfficialSiteDiagnostics!, NetworkMonitor!);
+        var page = EnsureCheckAndRepairViewModel();
 
         var view = new GithubAccelerator.UI.Views.CheckAndRepairView();
-        view.DataContext = CheckAndRepair;
+        view.DataContext = page;
         CurrentView = view;
         CurrentPageTitle = "检查与修复";
         ResetNavigationSelection();
@@ -1424,12 +1431,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         RaiseAccelerationStateChanged();
         OnPropertyChanged(nameof(AvailabilityConclusion));
         OnPropertyChanged(nameof(AvailabilityDetail));
-    }
-
-    partial void OnIsGitHubAccessibleChanged(bool value)
-    {
-        OnPropertyChanged(nameof(AvailabilityConclusion));
-        OnPropertyChanged(nameof(AvailabilityDetail));
         SyncStartupWithAcceleration(value);
     }
 
@@ -1446,6 +1447,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             _settings.ApplyStartupPreference();
         else
             _settings.ClearStartupEntry();
+    }
+
+    partial void OnIsGitHubAccessibleChanged(bool value)
+    {
+        OnPropertyChanged(nameof(AvailabilityConclusion));
+        OnPropertyChanged(nameof(AvailabilityDetail));
     }
 
     partial void OnIsGitHubTestedChanged(bool value)
@@ -2075,7 +2082,134 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             case LaunchIntent.ClearHosts:
                 await ClearAppliedHosts();
                 break;
+            case LaunchIntent.SelfTestHosts:
+                await RunElevatedHostsWriteSelfTestAsync();
+                break;
         }
+    }
+
+    /// <summary>
+    /// 写入自检入口：真实 hosts 只读，目标永远是 %TEMP% 副本。
+    /// 非管理员时走和正式加速相同的 ElevationService（runas → UAC），
+    /// 取消/失败会当场生成报告；点了“是”则切换到管理员实例继续写入、校验、回滚。
+    /// </summary>
+    private async Task RunHostsWriteSelfTestAsync()
+    {
+        var page = EnsureCheckAndRepairViewModel();
+        page.SelfTestReport = null;
+        page.IsSelfTestTabSelected = true;
+
+        if (IsAdmin)
+        {
+            await ExecuteHostsWriteSelfTestAsync(page, alreadyElevated: false);
+            return;
+        }
+
+        page.IsSelfTestRunning = true;
+        try
+        {
+            page.SelfTestStatus = "[自检 1/8] 准备：读取真实 hosts 哈希（只读），规划 %TEMP% 副本…";
+            var realHashBefore = HostsWriteSelfTestRunner.Sha256(
+                await File.ReadAllBytesAsync(HostsWriteSelfTestRunner.RealHostsPath));
+
+            page.SelfTestStatus = "[自检 2/8] 请求管理员权限：请在 UAC 窗口选择“是”或“否”（最多等 150 秒）…";
+            var elevation = ElevationService.RelaunchElevated(LaunchIntent.SelfTestHosts);
+
+            switch (elevation)
+            {
+                case ElevationResult.Started:
+                    page.SelfTestStatus = "[自检 2/8] 已请求管理员权限，正在切换到管理员实例继续…";
+                    Log.Information("[SelfTest] 已请求提权，交给管理员实例继续写入自检");
+                    if (Avalonia.Application.Current?.ApplicationLifetime
+                        is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+                    {
+                        desktop.Shutdown();
+                    }
+                    else
+                    {
+                        Environment.Exit(0);
+                    }
+                    break;
+
+                case ElevationResult.Cancelled:
+                    await FinishHostsSelfTestWithoutElevationAsync(page, realHashBefore, cancelled: true);
+                    break;
+
+                default:
+                    await FinishHostsSelfTestWithoutElevationAsync(page, realHashBefore, cancelled: false);
+                    break;
+            }
+        }
+        finally
+        {
+            page.IsSelfTestRunning = false;
+        }
+    }
+
+    private async Task RunElevatedHostsWriteSelfTestAsync()
+    {
+        ShowCheckAndRepair();
+        var page = CheckAndRepair!;
+        page.SelfTestReport = null;
+        page.IsSelfTestTabSelected = true;
+        await ExecuteHostsWriteSelfTestAsync(page, alreadyElevated: true);
+    }
+
+    private async Task ExecuteHostsWriteSelfTestAsync(CheckAndRepairViewModel page, bool alreadyElevated)
+    {
+        page.IsSelfTestRunning = true;
+        try
+        {
+            var result = await HostsWriteSelfTestRunner.RunAsync(
+                stage => page.SelfTestStatus = stage,
+                alreadyElevated);
+
+            var report = result.BuildReport();
+            var reportPath = HostsWriteSelfTestRunner.ExportReport(report);
+            page.SelfTestReport = report + $"{Environment.NewLine}报告文件：{reportPath}{Environment.NewLine}";
+            page.SelfTestStatus = $"[自检完成] {result.Summary}｜报告已导出：{reportPath}";
+
+            Log.Information("[SelfTest] 结果={Success}，真实 hosts 前后={Before}/{After}，临时副本={Temp}，清理={Cleaned}",
+                result.Success, result.RealHashBefore, result.RealHashAfter, result.TempHostsPath, result.TempCleaned);
+
+            if (result.Success)
+            {
+                _notificationService.Info("写入自检通过",
+                    "临时副本的写入、校验、回滚全部成功，真实 hosts 未被修改。");
+            }
+            else
+            {
+                _notificationService.Error("写入自检未通过", result.Summary + "。详情见检查与修复页。");
+            }
+        }
+        catch (Exception ex)
+        {
+            page.SelfTestStatus = $"[自检失败] {ex.Message}";
+            Log.Warning("[SelfTest] 异常：{Error}", ex.Message);
+        }
+        finally
+        {
+            page.IsSelfTestRunning = false;
+        }
+    }
+
+    private async Task FinishHostsSelfTestWithoutElevationAsync(
+        CheckAndRepairViewModel page, string realHashBefore, bool cancelled)
+    {
+        var realHashAfter = HostsWriteSelfTestRunner.Sha256(
+            await File.ReadAllBytesAsync(HostsWriteSelfTestRunner.RealHostsPath));
+        var report = HostsWriteSelfTestRunner.BuildNotRunReport(realHashBefore, realHashAfter, cancelled);
+        var reportPath = HostsWriteSelfTestRunner.ExportReport(report);
+        page.SelfTestReport = report + $"{Environment.NewLine}报告文件：{reportPath}{Environment.NewLine}";
+        page.SelfTestStatus = cancelled
+            ? "[自检取消] 未获得管理员权限，未写入真实 hosts，也未创建临时副本"
+            : $"[自检失败] 无法启动管理员实例：{ElevationService.LastError ?? "未知错误"}（真实 hosts 未改动）";
+
+        Log.Information("[SelfTest] 未提权完成：cancelled={Cancelled}，真实 hosts {Before}/{After}",
+            cancelled, realHashBefore, realHashAfter);
+        _notificationService.Info(
+            cancelled ? "写入自检已取消" : "写入自检未启动",
+            "没有写入真实 hosts，也没有创建临时副本。可稍后重试。");
     }
 
     /// <summary>

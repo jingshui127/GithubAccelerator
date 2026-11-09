@@ -113,7 +113,7 @@ dotnet run --project GithubAccelerator.Cli
 
 ## 📝 变更日志
 
-查看 [CHANGELOG.md](CHANGELOG.md) 了解版本更新历史（当前版本 v1.6.10）。
+查看 [CHANGELOG.md](CHANGELOG.md) 了解版本更新历史（当前版本 v1.7.0）。
 
 ## 🤝 贡献
 

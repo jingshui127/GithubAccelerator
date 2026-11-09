@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-11-09
+
+### Added
+- 检查与修复页新增「写入自检」：用和正式加速完全相同的提权、原子写、校验、回滚代码，在 `%TEMP%` 下的 hosts 副本上跑一遍；真实 `C:\Windows\System32\drivers\etc\hosts` 全程只读
+- 自检分阶段显示进展（准备、请求管理员、写入、校验、改回、回滚校验、真实 hosts 未变、清理），完成后给一行结论
+- 自检报告可复制，并自动导出到 `%TEMP%\GithubAccelerator\self-test-reports`，含每步耗时、临时路径与校验哈希
+- 取消或提权失败也会生成报告，明确「未创建临时副本、未写入真实 hosts」
+
+### Changed
+- 提权实例完成自检后自动切到「写入自检」页签，进度和结论不再藏在默认页签后面
+
 ## [1.6.10] - 2026-11-09
 
 ### Fixed

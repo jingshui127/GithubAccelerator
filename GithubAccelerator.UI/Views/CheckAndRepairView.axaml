@@ -112,6 +112,44 @@
             <TabItem Header="官网诊断">
                 <views:OfficialSiteDiagnosticsView DataContext="{Binding OfficialSite}"/>
             </TabItem>
+
+            <!-- 写入自检：与正式加速同一套提权/原子写/校验/回滚，但只写 %TEMP% 副本 -->
+            <TabItem Header="写入自检" IsSelected="{Binding IsSelfTestTabSelected, Mode=OneWay}">
+                <ScrollViewer Margin="16">
+                    <StackPanel Spacing="12">
+                        <Border Padding="16" CornerRadius="12"
+                                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                BorderThickness="1">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="🧪 写入自检（不改真实系统文件）" FontSize="15" FontWeight="SemiBold"/>
+                                <TextBlock TextWrapping="Wrap" FontSize="12" Classes="SecondaryText"
+                                           Text="用和正式加速完全相同的提权、原子写、校验、回滚代码，在 %TEMP% 下的 hosts 副本上跑一遍。全程只读真实 C:\Windows\System32\drivers\etc\hosts，不会写入；需要时只弹一次 UAC。"/>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Content="开始写入自检" Command="{Binding RunWriteSelfTestCommand}"
+                                            IsEnabled="{Binding IsSelfTestNotRunning}"
+                                            Padding="18,8" FontSize="13" FontWeight="SemiBold"/>
+                                    <Button Content="📋 复制自检结果" Command="{Binding CopySelfTestReportCommand}"
+                                            IsEnabled="{Binding HasSelfTestReport}"
+                                            Padding="16,8" FontSize="13"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding SelfTestStatus}" IsVisible="{Binding HasSelfTestStatus}"
+                                           FontSize="12" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Padding="12" CornerRadius="12"
+                                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                IsVisible="{Binding HasSelfTestReport}">
+                            <TextBox Text="{Binding SelfTestReport}" IsReadOnly="True"
+                                     AcceptsReturn="True" TextWrapping="NoWrap"
+                                     FontFamily="Consolas" FontSize="11" Height="320"/>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
         </TabControl>
     </Grid>
 </UserControl>
